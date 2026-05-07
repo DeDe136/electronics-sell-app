@@ -1,0 +1,9 @@
+# [PLACEHOLDER] CI Pipeline
+# Trigger: push to main / pull_request
+# Steps:
+#   1. Checkout code
+#   2. Install dependencies (backend + frontend)
+#   3. Run linter
+#   4. Run unit tests
+#   5. Build Docker images
+#   6. Push to ECR / Docker Hub

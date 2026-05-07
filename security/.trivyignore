@@ -1,0 +1,4 @@
+# [PLACEHOLDER] Trivy vulnerability scanner ignore list
+# Thêm CVE IDs hoặc paths cần bỏ qua khi scan Docker images
+# Ví dụ:
+# CVE-2023-XXXX

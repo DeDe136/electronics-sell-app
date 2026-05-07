@@ -1,0 +1,9 @@
+# [PLACEHOLDER] Deploy Pipeline
+# Trigger: push to main (after CI passes)
+# Environments: staging, production
+# Steps:
+#   1. Build & push Docker images
+#   2. Deploy to ECS / EC2 / VPS
+#   3. Run DB migrations
+#   4. Health check
+#   5. Notify Slack on success/failure

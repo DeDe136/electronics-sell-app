@@ -1,0 +1,89 @@
+# ============================================
+# ROOT .gitignore — Electronics Shop Monorepo
+# ============================================
+
+# ── Node / npm ────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.pnp
+.pnp.js
+
+# ── Environment / Secrets (NEVER commit) ──
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.local.example
+
+# ── Build outputs ─────────────────────────
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# ── TypeScript cache ──────────────────────
+*.js.map
+*.d.ts.map
+
+# ── Logs ──────────────────────────────────
+logs/
+*.log
+combined.log
+error.log
+
+# ── Database / Migration artifacts ────────
+*.sqlite
+*.db
+
+# ── Coverage & Test ───────────────────────
+coverage/
+.nyc_output/
+junit.xml
+
+# ── IDE / Editor ──────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+.DS_Store
+Thumbs.db
+
+# ── Docker ────────────────────────────────
+.docker/
+
+# ── MinIO local data (nếu chạy native) ────
+minio-data/
+
+# ── Uploads (nếu lưu local thay S3) ───────
+uploads/
+public/uploads/
+
+# ── Next.js specifics ─────────────────────
+.next/
+next-env.d.ts
+
+# ── NestJS specifics ──────────────────────
+dist/
+
+# ── OS ────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── Misc ──────────────────────────────────
+*.zip
+*.tar.gz
+.cache/
+tmp/
+temp/
