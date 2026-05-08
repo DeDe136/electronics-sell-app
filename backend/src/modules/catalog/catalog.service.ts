@@ -11,6 +11,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto, SortOrder } from './dto/product-query.dto';
 import { StorageService } from '../storage/storage.service';
 import { v4 as uuidv4 } from 'uuid';
+// eslint-disable-next-line @typescript-eslint/no-namespace
+type MulterFile = Express.Multer.File;
 
 @Injectable()
 export class CatalogService {
@@ -78,7 +80,7 @@ export class CatalogService {
 
   async create(
     dto: CreateProductDto,
-    images?: Express.Multer.File[],
+    images?: MulterFile[],
   ): Promise<Product> {
     const slug = this.generateSlug(dto.name);
     const existing = await this.productRepo.findOne({ where: { slug } });
@@ -103,7 +105,7 @@ export class CatalogService {
   async update(
     id: string,
     dto: Partial<CreateProductDto>,
-    images?: Express.Multer.File[],
+    images?: MulterFile[],
   ): Promise<Product> {
     const product = await this.findById(id);
 

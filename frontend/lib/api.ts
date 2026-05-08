@@ -16,13 +16,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto logout nếu 401
+// Auto logout nếu 401 — chỉ redirect khi chưa ở trang login
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('access_token');
-      window.location.href = '/login';
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   },

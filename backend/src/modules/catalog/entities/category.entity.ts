@@ -4,25 +4,22 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn,
   OneToMany,
-  ManyToOne,
-  JoinColumn,
 } from 'typeorm';
 
 @Entity('categories')
 export class Category {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ unique: true })
-  name: string; // vd: 'Smartphone', 'Laptop', 'Tablet'
+  name!: string; // vd: 'Smartphone', 'Laptop', 'Tablet'
 
   @Column({ unique: true })
-  slug: string;
+  slug!: string;
 
   @Column({ nullable: true })
-  iconUrl: string;
+  iconUrl!: string;
 
   /**
    * Định nghĩa spec fields cho từng category.
@@ -30,11 +27,11 @@ export class Category {
    * Ví dụ Laptop: ['ram', 'cpu', 'gpu', 'storage', 'screen', 'battery', 'os', 'weight']
    */
   @Column({ type: 'jsonb', default: [] })
-  specFields: string[];
+  specFields!: string[];
 
   @OneToMany(() => Product, (p) => p.category)
-  products: Product[];
+  products!: Product[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 }

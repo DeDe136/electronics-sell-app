@@ -4,8 +4,8 @@ import { IsNull, Repository } from 'typeorm';
 import { CartItem } from './entities/cart-item.entity';
 
 export class AddToCartDto {
-  productId: string;
-  quantity: number;
+  productId!: string;
+  quantity!: number;
   variantId?: string;
 }
 

@@ -8,6 +8,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
+// eslint-disable-next-line @typescript-eslint/no-namespace
+type MulterFile = Express.Multer.File;
 
 export interface UploadResult {
   key: string;
@@ -55,7 +57,7 @@ export class StorageService {
    * @param folder - Thư mục lưu (vd: 'products', 'avatars')
    */
   async uploadFile(
-    file: Express.Multer.File,
+    file: MulterFile,
     folder: string = 'uploads',
   ): Promise<UploadResult> {
     const ext = file.originalname.split('.').pop();
@@ -80,7 +82,7 @@ export class StorageService {
    * Upload nhiều ảnh cùng lúc
    */
   async uploadFiles(
-    files: Express.Multer.File[],
+    files: MulterFile[],
     folder: string = 'uploads',
   ): Promise<UploadResult[]> {
     return Promise.all(files.map((f) => this.uploadFile(f, folder)));
