@@ -43,7 +43,28 @@ export default function ProfilePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [form, setForm] = useState({ fullName: '', phone: '', address: '' });
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ảnh không được vượt quá 5MB');
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const updated = await userApi.uploadAvatar(file);
+      setUser(updated);
+      toast.success('Cập nhật ảnh đại diện thành công!');
+    } catch {
+      toast.error('Upload ảnh thất bại');
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
 
   const formatPrice = (p: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p);
@@ -108,8 +129,11 @@ export default function ProfilePage() {
               )}
             </div>
             <label className="absolute -bottom-1 -right-1 bg-white border border-gray-200 rounded-full p-1 cursor-pointer shadow hover:bg-gray-50">
-              <Camera className="w-3.5 h-3.5 text-gray-500" />
-              <input type="file" accept="image/*" className="hidden" />
+              {uploadingAvatar
+                ? <span className="w-3.5 h-3.5 block border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                : <Camera className="w-3.5 h-3.5 text-gray-500" />
+              }
+              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} disabled={uploadingAvatar} />
             </label>
           </div>
           <div className="flex-1 min-w-0">

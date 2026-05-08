@@ -15,15 +15,20 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    <html lang="vi" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
-          <div className="min-h-screen flex flex-col bg-gray-50">
+          <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
             <Navbar />
             <main className="flex-1">{children}</main>
             <Footer />
           </div>
-          <Toaster position="top-right" />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              className: 'dark:bg-gray-800 dark:text-white dark:border-gray-700',
+            }}
+          />
         </Providers>
       </body>
     </html>

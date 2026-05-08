@@ -16,15 +16,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto logout nếu 401 — chỉ redirect khi chưa ở trang login
+// Auto logout nếu 401
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('access_token');
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
-      }
+      window.location.href = '/login';
     }
     return Promise.reject(err);
   },
@@ -66,6 +64,13 @@ export const authApi = {
 export const userApi = {
   getProfile: () => api.get('/users/me').then((r) => r.data),
   updateProfile: (data: any) => api.patch('/users/me', data).then((r) => r.data),
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return api.patch('/users/me/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data);
+  },
 };
 
 // ===== Order API =====

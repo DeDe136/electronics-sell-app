@@ -33,8 +33,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const data = await authApi.login(loginForm.email, loginForm.password);
-      if (data.access_token) {
-        localStorage.setItem('access_token', data.access_token);
+      if (data.accessToken) {
+        localStorage.setItem('access_token', data.accessToken);
         toast.success('Đăng nhập thành công!');
         router.push('/');
       }
@@ -56,8 +56,8 @@ export default function LoginPage() {
       toast.error('Mật khẩu xác nhận không khớp');
       return;
     }
-    if (registerForm.password.length < 6) {
-      toast.error('Mật khẩu phải có ít nhất 6 ký tự');
+    if (registerForm.password.length < 8) {
+      toast.error('Mật khẩu phải có ít nhất 8 ký tự');
       return;
     }
     setLoading(true);
@@ -208,7 +208,7 @@ export default function LoginPage() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Tối thiểu 6 ký tự"
+                      placeholder="Tối thiểu 8 ký tự"
                       value={registerForm.password}
                       onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
                       className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm

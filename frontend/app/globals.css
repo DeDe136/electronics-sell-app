@@ -7,21 +7,32 @@
     --primary: 220 90% 50%;
     --primary-foreground: 0 0% 100%;
   }
+
+  /* Smooth transition khi đổi theme */
+  * {
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+  }
 }
 
 @layer components {
   .container-page {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
+
   .btn-primary {
     @apply bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg
            transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
   }
+
   .btn-outline {
-    @apply border border-blue-600 text-blue-600 hover:bg-blue-50 font-semibold px-6 py-2.5
+    @apply border border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 font-semibold px-6 py-2.5
            rounded-lg transition-colors duration-200;
   }
+
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden;
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm
+           border border-gray-100 dark:border-gray-700 overflow-hidden;
   }
 }
