@@ -447,6 +447,13 @@ mkdir -p ~/minio-data
 
 # Chạy MinIO server
 ~/minio server ~/minio-data --console-address ":9001"
+
+# Tạo alias để tiện cho mỗi lần chạy (tùy chọn)
+echo 'alias minio-server="~/minio server ~/minio-data --console-address :9001"' >> ~/.bashrc
+source ~/.bashrc
+
+# Chạy MinIO server từ alias đã tạo
+minio-server
 ```
 
 MinIO sẽ in ra thông tin:

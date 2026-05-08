@@ -5,9 +5,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { Category } from './category.entity';
+import { Inventory } from '../../inventory/entities/inventory.entity';
 
 export enum ProductStatus {
   ACTIVE = 'active',
@@ -15,68 +18,37 @@ export enum ProductStatus {
   DISCONTINUED = 'discontinued',
 }
 
-/**
- * Specs linh hoạt dạng JSONB — hỗ trợ mọi loại đồ điện tử.
- *
- * Smartphone example:
- * {
- *   ram: '8GB', storage: '256GB', battery: '5000mAh',
- *   screen: '6.7" AMOLED 120Hz', os: 'Android 14',
- *   camera: '200MP + 12MP + 10MP', chipset: 'Snapdragon 8 Gen 3',
- *   weight: '228g', color: 'Titanium Black'
- * }
- *
- * Laptop example:
- * {
- *   cpu: 'Intel Core Ultra 7 155H', gpu: 'RTX 4060 8GB',
- *   ram: '32GB DDR5', storage: '1TB NVMe SSD',
- *   screen: '16" 2K 165Hz', battery: '99Wh', weight: '2.1kg',
- *   os: 'Windows 11 Home', ports: 'USB-C x2, USB-A x3, HDMI 2.1'
- * }
- */
 @Entity('products')
 export class Product {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string; // vd: 'Samsung Galaxy S24 Ultra'
+  name!: string;
 
   @Column({ unique: true })
-  slug: string;
+  slug!: string;
 
   @Column()
-  brand: string; // vd: 'Samsung', 'Apple', 'Dell'
+  brand!: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description!: string;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
-  price: number;
+  price!: number;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
-  salePrice: number; // Giá khuyến mãi (null = không giảm)
+  salePrice!: number;
 
-  /**
-   * Mảng URL ảnh sản phẩm, ảnh đầu là thumbnail chính.
-   * Lưu S3/MinIO keys để quản lý xóa dễ hơn.
-   */
   @Column({ type: 'jsonb', default: [] })
-  images: { url: string; key: string }[];
+  images!: { url: string; key: string }[];
 
-  /**
-   * Specs kỹ thuật linh hoạt theo từng loại thiết bị.
-   * JSONB cho phép query theo specs: WHERE specs->>'ram' = '16GB'
-   */
   @Column({ type: 'jsonb', default: {} })
-  specs: Record<string, string>;
+  specs!: Record<string, string>;
 
-  /**
-   * Variants (biến thể màu sắc, cấu hình).
-   * Ví dụ: [{ ram: '8GB', storage: '128GB', color: 'Black', price: 25000000 }]
-   */
   @Column({ type: 'jsonb', default: [] })
-  variants: {
+  variants!: {
     id: string;
     label: string;
     specs: Record<string, string>;
@@ -85,24 +57,31 @@ export class Product {
   }[];
 
   @Column({ type: 'enum', enum: ProductStatus, default: ProductStatus.ACTIVE })
-  status: ProductStatus;
+  status!: ProductStatus;
 
   @Column({ default: 0 })
-  soldCount: number; // Đếm số lượng bán được
+  soldCount!: number;
 
   @Column({ default: 0 })
-  viewCount: number;
+  viewCount!: number;
 
-  @ManyToOne(() => Category, (c) => c.products, { eager: true })
+  @ManyToOne(() => Category, (c) => c.products, {
+    eager: true,
+    onDelete: 'RESTRICT', // Không cho xóa category nếu còn product
+  })
   @JoinColumn({ name: 'categoryId' })
-  category: Category;
+  category!: Category;
 
   @Column()
-  categoryId: string;
+  categoryId!: string;
+
+  // Quan hệ 1-1 với Inventory (mỗi product có 1 bản ghi tồn kho chính)
+  @OneToMany(() => Inventory, (inv) => inv.product)
+  inventories!: Inventory[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }

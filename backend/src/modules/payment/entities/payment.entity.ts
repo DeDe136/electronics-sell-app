@@ -1,5 +1,13 @@
-// payment.entity.ts
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToOne,
+  JoinColumn,
+} from 'typeorm';
+import { Order } from '../../order/entities/order.entity';
 
 export enum PaymentStatus {
   PENDING = 'pending',
@@ -18,26 +26,34 @@ export enum PaymentMethod {
 @Entity('payments')
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  orderId: string;
+  orderId!: string;
+
+  // FK thực sự tới orders — đảm bảo constraint trên database
+  @OneToOne(() => Order, (o) => o.payment, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'orderId' })
+  order!: Order;
 
   @Column({ type: 'enum', enum: PaymentMethod })
-  method: PaymentMethod;
+  method!: PaymentMethod;
 
   @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
-  status: PaymentStatus;
+  status!: PaymentStatus;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
-  amount: number;
+  amount!: number;
 
   @Column({ nullable: true })
-  transactionId: string; // ID từ cổng thanh toán
+  transactionId!: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata: Record<string, any>; // Raw response từ payment gateway
+  metadata!: Record<string, any>;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
 }

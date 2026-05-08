@@ -4,10 +4,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { StorageService } from '../storage/storage.service';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateUserDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   address?: string;
 }
 

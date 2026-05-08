@@ -7,6 +7,8 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
+import { Order } from '../../order/entities/order.entity';
+import { CartItem } from '../../cart/entities/cart-item.entity';
 
 export enum UserRole {
   CUSTOMER = 'customer',
@@ -16,39 +18,46 @@ export enum UserRole {
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ unique: true })
-  email: string;
+  email!: string;
 
   @Column()
-  @Exclude() // Không trả về password trong response
-  password: string;
+  @Exclude()
+  password!: string;
 
   @Column()
-  fullName: string;
+  fullName!: string;
 
   @Column({ nullable: true })
-  phone: string;
+  phone!: string;
 
   @Column({ nullable: true })
-  avatarUrl: string;
+  avatarUrl!: string;
 
   @Column({ nullable: true })
-  avatarKey: string; // S3 key để xóa khi cập nhật
+  avatarKey!: string;
 
   @Column({ type: 'text', nullable: true })
-  address: string;
+  address!: string;
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.CUSTOMER })
-  role: UserRole;
+  role!: UserRole;
 
   @Column({ default: true })
-  isActive: boolean;
+  isActive!: boolean;
+
+  // Quan hệ ngược — không eager load để tránh query nặng
+  @OneToMany(() => Order, (order) => order.user)
+  orders!: Order[];
+
+  @OneToMany(() => CartItem, (item) => item.user)
+  cartItems!: CartItem[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }

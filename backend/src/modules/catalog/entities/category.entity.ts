@@ -1,11 +1,12 @@
-import { Product } from './product.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
+import { Product } from './product.entity';
 
 @Entity('categories')
 export class Category {
@@ -13,7 +14,7 @@ export class Category {
   id!: string;
 
   @Column({ unique: true })
-  name!: string; // vd: 'Smartphone', 'Laptop', 'Tablet'
+  name!: string;
 
   @Column({ unique: true })
   slug!: string;
@@ -21,11 +22,6 @@ export class Category {
   @Column({ nullable: true })
   iconUrl!: string;
 
-  /**
-   * Định nghĩa spec fields cho từng category.
-   * Ví dụ Smartphone: ['ram', 'storage', 'battery', 'screen', 'os', 'camera']
-   * Ví dụ Laptop: ['ram', 'cpu', 'gpu', 'storage', 'screen', 'battery', 'os', 'weight']
-   */
   @Column({ type: 'jsonb', default: [] })
   specFields!: string[];
 
@@ -34,4 +30,7 @@ export class Category {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
 }

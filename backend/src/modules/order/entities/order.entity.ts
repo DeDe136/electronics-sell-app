@@ -1,9 +1,17 @@
-// order.entity.ts
 import {
-  Entity, PrimaryGeneratedColumn, Column,
-  ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToMany,
+  OneToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { OrderItem } from './order-item.entity';
+import { Payment } from '../../payment/entities/payment.entity';
 
 export enum OrderStatus {
   PENDING = 'pending',
@@ -17,23 +25,30 @@ export enum OrderStatus {
 @Entity('orders')
 export class Order {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ unique: true })
-  orderCode: string; // vd: ORD-20240115-0001
+  orderCode!: string;
 
   @Column()
-  userId: string;
+  userId!: string;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, (u) => u.orders, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user!: User;
 
-  @OneToMany('OrderItem', 'order', { cascade: true, eager: true })
-  items: any[];
+  @OneToMany(() => OrderItem, (item) => item.order, {
+    cascade: true,
+    eager: true,
+  })
+  items!: OrderItem[];
+
+  // Quan hệ 1-1: mỗi order có 1 payment
+  @OneToOne(() => Payment, (p) => p.order, { cascade: true })
+  payment!: Payment;
 
   @Column({ type: 'jsonb' })
-  shippingAddress: {
+  shippingAddress!: {
     fullName: string;
     phone: string;
     address: string;
@@ -43,26 +58,26 @@ export class Order {
   };
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
-  subtotal: number;
+  subtotal!: number;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
-  shippingFee: number;
+  shippingFee!: number;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
-  discount: number;
+  discount!: number;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
-  total: number;
+  total!: number;
 
   @Column({ type: 'enum', enum: OrderStatus, default: OrderStatus.PENDING })
-  status: OrderStatus;
+  status!: OrderStatus;
 
   @Column({ nullable: true })
-  note: string;
+  note!: string;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }
