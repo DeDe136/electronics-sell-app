@@ -5,12 +5,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
-  OneToOne,
   OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { Category } from './category.entity';
 import { Inventory } from '../../inventory/entities/inventory.entity';
+import { ProductVariant } from './product-variant.entity';
 
 export enum ProductStatus {
   ACTIVE = 'active',
@@ -47,15 +47,6 @@ export class Product {
   @Column({ type: 'jsonb', default: {} })
   specs!: Record<string, string>;
 
-  @Column({ type: 'jsonb', default: [] })
-  variants!: {
-    id: string;
-    label: string;
-    specs: Record<string, string>;
-    price: number;
-    sku: string;
-  }[];
-
   @Column({ type: 'enum', enum: ProductStatus, default: ProductStatus.ACTIVE })
   status!: ProductStatus;
 
@@ -67,7 +58,7 @@ export class Product {
 
   @ManyToOne(() => Category, (c) => c.products, {
     eager: true,
-    onDelete: 'RESTRICT', // Không cho xóa category nếu còn product
+    onDelete: 'RESTRICT',
   })
   @JoinColumn({ name: 'categoryId' })
   category!: Category;
@@ -75,7 +66,14 @@ export class Product {
   @Column()
   categoryId!: string;
 
-  // Quan hệ 1-1 với Inventory (mỗi product có 1 bản ghi tồn kho chính)
+  /** Variants tách thành bảng riêng — eager load cùng product */
+  @OneToMany(() => ProductVariant, (v) => v.product, {
+    cascade: true,
+    eager: true,
+  })
+  variants!: ProductVariant[];
+
+  /** Inventory cho sản phẩm không có variant (variantId = null) */
   @OneToMany(() => Inventory, (inv) => inv.product)
   inventories!: Inventory[];
 

@@ -4,13 +4,14 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, Between } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
+import { ProductVariant } from './entities/product-variant.entity';
 import { Category } from './entities/category.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto, SortOrder } from './dto/product-query.dto';
 import { StorageService } from '../storage/storage.service';
-import { v4 as uuidv4 } from 'uuid';
+
 // eslint-disable-next-line @typescript-eslint/no-namespace
 type MulterFile = Express.Multer.File;
 
@@ -19,6 +20,8 @@ export class CatalogService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepo: Repository<Product>,
+    @InjectRepository(ProductVariant)
+    private readonly variantRepo: Repository<ProductVariant>,
     @InjectRepository(Category)
     private readonly categoryRepo: Repository<Category>,
     private readonly storageService: StorageService,
@@ -30,8 +33,10 @@ export class CatalogService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const qb = this.productRepo.createQueryBuilder('p')
+    const qb = this.productRepo
+      .createQueryBuilder('p')
       .leftJoinAndSelect('p.category', 'category')
+      .leftJoinAndSelect('p.variants', 'variants')
       .where('p.status = :status', { status: 'active' });
 
     if (search) {
@@ -50,10 +55,17 @@ export class CatalogService {
     }
 
     switch (sort) {
-      case SortOrder.PRICE_ASC: qb.orderBy('p.price', 'ASC'); break;
-      case SortOrder.PRICE_DESC: qb.orderBy('p.price', 'DESC'); break;
-      case SortOrder.POPULAR: qb.orderBy('p.soldCount', 'DESC'); break;
-      default: qb.orderBy('p.createdAt', 'DESC');
+      case SortOrder.PRICE_ASC:
+        qb.orderBy('p.price', 'ASC');
+        break;
+      case SortOrder.PRICE_DESC:
+        qb.orderBy('p.price', 'DESC');
+        break;
+      case SortOrder.POPULAR:
+        qb.orderBy('p.soldCount', 'DESC');
+        break;
+      default:
+        qb.orderBy('p.createdAt', 'DESC');
     }
 
     const [items, total] = await qb.skip(skip).take(limit).getManyAndCount();
@@ -64,7 +76,10 @@ export class CatalogService {
   }
 
   async findBySlug(slug: string): Promise<Product> {
-    const product = await this.productRepo.findOne({ where: { slug } });
+    const product = await this.productRepo.findOne({
+      where: { slug },
+      relations: ['variants'],
+    });
     if (!product) throw new NotFoundException(`Product "${slug}" not found`);
 
     // Tăng view count
@@ -73,7 +88,10 @@ export class CatalogService {
   }
 
   async findById(id: string): Promise<Product> {
-    const product = await this.productRepo.findOne({ where: { id } });
+    const product = await this.productRepo.findOne({
+      where: { id },
+      relations: ['variants'],
+    });
     if (!product) throw new NotFoundException(`Product not found`);
     return product;
   }
@@ -92,11 +110,21 @@ export class CatalogService {
       uploadedImages = results.map((r) => ({ url: r.url, key: r.key }));
     }
 
+    // Tạo các variant entity (cascade insert qua product)
+    const variants: ProductVariant[] = (dto.variants ?? []).map((v) => {
+      return this.variantRepo.create({
+        label: v.label,
+        sku: v.sku,
+        price: v.price,
+        specs: v.specs ?? {},
+      });
+    });
+
     const product = this.productRepo.create({
       ...dto,
       slug,
       images: uploadedImages,
-      variants: dto.variants?.map((v) => ({ ...v, id: uuidv4() })) || [],
+      variants,
     });
 
     return this.productRepo.save(product);
@@ -115,7 +143,23 @@ export class CatalogService {
       product.images = [...product.images, ...newImages];
     }
 
-    Object.assign(product, dto);
+    // Nếu có variants mới → replace toàn bộ (xóa cũ, thêm mới)
+    if (dto.variants !== undefined) {
+      await this.variantRepo.delete({ productId: id });
+      product.variants = (dto.variants ?? []).map((v) =>
+        this.variantRepo.create({
+          label: v.label,
+          sku: v.sku,
+          price: v.price,
+          specs: v.specs ?? {},
+          productId: id,
+        }),
+      );
+    }
+
+    const { variants: _variants, ...rest } = dto;
+    Object.assign(product, rest);
+
     return this.productRepo.save(product);
   }
 
@@ -125,7 +169,49 @@ export class CatalogService {
     for (const img of product.images) {
       await this.storageService.deleteFile(img.key);
     }
+    // Variants sẽ bị cascade delete
     await this.productRepo.remove(product);
+  }
+
+  // === Variants CRUD riêng ===
+
+  async findVariant(variantId: string): Promise<ProductVariant> {
+    const variant = await this.variantRepo.findOne({ where: { id: variantId } });
+    if (!variant) throw new NotFoundException(`Variant not found`);
+    return variant;
+  }
+
+  async addVariant(
+    productId: string,
+    variantDto: {
+      label: string;
+      sku: string;
+      price: number;
+      specs?: Record<string, string>;
+    },
+  ): Promise<ProductVariant> {
+    await this.findById(productId); // đảm bảo product tồn tại
+    const variant = this.variantRepo.create({ ...variantDto, productId });
+    return this.variantRepo.save(variant);
+  }
+
+  async updateVariant(
+    variantId: string,
+    variantDto: Partial<{
+      label: string;
+      sku: string;
+      price: number;
+      specs: Record<string, string>;
+    }>,
+  ): Promise<ProductVariant> {
+    const variant = await this.findVariant(variantId);
+    Object.assign(variant, variantDto);
+    return this.variantRepo.save(variant);
+  }
+
+  async deleteVariant(variantId: string): Promise<void> {
+    const variant = await this.findVariant(variantId);
+    await this.variantRepo.remove(variant);
   }
 
   // === Categories ===
