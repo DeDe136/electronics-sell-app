@@ -23,7 +23,13 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already registered');
 
     const hashed = await bcrypt.hash(dto.password, 12);
-    const user = this.userRepo.create({ ...dto, password: hashed });
+    const minioEndpoint = process.env.MINIO_ENDPOINT || 'http://localhost:9000';
+    const minioBucket = process.env.MINIO_BUCKET || 'electronics-shop';
+    const user = this.userRepo.create({
+      ...dto,
+      password: hashed,
+      avatarUrl: `${minioEndpoint}/${minioBucket}/avatars/nov.jpg`,
+    });
     await this.userRepo.save(user);
 
     return this.signToken(user);
