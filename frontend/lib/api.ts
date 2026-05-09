@@ -17,10 +17,19 @@ api.interceptors.request.use((config) => {
 });
 
 // Auto logout nếu 401
+// Dùng flag để tránh redirect nhiều lần liên tiếp khi có nhiều request cùng lúc
+let isRedirectingToLogin = false;
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && typeof window !== 'undefined') {
+    if (
+      err.response?.status === 401 &&
+      typeof window !== 'undefined' &&
+      !isRedirectingToLogin &&
+      window.location.pathname !== '/login'  // Không redirect nếu đang ở trang login
+    ) {
+      isRedirectingToLogin = true;
       localStorage.removeItem('access_token');
       window.location.href = '/login';
     }

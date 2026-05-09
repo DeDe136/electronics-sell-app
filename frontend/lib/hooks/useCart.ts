@@ -36,12 +36,17 @@ export const useCart = create<CartState>((set, get) => ({
   isLoading: false,
 
   fetchCart: async () => {
+    // Không gửi request nếu chưa login — tránh kích hoạt 401 interceptor
+    if (typeof window !== 'undefined' && !localStorage.getItem('access_token')) {
+      set({ items: [], subtotal: 0, itemCount: 0 });
+      return;
+    }
     try {
       set({ isLoading: true });
       const data = await cartApi.getCart();
       set({ items: data.items, subtotal: data.subtotal, itemCount: data.itemCount });
     } catch {
-      // Chưa login — giỏ trống
+      // Token hết hạn hoặc lỗi server — reset giỏ trống
       set({ items: [], subtotal: 0, itemCount: 0 });
     } finally {
       set({ isLoading: false });

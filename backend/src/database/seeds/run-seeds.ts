@@ -2,7 +2,7 @@
  * Seed entrypoint
  * Chạy: npx ts-node src/database/seeds/run-seeds.ts
  *
- * Thứ tự: categories → products → inventory → users → orders → order_items → payments → cart_items
+ * Thứ tự: categories → products → variants → inventory → users → orders → order_items → payments → cart_items
  */
 
 import 'reflect-metadata';
@@ -15,6 +15,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 import { Category } from '../../modules/catalog/entities/category.entity';
 import { Product } from '../../modules/catalog/entities/product.entity';
+import { ProductVariant } from '../../modules/catalog/entities/product-variant.entity';
 import { Inventory } from '../../modules/inventory/entities/inventory.entity';
 import { User } from '../../modules/user/entities/user.entity';
 import { Order } from '../../modules/order/entities/order.entity';
@@ -24,6 +25,7 @@ import { CartItem } from '../../modules/cart/entities/cart-item.entity';
 
 import { seedCategories } from './category.seed';
 import { seedProducts } from './product.seed';
+import { seedVariants } from './variant.seed';
 import { seedInventory } from './inventory.seed';
 import { seedUsers } from './user.seed';
 import { seedOrders } from './order.seed';
@@ -37,7 +39,7 @@ async function main() {
     username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_NAME || 'electronics_shop',
-    entities: [Category, Product, Inventory, User, Order, OrderItem, Payment, CartItem],
+    entities: [Category, Product, ProductVariant, Inventory, User, Order, OrderItem, Payment, CartItem],
     synchronize: false,
     logging: false,
   });
@@ -50,6 +52,7 @@ async function main() {
 
     await seedCategories(dataSource);
     await seedProducts(dataSource);
+    await seedVariants(dataSource);   // ← thêm: phải chạy trước inventory
     await seedInventory(dataSource);
     await seedUsers(dataSource);
     await seedOrders(dataSource);

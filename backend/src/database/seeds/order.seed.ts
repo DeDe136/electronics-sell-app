@@ -7,8 +7,7 @@ import { Product } from '../../modules/catalog/entities/product.entity';
 
 interface OrderSeedItem {
   productSlug: string;
-  variantId: string | null;
-  variantLabel: string | null;
+  variantLabel: string | undefined; // ✅ undefined thay vì null
   unitPrice: number;
   quantity: number;
 }
@@ -27,12 +26,12 @@ interface OrderSeed {
   shippingFee: number;
   discount: number;
   status: OrderStatus;
-  note: string | null;
+  note: string | undefined; // ✅ undefined thay vì null
   items: OrderSeedItem[];
   payment: {
     method: PaymentMethod;
     status: PaymentStatus;
-    transactionId: string | null;
+    transactionId: string | undefined; // ✅ undefined thay vì null
     metadata: Record<string, any>;
   };
   createdDaysAgo: number;
@@ -56,8 +55,8 @@ export async function seedOrders(dataSource: DataSource) {
       status: OrderStatus.DELIVERED,
       note: 'Giao nhanh giúp tôi nhé',
       items: [
-        { productSlug: 'samsung-galaxy-s24-ultra', variantId: 'var-s24u-1', variantLabel: '256GB - Titanium Black', unitPrice: 29990000, quantity: 1 },
-        { productSlug: 'sony-wh-1000xm5',          variantId: 'var-xm5-1',  variantLabel: 'Đen',                   unitPrice: 7490000,  quantity: 1 },
+        { productSlug: 'samsung-galaxy-s24-ultra', variantLabel: '256GB - Titanium Black', unitPrice: 29990000, quantity: 1 },
+        { productSlug: 'sony-wh-1000xm5',          variantLabel: 'Đen',                   unitPrice: 7490000,  quantity: 1 },
       ],
       payment: { method: PaymentMethod.BANK_TRANSFER, status: PaymentStatus.SUCCESS, transactionId: 'VCB20240501123456', metadata: { bank: 'Vietcombank', accountName: 'NGUYEN VAN AN', transferNote: 'ORD-20240501-0001' } },
       createdDaysAgo: 20,
@@ -71,10 +70,10 @@ export async function seedOrders(dataSource: DataSource) {
       shippingFee: 0,
       discount: 500000,
       status: OrderStatus.SHIPPING,
-      note: null,
+      note: undefined, // ✅
       items: [
-        { productSlug: 'apple-airpods-pro-2',       variantId: null,         variantLabel: null,                    unitPrice: 5990000,  quantity: 1 },
-        { productSlug: 'apple-watch-series-9-45mm', variantId: 'var-aws9-1', variantLabel: '45mm Nhôm - Midnight',  unitPrice: 11490000, quantity: 1 },
+        { productSlug: 'apple-airpods-pro-2',       variantLabel: undefined,               unitPrice: 5990000,  quantity: 1 }, // ✅
+        { productSlug: 'apple-watch-series-9-45mm', variantLabel: '45mm Nhôm - Midnight',  unitPrice: 11490000, quantity: 1 },
       ],
       payment: { method: PaymentMethod.MOMO, status: PaymentStatus.SUCCESS, transactionId: 'MOMO20240505987654', metadata: { momoOrderId: 'MM20240505987654', requestId: 'req-abc123' } },
       createdDaysAgo: 3,
@@ -90,7 +89,7 @@ export async function seedOrders(dataSource: DataSource) {
       status: OrderStatus.CONFIRMED,
       note: 'Đóng gói cẩn thận',
       items: [
-        { productSlug: 'macbook-pro-16-m3-pro', variantId: 'var-mbp16-1', variantLabel: '18GB / 512GB - Bạc', unitPrice: 66990000, quantity: 1 },
+        { productSlug: 'macbook-pro-16-m3-pro', variantLabel: '18GB / 512GB - Bạc', unitPrice: 66990000, quantity: 1 },
       ],
       payment: { method: PaymentMethod.VNPAY, status: PaymentStatus.SUCCESS, transactionId: 'VNPAY20240507001122', metadata: { vnp_TxnRef: 'ORD-20240507-0003', vnp_BankCode: 'VCB', vnp_CardType: 'ATM' } },
       createdDaysAgo: 1,
@@ -104,11 +103,11 @@ export async function seedOrders(dataSource: DataSource) {
       shippingFee: 30000,
       discount: 0,
       status: OrderStatus.PENDING,
-      note: null,
+      note: undefined, // ✅
       items: [
-        { productSlug: 'sony-wh-1000xm5', variantId: 'var-xm5-1', variantLabel: 'Đen', unitPrice: 7490000, quantity: 1 },
+        { productSlug: 'sony-wh-1000xm5', variantLabel: 'Đen', unitPrice: 7490000, quantity: 1 },
       ],
-      payment: { method: PaymentMethod.COD, status: PaymentStatus.PENDING, transactionId: null, metadata: { note: 'Thu tiền khi giao hàng' } },
+      payment: { method: PaymentMethod.COD, status: PaymentStatus.PENDING, transactionId: undefined, metadata: { note: 'Thu tiền khi giao hàng' } }, // ✅
       createdDaysAgo: 0,
     },
 
@@ -122,7 +121,7 @@ export async function seedOrders(dataSource: DataSource) {
       status: OrderStatus.CANCELLED,
       note: 'Khách hủy vì đổi ý',
       items: [
-        { productSlug: 'ipad-pro-11-m4-wifi', variantId: 'var-ipadpro11-1', variantLabel: '256GB Wi-Fi - Bạc', unitPrice: 22490000, quantity: 1 },
+        { productSlug: 'ipad-pro-11-m4-wifi', variantLabel: '256GB Wi-Fi - Bạc', unitPrice: 22490000, quantity: 1 },
       ],
       payment: { method: PaymentMethod.MOMO, status: PaymentStatus.REFUNDED, transactionId: 'MOMO20240420-REF001', metadata: { refundId: 'REF-20240422-001', reason: 'Khách hủy đơn' } },
       createdDaysAgo: 35,
@@ -163,7 +162,7 @@ export async function seedOrders(dataSource: DataSource) {
       discount: seed.discount,
       total,
       status: seed.status,
-      note: seed.note,
+      note: seed.note,       // ✅ undefined — TypeORM sẽ bỏ qua hoặc lưu NULL vào DB
       createdAt,
       updatedAt: createdAt,
     });
@@ -181,8 +180,8 @@ export async function seedOrders(dataSource: DataSource) {
         orderId: savedOrder.id,
         productId: product.id,
         productName: product.name,
-        productImage: product.images?.[0]?.url ?? null,
-        variantLabel: it.variantLabel,
+        productImage: product.images?.[0]?.url ?? undefined, // ✅ undefined thay vì null
+        variantLabel: it.variantLabel,                       // ✅ undefined thay vì null
         unitPrice: it.unitPrice,
         quantity: it.quantity,
         subtotal: it.unitPrice * it.quantity,
@@ -197,7 +196,7 @@ export async function seedOrders(dataSource: DataSource) {
       method: seed.payment.method,
       status: seed.payment.status,
       amount: total,
-      transactionId: seed.payment.transactionId,
+      transactionId: seed.payment.transactionId, // ✅ undefined thay vì null
       metadata: seed.payment.metadata,
       createdAt,
       updatedAt: createdAt,

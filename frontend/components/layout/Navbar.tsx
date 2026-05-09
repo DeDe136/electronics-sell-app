@@ -17,7 +17,7 @@ export function Navbar() {
   useEffect(() => {
     setMounted(true);
     fetchCart();
-  }, []);
+  }, [fetchCart]);
 
   const categories = [
     { label: 'Điện thoại', href: '/?category=smartphone' },

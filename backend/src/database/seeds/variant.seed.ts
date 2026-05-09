@@ -15,18 +15,18 @@ export async function seedVariants(dataSource: DataSource) {
   const productRepo = dataSource.getRepository(Product);
 
   const variants: VariantSeed[] = [
-    // ── iPhone 15 Pro Max ──
-    { productSlug: 'iphone-15-pro-max', label: '256GB - Titan Tự nhiên', sku: 'IP15PM-256-NAT', price: 34990000, specs: { 'Màu': 'Titan Tự nhiên', 'Bộ nhớ': '256GB' } },
-    { productSlug: 'iphone-15-pro-max', label: '256GB - Titan Đen',      sku: 'IP15PM-256-BLK', price: 34990000, specs: { 'Màu': 'Titan Đen',      'Bộ nhớ': '256GB' } },
-    { productSlug: 'iphone-15-pro-max', label: '512GB - Titan Trắng',    sku: 'IP15PM-512-WHT', price: 40990000, specs: { 'Màu': 'Titan Trắng',    'Bộ nhớ': '512GB' } },
+    // ── iPhone 17 Pro Max ──
+    { productSlug: 'iphone-17-pro-max', label: '256GB - Titan Tự nhiên', sku: 'IP17PM-256-NAT', price: 34990000, specs: { 'Màu': 'Titan Tự nhiên', 'Bộ nhớ': '256GB' } },
+    { productSlug: 'iphone-17-pro-max', label: '256GB - Titan Đen',      sku: 'IP17PM-256-BLK', price: 34990000, specs: { 'Màu': 'Titan Đen',      'Bộ nhớ': '256GB' } },
+    { productSlug: 'iphone-17-pro-max', label: '512GB - Titan Trắng',    sku: 'IP17PM-512-WHT', price: 40990000, specs: { 'Màu': 'Titan Trắng',    'Bộ nhớ': '512GB' } },
 
     // ── Samsung Galaxy S24 Ultra ──
     { productSlug: 'samsung-galaxy-s24-ultra', label: '256GB - Titanium Black', sku: 'S24U-256-BLK', price: 31990000, specs: { 'Màu': 'Titanium Black', 'Bộ nhớ': '256GB' } },
     { productSlug: 'samsung-galaxy-s24-ultra', label: '512GB - Titanium Gray',  sku: 'S24U-512-GRY', price: 36990000, specs: { 'Màu': 'Titanium Gray',  'Bộ nhớ': '512GB' } },
 
-    // ── Xiaomi 14 Ultra ──
-    { productSlug: 'xiaomi-14-ultra', label: '512GB - Trắng', sku: 'X14U-512-WHT', price: 22990000, specs: { 'Màu': 'Trắng', 'Bộ nhớ': '512GB' } },
-    { productSlug: 'xiaomi-14-ultra', label: '512GB - Đen',   sku: 'X14U-512-BLK', price: 22990000, specs: { 'Màu': 'Đen',   'Bộ nhớ': '512GB' } },
+    // ── Xiaomi 17 Ultra ──
+    { productSlug: 'xiaomi-17-ultra', label: '512GB - Trắng', sku: 'X17U-512-WHT', price: 22990000, specs: { 'Màu': 'Trắng', 'Bộ nhớ': '512GB' } },
+    { productSlug: 'xiaomi-17-ultra', label: '512GB - Đen',   sku: 'X17U-512-BLK', price: 22990000, specs: { 'Màu': 'Đen',   'Bộ nhớ': '512GB' } },
 
     // ── MacBook Pro 16 M3 Pro ──
     { productSlug: 'macbook-pro-16-m3-pro', label: '18GB / 512GB - Bạc',           sku: 'MBP16-M3P-18-512-SIL', price: 69990000, specs: { 'Màu': 'Bạc',           'RAM': '18GB', 'Ổ cứng': '512GB' } },

@@ -29,6 +29,7 @@ export class AuthService {
       ...dto,
       password: hashed,
       avatarUrl: `${minioEndpoint}/${minioBucket}/avatars/nov.jpg`,
+      avatarKey: 'avatars/nov.jpg',
     });
     await this.userRepo.save(user);
 

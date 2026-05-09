@@ -21,17 +21,17 @@ export async function seedProducts(dataSource: DataSource) {
   const products: Partial<Product>[] = [
     // ── ĐIỆN THOẠI ──
     {
-      name: 'iPhone 15 Pro Max',
-      slug: 'iphone-15-pro-max',
+      name: 'iPhone 17 Pro Max',
+      slug: 'iphone-17-pro-max',
       brand: 'Apple',
       description:
-        'iPhone 15 Pro Max với chip A17 Pro mạnh mẽ, camera 48MP, màn hình Super Retina XDR 6.7 inch và khung titanium cao cấp. Hỗ trợ USB-C 3.0 và Action Button tùy chỉnh.',
+        'iPhone 17 Pro Max với chip A17 Pro mạnh mẽ, camera 48MP, màn hình Super Retina XDR 6.7 inch và khung titanium cao cấp. Hỗ trợ USB-C 3.0 và Action Button tùy chỉnh.',
       price: 34990000,
       salePrice: 32990000,
       images: [
-        { url: 'http://localhost:9000/products/iphone15promax/1.jpg', key: 'products/iphone15promax/1.jpg' },
-        { url: 'http://localhost:9000/products/iphone15promax/2.jpg', key: 'products/iphone15promax/2.jpg' },
-        { url: 'http://localhost:9000/products/iphone15promax/3.jpg', key: 'products/iphone15promax/3.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/iphone17promax/1.jpg', key: 'products/iphone17promax/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/iphone17promax/2.jpg', key: 'products/iphone17promax/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/iphone17promax/3.jpg', key: 'products/iphone17promax/3.jpg' },
       ],
       specs: {
         'Màn hình': '6.7 inch Super Retina XDR LTPO OLED 120Hz',
@@ -56,8 +56,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 31990000,
       salePrice: 29990000,
       images: [
-        { url: 'http://localhost:9000/products/s24ultra/1.jpg', key: 'products/s24ultra/1.jpg' },
-        { url: 'http://localhost:9000/products/s24ultra/2.jpg', key: 'products/s24ultra/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/s24ultra/1.jpg', key: 'products/s24ultra/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/s24ultra/2.jpg', key: 'products/s24ultra/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/s24ultra/3.jpg', key: 'products/s24ultra/3.jpg' },
       ],
       specs: {
         'Màn hình': '6.8 inch Dynamic AMOLED 2X 120Hz',
@@ -74,16 +75,17 @@ export async function seedProducts(dataSource: DataSource) {
       category: dienThoai,
     },
     {
-      name: 'Xiaomi 14 Ultra',
-      slug: 'xiaomi-14-ultra',
+      name: 'Xiaomi 17 Ultra',
+      slug: 'xiaomi-17-ultra',
       brand: 'Xiaomi',
       description:
-        'Xiaomi 14 Ultra với hệ thống camera Leica hàng đầu, chip Snapdragon 8 Gen 3, màn hình AMOLED 6.73 inch 120Hz và sạc nhanh 90W không dây.',
+        'Xiaomi 17 Ultra với hệ thống camera Leica hàng đầu, chip Snapdragon 8 Gen 3, màn hình AMOLED 6.73 inch 120Hz và sạc nhanh 90W không dây.',
       price: 22990000,
       salePrice: 20990000,
       images: [
-        { url: 'http://localhost:9000/products/xiaomi14ultra/1.jpg', key: 'products/xiaomi14ultra/1.jpg' },
-        { url: 'http://localhost:9000/products/xiaomi14ultra/2.jpg', key: 'products/xiaomi14ultra/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/xiaomi17ultra/1.jpg', key: 'products/xiaomi17ultra/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/xiaomi17ultra/2.jpg', key: 'products/xiaomi17ultra/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/xiaomi17ultra/3.jpg', key: 'products/xiaomi17ultra/3.jpg' },
       ],
       specs: {
         'Màn hình': '6.73 inch AMOLED 120Hz',
@@ -110,8 +112,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 69990000,
       salePrice: 66990000,
       images: [
-        { url: 'http://localhost:9000/products/mbp16m3pro/1.jpg', key: 'products/mbp16m3pro/1.jpg' },
-        { url: 'http://localhost:9000/products/mbp16m3pro/2.jpg', key: 'products/mbp16m3pro/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/mbp16m3pro/1.jpg', key: 'products/mbp16m3pro/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/mbp16m3pro/2.jpg', key: 'products/mbp16m3pro/2.jpg' },
       ],
       specs: {
         'CPU': 'Apple M3 Pro 12-core',
@@ -136,8 +138,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 45990000,
       salePrice: 42990000,
       images: [
-        { url: 'http://localhost:9000/products/dellxps15/1.jpg', key: 'products/dellxps15/1.jpg' },
-        { url: 'http://localhost:9000/products/dellxps15/2.jpg', key: 'products/dellxps15/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/dellxps15/1.jpg', key: 'products/dellxps15/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/dellxps15/2.jpg', key: 'products/dellxps15/2.jpg' },
       ],
       specs: {
         'CPU': 'Intel Core i7-13700H',
@@ -160,10 +162,10 @@ export async function seedProducts(dataSource: DataSource) {
       description:
         'ROG Zephyrus G14 2024 với AMD Ryzen 9 8945HS, RTX 4070, màn hình OLED 2.8K 120Hz và trọng lượng chỉ 1.65 kg. Gaming mỏng nhẹ hàng đầu phân khúc.',
       price: 39990000,
-      salePrice: null,
+      salePrice: undefined,
       images: [
-        { url: 'http://localhost:9000/products/rogg14-2024/1.jpg', key: 'products/rogg14-2024/1.jpg' },
-        { url: 'http://localhost:9000/products/rogg14-2024/2.jpg', key: 'products/rogg14-2024/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/rogg14-2024/1.jpg', key: 'products/rogg14-2024/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/rogg14-2024/2.jpg', key: 'products/rogg14-2024/2.jpg' },
       ],
       specs: {
         'CPU': 'AMD Ryzen 9 8945HS',
@@ -190,8 +192,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 8990000,
       salePrice: 7490000,
       images: [
-        { url: 'http://localhost:9000/products/sonywh1000xm5/1.jpg', key: 'products/sonywh1000xm5/1.jpg' },
-        { url: 'http://localhost:9000/products/sonywh1000xm5/2.jpg', key: 'products/sonywh1000xm5/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/sonywh1000xm5/1.jpg', key: 'products/sonywh1000xm5/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/sonywh1000xm5/2.jpg', key: 'products/sonywh1000xm5/2.jpg' },
       ],
       specs: {
         'Loại kết nối': 'Bluetooth 5.2 / 3.5mm jack',
@@ -214,8 +216,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 6490000,
       salePrice: 5990000,
       images: [
-        { url: 'http://localhost:9000/products/airpodspro2/1.jpg', key: 'products/airpodspro2/1.jpg' },
-        { url: 'http://localhost:9000/products/airpodspro2/2.jpg', key: 'products/airpodspro2/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/airpodspro2/1.jpg', key: 'products/airpodspro2/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/airpodspro2/2.jpg', key: 'products/airpodspro2/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/airpodspro2/3.jpg', key: 'products/airpodspro2/3.jpg' },
       ],
       specs: {
         'Loại kết nối': 'Bluetooth 5.3',
@@ -240,8 +243,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 12990000,
       salePrice: 11490000,
       images: [
-        { url: 'http://localhost:9000/products/applewatch-s9-45/1.jpg', key: 'products/applewatch-s9-45/1.jpg' },
-        { url: 'http://localhost:9000/products/applewatch-s9-45/2.jpg', key: 'products/applewatch-s9-45/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/applewatch-s9-45/1.jpg', key: 'products/applewatch-s9-45/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/applewatch-s9-45/2.jpg', key: 'products/applewatch-s9-45/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/applewatch-s9-45/3.jpg', key: 'products/applewatch-s9-45/3.jpg' },
       ],
       specs: {
         'Màn hình': '45 mm Always-On Retina LTPO OLED',
@@ -264,8 +268,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 9490000,
       salePrice: 8290000,
       images: [
-        { url: 'http://localhost:9000/products/gw6classic47/1.jpg', key: 'products/gw6classic47/1.jpg' },
-        { url: 'http://localhost:9000/products/gw6classic47/2.jpg', key: 'products/gw6classic47/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/gw6classic47/1.jpg', key: 'products/gw6classic47/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/gw6classic47/2.jpg', key: 'products/gw6classic47/2.jpg' },
       ],
       specs: {
         'Màn hình': '47 mm Super AMOLED 480×480',
@@ -290,8 +294,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 23990000,
       salePrice: 22490000,
       images: [
-        { url: 'http://localhost:9000/products/ipadpro11m4/1.jpg', key: 'products/ipadpro11m4/1.jpg' },
-        { url: 'http://localhost:9000/products/ipadpro11m4/2.jpg', key: 'products/ipadpro11m4/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/ipadpro11m4/1.jpg', key: 'products/ipadpro11m4/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/ipadpro11m4/2.jpg', key: 'products/ipadpro11m4/2.jpg' },
       ],
       specs: {
         'Màn hình': '11 inch Ultra Retina XDR OLED tandem 120Hz',
@@ -316,8 +320,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 10490000,
       salePrice: 9290000,
       images: [
-        { url: 'http://localhost:9000/products/tabs9fe/1.jpg', key: 'products/tabs9fe/1.jpg' },
-        { url: 'http://localhost:9000/products/tabs9fe/2.jpg', key: 'products/tabs9fe/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/tabs9fe/1.jpg', key: 'products/tabs9fe/1.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/tabs9fe/2.jpg', key: 'products/tabs9fe/2.jpg' },
+        { url: 'http://localhost:9000/electronics-shop/products/tabs9fe/3.jpg', key: 'products/tabs9fe/3.jpg' },
       ],
       specs: {
         'Màn hình': '10.9 inch TFT 90Hz',

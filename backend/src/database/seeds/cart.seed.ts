@@ -6,7 +6,7 @@ import { Product } from '../../modules/catalog/entities/product.entity';
 interface CartSeed {
   userEmail: string;
   productSlug: string;
-  variantId: string | null;
+  variantId: string | undefined; // ✅ undefined thay vì null
   quantity: number;
 }
 
@@ -17,12 +17,12 @@ export async function seedCartItems(dataSource: DataSource) {
 
   const items: CartSeed[] = [
     // Nguyễn Văn An — đang xem iPad Pro 11
-    { userEmail: 'nguyen.van.an@gmail.com', productSlug: 'ipad-pro-11-m4-wifi',           variantId: 'var-ipadpro11-1', quantity: 1 },
+    { userEmail: 'nguyen.van.an@gmail.com', productSlug: 'ipad-pro-11-m4-wifi',        variantId: 'var-ipadpro11-1', quantity: 1 },
     // Trần Thị Bích — đang so sánh 2 điện thoại
-    { userEmail: 'tran.thi.bich@gmail.com', productSlug: 'iphone-15-pro-max',              variantId: 'var-ip15pm-2',    quantity: 1 },
-    { userEmail: 'tran.thi.bich@gmail.com', productSlug: 'xiaomi-14-ultra',                variantId: 'var-x14u-1',      quantity: 1 },
+    { userEmail: 'tran.thi.bich@gmail.com', productSlug: 'iphone-17-pro-max',           variantId: 'var-ip17pm-2',    quantity: 1 },
+    { userEmail: 'tran.thi.bich@gmail.com', productSlug: 'xiaomi-17-ultra',             variantId: 'var-x17u-1',      quantity: 1 },
     // Lê Minh Cường — đang xem laptop gaming
-    { userEmail: 'le.minh.cuong@gmail.com', productSlug: 'asus-rog-zephyrus-g14-2024',    variantId: 'var-g14-1',       quantity: 1 },
+    { userEmail: 'le.minh.cuong@gmail.com', productSlug: 'asus-rog-zephyrus-g14-2024', variantId: 'var-g14-1',       quantity: 1 },
   ];
 
   for (const seed of items) {
@@ -39,6 +39,7 @@ export async function seedCartItems(dataSource: DataSource) {
     }
 
     // Tránh duplicate: cùng user + product + variant
+    // ✅ undefined tương thích với FindOperator<string> | undefined
     const existing = await cartRepo.findOneBy({
       userId: user.id,
       productId: product.id,
@@ -49,6 +50,7 @@ export async function seedCartItems(dataSource: DataSource) {
       continue;
     }
 
+    // ✅ repo.create() nhận undefined, không nhận null
     const item = cartRepo.create({
       userId: user.id,
       productId: product.id,
