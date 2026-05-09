@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="vi" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
-          <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+          <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-[#0d1117]">
             <Navbar />
             <main className="flex-1">{children}</main>
             <Footer />
@@ -26,7 +26,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Toaster
             position="top-right"
             toastOptions={{
-              className: 'dark:bg-gray-800 dark:text-white dark:border-gray-700',
+              style: { borderRadius: '10px' },
+              className: 'dark:!bg-slate-800 dark:!text-slate-100 dark:!border dark:!border-slate-700',
             }}
           />
         </Providers>

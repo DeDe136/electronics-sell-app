@@ -25,17 +25,23 @@ export function ProductSpecs({ specs, className = '' }: ProductSpecsProps) {
   if (!entries.length) return null;
 
   return (
-    <div className={`bg-gray-50 rounded-xl p-4 ${className}`}>
-      <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">
+    <div className={`rounded-xl p-4
+      bg-gray-50 dark:bg-slate-800/60
+      border border-gray-100 dark:border-slate-700/50
+      ${className}`}>
+      <h3 className="font-semibold mb-3 text-sm uppercase tracking-wide
+        text-gray-800 dark:text-slate-100">
         Thông số kỹ thuật
       </h3>
-      <div className="divide-y divide-gray-200">
+      <div className="divide-y divide-gray-200 dark:divide-slate-700/60">
         {entries.map(([key, value]) => (
-          <div key={key} className="flex py-2.5 gap-4">
-            <span className="text-sm text-gray-500 w-36 shrink-0">
+          <div key={SPEC_LABELS[key] || key} className="flex py-2.5 gap-4">
+            <span className="text-sm w-36 shrink-0 text-gray-500 dark:text-slate-400">
               {SPEC_LABELS[key] || key}
             </span>
-            <span className="text-sm text-gray-800 font-medium flex-1">{value}</span>
+            <span className="text-sm font-medium flex-1 text-gray-800 dark:text-slate-100">
+              {value}
+            </span>
           </div>
         ))}
       </div>

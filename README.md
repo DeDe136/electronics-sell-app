@@ -25,7 +25,7 @@
 7. [Hướng dẫn chạy local](#7-hướng-dẫn-chạy-local)
 8. [API Reference](#8-api-reference)
 9. [Biến môi trường](#9-biến-môi-trường)
-10. [DevSecOps (placeholder)](#10-devsecops-placeholder)
+10. [DevSecOps](#10-devsecops)
 11. [Lộ trình tách Microservices](#11-lộ-trình-tách-microservices)
 12. [Troubleshooting](#12-troubleshooting)
 
@@ -77,7 +77,7 @@ electronics-shop/
 │
 ├── scripts/
 │   ├── migrate.sh              # [Placeholder] Chạy TypeORM migrations (production)
-│   └── seed.sh                 # [Placeholder] Seed dữ liệu mẫu vào database
+│   └── seed.sh                 # Seed dữ liệu mẫu vào database (chạy được)
 │
 ├── security/
 │   ├── .trivyignore            # Danh sách CVE bỏ qua khi scan Docker image bằng Trivy
@@ -103,6 +103,18 @@ electronics-shop/
 │   │   │   └── guards/
 │   │   │       ├── jwt-auth.guard.ts   # Guard xác thực Bearer token JWT
 │   │   │       └── roles.guard.ts      # Guard phân quyền: kiểm tra role từ @Roles()
+│   │   │
+│   │   ├── database/
+│   │   │   └── seeds/                  # ── Seed dữ liệu mẫu (đã hoàn chỉnh) ──
+│   │   │       ├── run-seeds.ts        # Entrypoint seed: khởi tạo DataSource độc lập,
+│   │   │       │                       # chạy tuần tự theo thứ tự phụ thuộc
+│   │   │       ├── category.seed.ts    # Seed danh mục (Điện thoại, Laptop, Tablet...)
+│   │   │       ├── product.seed.ts     # Seed sản phẩm với specs JSONB đầy đủ
+│   │   │       ├── variant.seed.ts     # Seed biến thể sản phẩm (màu, cấu hình, giá)
+│   │   │       ├── inventory.seed.ts   # Seed tồn kho theo SKU
+│   │   │       ├── user.seed.ts        # Seed tài khoản mẫu (admin + user thường)
+│   │   │       ├── order.seed.ts       # Seed đơn hàng với snapshot OrderItems
+│   │   │       └── cart.seed.ts        # Seed giỏ hàng mẫu
 │   │   │
 │   │   └── modules/              # ── Business Modules ──
 │   │       │
@@ -153,8 +165,10 @@ electronics-shop/
 │   │       │       ├── product.entity.ts  # slug (auto-gen), specs: JSONB (RAM/CPU/Pin...),
 │   │       │       │                      # images: [{url, key}], variants: [],
 │   │       │       │                      # salePrice, soldCount, viewCount
-│   │       │       └── category.entity.ts # name, slug, specFields[] (định nghĩa
-│   │       │                              # các thông số đặc trưng cho từng loại thiết bị)
+│   │       │       ├── product-variant.entity.ts  # Biến thể: name, sku, price,
+│   │       │       │                               # attributes (JSONB), stock
+│   │       │       └── category.entity.ts  # name, slug, specFields[] (định nghĩa
+│   │       │                               # các thông số đặc trưng cho từng loại thiết bị)
 │   │       │
 │   │       ├── cart/             # Giỏ hàng (lưu DB, không dùng session/cookie)
 │   │       │   ├── cart.module.ts
@@ -210,10 +224,14 @@ electronics-shop/
     │   ├── layout.tsx          # Root layout: load font, render Navbar + Footer,
     │   │                       # wrap QueryClientProvider + Toaster
     │   ├── globals.css         # Tailwind @tailwind directives + custom CSS variables
+    │   ├── globals.d.ts        # Type declarations toàn cục cho Next.js
     │   ├── providers.tsx       # React Query QueryClientProvider (client component)
     │   ├── page.tsx            # 🏠 Trang chủ (SSR): banner hero 3 cột, category pills,
     │   │                       # sidebar filter (giá, thương hiệu), product grid,
     │   │                       # sort dropdown, pagination
+    │   ├── login/
+    │   │   └── page.tsx        # 🔑 Trang đăng nhập / đăng ký: form toggle,
+    │   │                       # validation, redirect sau login
     │   ├── products/
     │   │   └── [slug]/
     │   │       └── page.tsx    # 📱 Chi tiết sản phẩm (CSR): image gallery + thumbnails,
@@ -346,6 +364,11 @@ getSignedReadUrl(key)               → string  (truy cập file private có TTL
 - Product grid: 2 cột mobile → 4 cột desktop
 - Sort dropdown, pagination
 
+### Trang Login (`/login`)
+- Form toggle đăng nhập / đăng ký trên cùng trang
+- Validate client-side trước khi gọi API
+- Lưu `accessToken` vào `localStorage`, tự redirect về trang chủ sau khi thành công
+
 ### Trang Product Detail (`/products/[slug]`)
 - **Client Component** — fetch khi mount
 - Gallery ảnh với thumbnails, chuyển prev/next
@@ -409,18 +432,14 @@ npm -v    # → 10.x.x
 ```bash
 sudo apt update
 sudo apt install -y postgresql postgresql-contrib
-
-# Khởi động PostgreSQL
-sudo service postgresql start
-
-# Bật tự khởi động (WSL2 không có systemd mặc định, dùng service)
-# Thêm vào cuối ~/.bashrc để tự start khi mở terminal:
-echo 'sudo service postgresql start > /dev/null 2>&1' >> ~/.bashrc
 ```
 
 **Tạo database:**
 ```bash
-# Trên WSL2/Linux, dùng sudo -u postgres để chạy với quyền postgres user
+# Khởi động PostgreSQL lần đầu
+sudo service postgresql start
+
+# Tạo database
 sudo -u postgres psql -c "CREATE DATABASE electronics_shop;"
 
 # Kiểm tra đã tạo thành công
@@ -433,6 +452,90 @@ sudo -u postgres psql -c "\l" | grep electronics_shop
 ```bash
 sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 ```
+
+#### 🔄 Quản lý vòng đời PostgreSQL (tắt / bật)
+
+WSL2 không có `systemd` theo mặc định nên PostgreSQL **không tự chạy** khi mở terminal mới, và **không tự dừng** khi đóng terminal. Dưới đây là cách quản lý đúng:
+
+**Khởi động thủ công:**
+```bash
+sudo service postgresql start
+```
+
+**Dừng thủ công (khi thoát project):**
+```bash
+sudo service postgresql stop
+```
+
+**Khởi động lại (sau khi thay đổi config):**
+```bash
+sudo service postgresql restart
+```
+
+**Kiểm tra trạng thái:**
+```bash
+sudo service postgresql status
+```
+
+---
+
+**Tự động khởi động khi mở terminal (tuỳ chọn):**
+
+Thêm vào cuối `~/.bashrc` để PostgreSQL tự start mỗi khi mở terminal WSL2:
+
+```bash
+echo 'sudo service postgresql start > /dev/null 2>&1' >> ~/.bashrc
+source ~/.bashrc
+```
+
+> **Lưu ý:** Cách này yêu cầu password sudo mỗi lần. Để bỏ yêu cầu password cho lệnh này, thêm vào `/etc/sudoers`:
+> ```bash
+> sudo visudo
+> # Thêm dòng sau (thay <username> bằng tên user của bạn):
+> <username> ALL=(ALL) NOPASSWD: /usr/sbin/service postgresql start, /usr/sbin/service postgresql stop, /usr/sbin/service postgresql restart
+> ```
+
+---
+
+**Tự động dừng khi đóng terminal (tuỳ chọn):**
+
+Thêm vào cuối `~/.bashrc` để PostgreSQL tự stop khi shell thoát:
+
+```bash
+echo 'trap "sudo service postgresql stop > /dev/null 2>&1" EXIT' >> ~/.bashrc
+source ~/.bashrc
+```
+
+> **Cảnh báo:** `trap EXIT` sẽ dừng PostgreSQL ngay khi terminal đóng lại — kể cả khi backend vẫn đang chạy ở tab khác. Chỉ dùng nếu bạn chạy tất cả services trong cùng một terminal session.
+
+---
+
+**Tự động tắt và bật theo project (khuyến nghị):**
+
+Thay vì dùng `trap`, hãy ghi hai alias vào `~/.bashrc` để tồn tại vĩnh viễn qua các phiên:
+
+```bash
+# Ghi alias vào ~/.bashrc (chỉ cần chạy một lần duy nhất)
+echo 'alias db-start="sudo service postgresql start && echo \"✅ PostgreSQL started\""' >> ~/.bashrc
+echo 'alias db-stop="sudo service postgresql stop && echo \"🛑 PostgreSQL stopped\""' >> ~/.bashrc
+
+# Áp dụng ngay cho phiên hiện tại
+source ~/.bashrc
+```
+
+Từ lần sau chỉ cần:
+
+```bash
+# Khi bắt đầu làm việc
+db-start
+
+# Khi kết thúc làm việc
+db-stop
+```
+
+Đây là cách **được khuyến nghị nhất** — kiểm soát rõ ràng, không có tác dụng phụ.
+
+---
 
 ### 6.3 — MinIO (Object Storage)
 
@@ -614,7 +717,23 @@ npm run dev
 4. Frontend     → cd frontend && npm run dev
 ```
 
-### Bước 5 — Tạo tài khoản admin đầu tiên
+### Bước 5 — Seed dữ liệu mẫu
+
+Project có sẵn bộ seed dữ liệu đầy đủ, chạy theo thứ tự phụ thuộc:
+`categories → products → variants → inventory → users → orders → cart_items`
+
+```bash
+# Chạy từ thư mục root của project
+bash scripts/seed.sh
+
+# Hoặc chạy trực tiếp từ thư mục backend
+cd backend
+npx ts-node src/database/seeds/run-seeds.ts
+```
+
+> **Lưu ý:** Backend phải đã chạy ít nhất một lần để TypeORM tạo đủ các bảng trước khi seed.
+
+### Bước 6 — Tạo tài khoản admin đầu tiên
 
 ```bash
 # 1. Đăng ký tài khoản thường
@@ -630,6 +749,8 @@ sudo -u postgres psql -d electronics_shop \
 sudo -u postgres psql -d electronics_shop \
   -c "SELECT email, role FROM users WHERE email='admin@techshop.vn';"
 ```
+
+> **Hoặc dùng tài khoản từ seed:** Nếu đã chạy seed, tài khoản admin đã được tạo sẵn — xem file `backend/src/database/seeds/user.seed.ts` để biết thông tin đăng nhập.
 
 ### Kiểm tra tổng thể
 
@@ -775,9 +896,17 @@ PUT /api/v1/inventory/:productId     # Cập nhật: { "quantity": 100, "lowStoc
 
 ---
 
-## 10. DevSecOps (placeholder)
+## 10. DevSecOps
 
-Các file sau đã tạo sẵn khung cấu trúc, **chưa có nội dung thực** — điền khi sẵn sàng deploy:
+### Files đã hoàn chỉnh
+
+| File | Trạng thái | Mô tả |
+|---|---|---|
+| `scripts/seed.sh` | ✅ Hoàn chỉnh | Seed dữ liệu mẫu vào database |
+| `security/.trivyignore` | ✅ Hoàn chỉnh | Danh sách CVE bỏ qua khi scan Docker image bằng Trivy |
+| `security/owasp-zap.conf` | ✅ Hoàn chỉnh | Config OWASP ZAP automated penetration testing |
+
+### Files placeholder (chưa triển khai)
 
 | File | Mục đích |
 |---|---|
@@ -785,11 +914,8 @@ Các file sau đã tạo sẵn khung cấu trúc, **chưa có nội dung thực*
 | `.github/workflows/deploy.yml` | CD: tự động deploy lên staging/production |
 | `docker/backend.Dockerfile` | Multi-stage build NestJS: build stage → production image |
 | `docker/frontend.Dockerfile` | Multi-stage build Next.js standalone output |
-| `docker/docker-compose.yml` | Compose: backend + frontend + postgres + minio (commented out) |
+| `docker/docker-compose.yml` | Compose: backend + frontend + postgres + minio |
 | `scripts/migrate.sh` | Chạy TypeORM migrations (production — không dùng synchronize) |
-| `scripts/seed.sh` | Seed dữ liệu demo vào database |
-| `security/.trivyignore` | Danh sách CVE bỏ qua khi scan Docker image bằng Trivy |
-| `security/owasp-zap.conf` | Config OWASP ZAP automated penetration testing |
 
 ---
 
@@ -902,6 +1028,19 @@ sudo -u postgres psql -c "\l" | grep electronics_shop
 
 # Nếu chưa có, tạo lại
 sudo -u postgres psql -c "CREATE DATABASE electronics_shop;"
+```
+
+### ❌ Seed lỗi `relation does not exist`
+
+Backend cần chạy ít nhất một lần để TypeORM tạo bảng trước khi seed:
+
+```bash
+# Bước 1: chạy backend để tạo bảng
+cd backend && npm run start:dev
+# Chờ thấy "🚀 Backend running on http://localhost:3001"
+
+# Bước 2: mở terminal mới, chạy seed
+bash scripts/seed.sh
 ```
 
 ---

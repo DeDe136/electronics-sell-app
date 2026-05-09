@@ -10,11 +10,11 @@ import { Button } from '@/components/ui/Button';
 import { useCart } from '@/lib/hooks/useCart';
 
 export default function ProductDetailPage({ params }: { params: { slug: string } }) {
-  const [product, setProduct] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeImg, setActiveImg] = useState(0);
+  const [product, setProduct]               = useState<any>(null);
+  const [loading, setLoading]               = useState(true);
+  const [activeImg, setActiveImg]           = useState(0);
   const [selectedVariant, setSelectedVariant] = useState<any>(null);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity]             = useState(1);
   const { addItem } = useCart();
 
   useEffect(() => {
@@ -31,11 +31,11 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
     return (
       <div className="container-page py-12 animate-pulse">
         <div className="grid md:grid-cols-2 gap-8">
-          <div className="aspect-square bg-gray-200 rounded-2xl" />
+          <div className="aspect-square bg-gray-200 dark:bg-slate-700 rounded-2xl" />
           <div className="space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-3/4" />
-            <div className="h-6 bg-gray-200 rounded w-1/3" />
-            <div className="h-24 bg-gray-200 rounded" />
+            <div className="h-8 bg-gray-200 dark:bg-slate-700 rounded w-3/4" />
+            <div className="h-6 bg-gray-200 dark:bg-slate-700 rounded w-1/3" />
+            <div className="h-24 bg-gray-200 dark:bg-slate-700 rounded" />
           </div>
         </div>
       </div>
@@ -59,16 +59,19 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   return (
     <div className="container-page py-8">
       {/* Breadcrumb */}
-      <nav className="text-sm text-gray-500 mb-6 flex gap-2">
-        <a href="/" className="hover:text-blue-600">Trang chủ</a>
+      <nav className="text-sm mb-6 flex gap-2 text-gray-500 dark:text-slate-400">
+        <a href="/" className="hover:text-blue-600 dark:hover:text-blue-400">Trang chủ</a>
         <span>/</span>
-        <span className="text-gray-800 font-medium">{product.name}</span>
+        <span className="text-gray-800 dark:text-slate-100 font-medium">{product.name}</span>
       </nav>
 
       <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
+
         {/* Images */}
         <div>
-          <div className="relative aspect-square bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 mb-3">
+          <div className="relative aspect-square rounded-2xl overflow-hidden mb-3
+            bg-gray-50 dark:bg-slate-800/60
+            border border-gray-100 dark:border-slate-700/60">
             <Image
               src={images[activeImg]?.url}
               alt={product.name}
@@ -80,20 +83,24 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
               <>
                 <button
                   onClick={() => setActiveImg((i) => (i - 1 + images.length) % images.length)}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white shadow rounded-full p-1.5 hover:bg-gray-50"
+                  className="absolute left-2 top-1/2 -translate-y-1/2
+                    bg-white dark:bg-slate-700 shadow rounded-full p-1.5
+                    hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-slate-200" />
                 </button>
                 <button
                   onClick={() => setActiveImg((i) => (i + 1) % images.length)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white shadow rounded-full p-1.5 hover:bg-gray-50"
+                  className="absolute right-2 top-1/2 -translate-y-1/2
+                    bg-white dark:bg-slate-700 shadow rounded-full p-1.5
+                    hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
                 >
-                  <ChevronRight className="w-5 h-5" />
+                  <ChevronRight className="w-5 h-5 text-gray-700 dark:text-slate-200" />
                 </button>
               </>
             )}
             {hasDiscount && (
-              <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
+              <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-md">
                 -{discountPct}%
               </span>
             )}
@@ -106,8 +113,11 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
                 <button
                   key={i}
                   onClick={() => setActiveImg(i)}
-                  className={`shrink-0 w-16 h-16 rounded-lg border-2 overflow-hidden bg-gray-50
-                              ${i === activeImg ? 'border-blue-500' : 'border-transparent hover:border-gray-300'}`}
+                  className={`shrink-0 w-16 h-16 rounded-lg border-2 overflow-hidden
+                    bg-gray-50 dark:bg-slate-800 transition-colors
+                    ${i === activeImg
+                      ? 'border-blue-500'
+                      : 'border-transparent hover:border-gray-300 dark:hover:border-slate-500'}`}
                 >
                   <Image src={img.url} alt="" width={64} height={64} className="object-contain w-full h-full p-1" />
                 </button>
@@ -118,23 +128,32 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
         {/* Info */}
         <div>
-          <p className="text-blue-600 text-sm font-semibold uppercase tracking-wide mb-1">
+          <p className="text-sm font-semibold uppercase tracking-wide mb-1
+            text-blue-600 dark:text-blue-400">
             {product.brand}
           </p>
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">{product.name}</h1>
+          <h1 className="text-2xl font-bold mb-3 text-gray-900 dark:text-slate-100">
+            {product.name}
+          </h1>
 
-          {/* Rating placeholder */}
+          {/* Rating */}
           <div className="flex items-center gap-3 mb-4">
             <div className="flex text-yellow-400 text-sm">★★★★★</div>
-            <span className="text-sm text-gray-500">Đã bán {product.soldCount?.toLocaleString()}</span>
+            <span className="text-sm text-gray-500 dark:text-slate-400">
+              Đã bán {product.soldCount?.toLocaleString()}
+            </span>
           </div>
 
-          {/* Price */}
-          <div className="bg-gray-50 rounded-xl p-4 mb-4">
+          {/* Price box */}
+          <div className="rounded-xl p-4 mb-4 bg-gray-50 dark:bg-slate-800/60 border border-gray-100 dark:border-slate-700/50">
             <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold text-red-600">{formatPrice(price)}</span>
+              <span className="text-3xl font-bold text-red-600 dark:text-red-400">
+                {formatPrice(price)}
+              </span>
               {hasDiscount && (
-                <span className="text-lg text-gray-400 line-through">{formatPrice(product.price)}</span>
+                <span className="text-lg text-gray-400 dark:text-slate-500 line-through">
+                  {formatPrice(product.price)}
+                </span>
               )}
             </div>
           </div>
@@ -142,7 +161,7 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
           {/* Variants */}
           {product.variants?.length > 0 && (
             <div className="mb-4">
-              <p className="text-sm font-semibold text-gray-700 mb-2">Phiên bản:</p>
+              <p className="text-sm font-semibold text-gray-700 dark:text-slate-200 mb-2">Phiên bản:</p>
               <div className="flex flex-wrap gap-2">
                 {product.variants.map((v: any) => (
                   <button
@@ -150,11 +169,11 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
                     onClick={() => setSelectedVariant(v)}
                     className={`px-3 py-2 text-sm border rounded-lg transition-colors
                                 ${selectedVariant?.id === v.id
-                                  ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                                  : 'border-gray-200 text-gray-600 hover:border-blue-300'}`}
+                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-medium'
+                                  : 'border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:border-blue-300 dark:hover:border-blue-500'}`}
                   >
                     {v.label}
-                    <span className="ml-1 text-xs text-gray-400">
+                    <span className="ml-1 text-xs text-gray-400 dark:text-slate-500">
                       ({formatPrice(v.price)})
                     </span>
                   </button>
@@ -165,16 +184,23 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
           {/* Quantity */}
           <div className="flex items-center gap-3 mb-5">
-            <span className="text-sm font-semibold text-gray-700">Số lượng:</span>
-            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+            <span className="text-sm font-semibold text-gray-700 dark:text-slate-200">Số lượng:</span>
+            <div className="flex items-center rounded-lg overflow-hidden
+              border border-gray-300 dark:border-slate-600">
               <button
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                className="px-3 py-2 hover:bg-gray-100 text-gray-600 transition-colors"
+                className="px-3 py-2 transition-colors text-gray-600 dark:text-slate-300
+                  hover:bg-gray-100 dark:hover:bg-slate-700"
               >−</button>
-              <span className="px-4 py-2 text-sm font-semibold border-x border-gray-300">{quantity}</span>
+              <span className="px-4 py-2 text-sm font-semibold
+                border-x border-gray-300 dark:border-slate-600
+                text-gray-800 dark:text-slate-100">
+                {quantity}
+              </span>
               <button
                 onClick={() => setQuantity((q) => q + 1)}
-                className="px-3 py-2 hover:bg-gray-100 text-gray-600 transition-colors"
+                className="px-3 py-2 transition-colors text-gray-600 dark:text-slate-300
+                  hover:bg-gray-100 dark:hover:bg-slate-700"
               >+</button>
             </div>
           </div>
@@ -195,7 +221,9 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
           </div>
 
           {/* Policies */}
-          <div className="grid grid-cols-3 gap-3 text-center text-xs text-gray-500 border-t pt-4">
+          <div className="grid grid-cols-3 gap-3 text-center text-xs border-t pt-4
+            border-gray-100 dark:border-slate-700/60
+            text-gray-500 dark:text-slate-400">
             <div className="flex flex-col items-center gap-1">
               <Shield className="w-5 h-5 text-blue-500" />
               <span>Bảo hành chính hãng</span>
@@ -217,11 +245,15 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
         <ProductSpecs specs={product.specs} />
 
         {product.description && (
-          <div className="bg-gray-50 rounded-xl p-4">
-            <h3 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">
+          <div className="rounded-xl p-4
+            bg-gray-50 dark:bg-slate-800/60
+            border border-gray-100 dark:border-slate-700/50">
+            <h3 className="font-semibold mb-3 text-sm uppercase tracking-wide
+              text-gray-800 dark:text-slate-100">
               Mô tả sản phẩm
             </h3>
-            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+            <p className="text-sm leading-relaxed whitespace-pre-line
+              text-gray-600 dark:text-slate-300">
               {product.description}
             </p>
           </div>

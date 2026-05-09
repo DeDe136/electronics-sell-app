@@ -2,10 +2,18 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { CartItem } from './entities/cart-item.entity';
+import { IsUUID, IsInt, IsOptional, Min } from 'class-validator';
 
 export class AddToCartDto {
+  @IsUUID()
   productId!: string;
+
+  @IsInt()
+  @Min(1)
   quantity!: number;
+
+  @IsUUID()
+  @IsOptional()
   variantId?: string;
 }
 
