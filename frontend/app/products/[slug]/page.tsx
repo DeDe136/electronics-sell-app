@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { notFound } from 'next/navigation';
-import { ShoppingCart, Shield, Truck, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { notFound, useRouter } from 'next/navigation';
+import { ShoppingCart, Shield, Truck, RotateCcw, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { catalogApi } from '@/lib/api';
 import { ProductSpecs } from '@/components/product/ProductSpecs';
 import { Button } from '@/components/ui/Button';
 import { useCart } from '@/lib/hooks/useCart';
+import toast from 'react-hot-toast';
 
 export default function ProductDetailPage({ params }: { params: { slug: string } }) {
   const [product, setProduct]               = useState<any>(null);
@@ -16,6 +17,8 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   const [selectedVariant, setSelectedVariant] = useState<any>(null);
   const [quantity, setQuantity]             = useState(1);
   const { addItem } = useCart();
+  const router = useRouter();
+  const [buyingNow, setBuyingNow] = useState(false);
 
   useEffect(() => {
     catalogApi.getProduct(params.slug)
@@ -51,6 +54,24 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
   const formatPrice = (p: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p);
+
+  const handleBuyNow = async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    if (!token) {
+      toast.error('Vui lòng đăng nhập để mua hàng');
+      router.push('/login');
+      return;
+    }
+    setBuyingNow(true);
+    try {
+      await addItem(product.id, quantity, selectedVariant?.id);
+      router.push('/checkout');
+    } catch {
+      // addItem đã show toast lỗi
+    } finally {
+      setBuyingNow(false);
+    }
+  };
 
   const images = product.images?.length
     ? product.images
@@ -215,7 +236,14 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
               <ShoppingCart className="w-5 h-5" />
               Thêm vào giỏ
             </Button>
-            <Button size="lg" variant="outline" className="flex-1">
+            <Button
+              size="lg"
+              variant="outline"
+              className="flex-1"
+              loading={buyingNow}
+              onClick={handleBuyNow}
+            >
+              <Zap className="w-5 h-5" />
               Mua ngay
             </Button>
           </div>

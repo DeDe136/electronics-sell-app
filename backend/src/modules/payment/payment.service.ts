@@ -3,6 +3,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
+import { PaymentMethodOption } from './entities/payment-method-option.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsEnum, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -32,7 +33,26 @@ export class PaymentService {
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
+
+    @InjectRepository(PaymentMethodOption)
+    private readonly methodOptionRepo: Repository<PaymentMethodOption>,
   ) {}
+
+  // ─── Payment Method Options ───────────────────────────────────────────────
+
+  /**
+   * Trả về danh sách phương thức thanh toán đang hoạt động,
+   * sắp xếp theo sortOrder tăng dần.
+   * Frontend gọi GET /payments/methods để render checkout.
+   */
+  async getPaymentMethods(): Promise<PaymentMethodOption[]> {
+    return this.methodOptionRepo.find({
+      where: { isActive: true },
+      order: { sortOrder: 'ASC' },
+    });
+  }
+
+  // ─── Payment CRUD ─────────────────────────────────────────────────────────
 
   async initiate(dto: CreatePaymentDto): Promise<Payment> {
     const payment = this.paymentRepo.create({

@@ -94,3 +94,9 @@ export const orderApi = {
   getOrder: (id: string) => api.get(`/orders/${id}`).then((r) => r.data),
   createOrder: (data: any) => api.post('/orders', data).then((r) => r.data),
 };
+
+// ===== Payment Method Options API =====
+// GET /payments/methods — public, không cần JWT
+export const paymentMethodApi = {
+  getMethods: () => api.get('/payments/methods').then((r) => r.data),
+};
