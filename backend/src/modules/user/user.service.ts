@@ -5,18 +5,25 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { StorageService } from '../storage/storage.service';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateUserDto {
+  @ApiPropertyOptional({ example: 'Nguyen Van B', description: 'Họ tên mới (tối đa 100 ký tự)' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   fullName?: string;
 
+  @ApiPropertyOptional({ example: '0909999888', description: 'Số điện thoại mới (tối đa 20 ký tự)' })
   @IsOptional()
   @IsString()
   @MaxLength(20)
   phone?: string;
 
+  @ApiPropertyOptional({
+    example: '456 Le Van Sy, Phuong 14, Quan 3, TP.HCM',
+    description: 'Địa chỉ mặc định (tối đa 500 ký tự)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)

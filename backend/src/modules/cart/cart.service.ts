@@ -3,15 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { CartItem } from './entities/cart-item.entity';
 import { IsUUID, IsInt, IsOptional, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AddToCartDto {
+  @ApiProperty({ example: 'uuid-product-id', description: 'UUID của sản phẩm cần thêm vào giỏ' })
   @IsUUID()
   productId!: string;
 
+  @ApiProperty({ example: 1, description: 'Số lượng cần thêm (tối thiểu 1)', minimum: 1 })
   @IsInt()
   @Min(1)
   quantity!: number;
 
+  @ApiPropertyOptional({
+    example: 'uuid-variant-id',
+    description: 'UUID của variant (nếu sản phẩm có nhiều phiên bản RAM/ROM)',
+  })
   @IsUUID()
   @IsOptional()
   variantId?: string;
@@ -41,7 +48,6 @@ export class CartService {
   async addItem(userId: string, dto: AddToCartDto): Promise<CartItem> {
     if (dto.quantity < 1) throw new BadRequestException('Quantity must be >= 1');
 
-    // Nếu đã có item, tăng quantity
     const existing = await this.cartRepo.findOne({
       where: { userId, productId: dto.productId, variantId: dto.variantId ?? IsNull() },
     });

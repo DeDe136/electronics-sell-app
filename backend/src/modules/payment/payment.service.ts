@@ -3,10 +3,27 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsUUID, IsEnum, IsNumber, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreatePaymentDto {
+  @ApiProperty({ example: 'uuid-order-id', description: 'UUID của đơn hàng cần thanh toán' })
+  @IsUUID()
   orderId: string;
+
+  @ApiProperty({
+    enum: PaymentMethod,
+    example: PaymentMethod.VNPAY,
+    description: 'Phương thức thanh toán: cod | bank_transfer | momo | vnpay',
+  })
+  @IsEnum(PaymentMethod)
   method: PaymentMethod;
+
+  @ApiProperty({ example: 30020000, description: 'Số tiền cần thanh toán (VNĐ)', minimum: 0 })
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
   amount: number;
 }
 
@@ -32,7 +49,6 @@ export class PaymentService {
     }
 
     // TODO: Tích hợp VNPay/MoMo SDK ở đây
-    // Trả về paymentUrl để redirect frontend
     return saved;
   }
 

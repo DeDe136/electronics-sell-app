@@ -5,16 +5,48 @@ import { Repository, DataSource } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { CartService } from '../cart/cart.service';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class ShippingAddressDto {
+  @ApiProperty({ example: 'Nguyen Van A', description: 'Họ tên người nhận' })
+  @IsString()
+  fullName: string;
+
+  @ApiProperty({ example: '0901234567', description: 'Số điện thoại người nhận' })
+  @IsString()
+  phone: string;
+
+  @ApiProperty({ example: '123 Nguyen Trai', description: 'Số nhà, tên đường' })
+  @IsString()
+  address: string;
+
+  @ApiProperty({ example: 'Phuong 2', description: 'Phường/Xã' })
+  @IsString()
+  ward: string;
+
+  @ApiProperty({ example: 'Quan 5', description: 'Quận/Huyện' })
+  @IsString()
+  district: string;
+
+  @ApiProperty({ example: 'Ho Chi Minh', description: 'Tỉnh/Thành phố' })
+  @IsString()
+  city: string;
+}
 
 export class CreateOrderDto {
-  shippingAddress: {
-    fullName: string;
-    phone: string;
-    address: string;
-    ward: string;
-    district: string;
-    city: string;
-  };
+  @ApiProperty({ type: ShippingAddressDto, description: 'Địa chỉ giao hàng' })
+  @ValidateNested()
+  @Type(() => ShippingAddressDto)
+  shippingAddress: ShippingAddressDto;
+
+  @ApiPropertyOptional({
+    example: 'Giao giờ hành chính, gọi trước 30 phút',
+    description: 'Ghi chú thêm cho đơn hàng',
+  })
+  @IsOptional()
+  @IsString()
   note?: string;
 }
 
@@ -61,7 +93,6 @@ export class OrderService {
         });
       }
 
-      // Xóa giỏ hàng sau khi đặt thành công
       await this.cartService.clearCart(userId);
       return savedOrder;
     });
