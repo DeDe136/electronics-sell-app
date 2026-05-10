@@ -64,6 +64,8 @@ export const cartApi = {
     api.patch(`/cart/items/${itemId}`, { quantity }).then((r) => r.data),
   removeItem: (itemId: string) =>
     api.delete(`/cart/items/${itemId}`).then((r) => r.data),
+  removeItems: (itemIds: string[]) =>
+    api.delete('/cart/items', { data: { itemIds } }).then((r) => r.data),
   clearCart: () => api.delete('/cart').then((r) => r.data),
 };
 
@@ -89,6 +91,11 @@ export const userApi = {
 };
 
 // ===== Order API =====
+export interface OrderItemInput {
+  cartItemId: string;
+  quantity: number;
+}
+
 export interface CreateOrderPayload {
   shippingAddress: {
     fullName: string;
@@ -99,6 +106,7 @@ export interface CreateOrderPayload {
     city: string;
   };
   paymentMethod: string;
+  items: OrderItemInput[];
   note?: string;
 }
 

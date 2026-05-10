@@ -130,6 +130,31 @@ export class CartController {
     return this.cartService.removeItem(user.id, id);
   }
 
+  @Delete('items')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Xóa nhiều sản phẩm khỏi giỏ hàng',
+    description: 'Xóa một danh sách cart items sau khi đặt hàng thành công.',
+  })
+  @ApiBody({
+    description: 'Danh sách cart item IDs cần xóa',
+    schema: {
+      type: 'object',
+      required: ['itemIds'],
+      properties: {
+        itemIds: {
+          type: 'array',
+          items: { type: 'string', format: 'uuid' },
+          example: ['uuid-1', 'uuid-2'],
+        },
+      },
+    },
+  })
+  @ApiNoContentResponse({ description: 'Các sản phẩm đã được xóa khỏi giỏ hàng' })
+  removeItems(@CurrentUser() user: User, @Body('itemIds') itemIds: string[]) {
+    return this.cartService.removeItems(user.id, itemIds);
+  }
+
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

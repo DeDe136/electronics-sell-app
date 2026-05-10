@@ -78,6 +78,14 @@ export class CartService {
     await this.cartRepo.delete({ userId });
   }
 
+  /** Xóa nhiều cart items cùng lúc — dùng sau khi tạo order từ các items được chọn */
+  async removeItems(userId: string, itemIds: string[]): Promise<void> {
+    if (!itemIds.length) return;
+    const items = await this.cartRepo.find({ where: { userId } });
+    const toRemove = items.filter((i) => itemIds.includes(i.id));
+    if (toRemove.length) await this.cartRepo.remove(toRemove);
+  }
+
   private async findItem(userId: string, itemId: string): Promise<CartItem> {
     const item = await this.cartRepo.findOne({ where: { id: itemId, userId } });
     if (!item) throw new NotFoundException('Cart item not found');

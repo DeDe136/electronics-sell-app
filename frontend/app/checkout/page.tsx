@@ -24,7 +24,6 @@ interface ShippingAddress {
   city: string;
 }
 
-/** Cấu trúc trả về từ GET /payments/methods */
 interface PaymentMethodOption {
   id: string;
   code: string;
@@ -33,8 +32,17 @@ interface PaymentMethodOption {
   icon: string;
   isActive: boolean;
   sortOrder: number;
-  /** metadata tuỳ biến mỗi phương thức — ví dụ bankName, accountNumber... */
   metadata: Record<string, any> | null;
+}
+
+/** Cấu trúc lưu trong sessionStorage — được tạo bởi cart/page.tsx */
+interface CheckoutItem {
+  cartItemId: string;
+  quantity: number;
+  productName: string;
+  productImage: string | null;
+  unitPrice: number;
+  variantId: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -54,20 +62,23 @@ const INITIAL_FORM: ShippingAddress = {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, subtotal, itemCount, isLoading, fetchCart, clearCart } = useCart();
+  const { fetchCart } = useCart();
 
   const [form, setForm] = useState<ShippingAddress>(INITIAL_FORM);
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<Partial<ShippingAddress>>({});
 
-  // Payment method options từ database
+  // Items được chọn từ trang cart (đọc từ sessionStorage)
+  const [checkoutItems, setCheckoutItems] = useState<CheckoutItem[]>([]);
+  const [itemsReady, setItemsReady] = useState(false);
+
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
   const [methodsLoading, setMethodsLoading] = useState(true);
   const [selectedMethod, setSelectedMethod] = useState<string>('');
 
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Fetch dữ liệu khi mount ──────────────────────────────────────────────
+  // ── Đọc checkout items từ sessionStorage ────────────────────────────────
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     if (!token) {
@@ -75,9 +86,31 @@ export default function CheckoutPage() {
       router.push('/login');
       return;
     }
-    fetchCart();
-  }, [fetchCart, router]);
 
+    const raw = sessionStorage.getItem('checkout_items');
+    if (!raw) {
+      toast.error('Không có sản phẩm nào được chọn');
+      router.push('/cart');
+      return;
+    }
+
+    try {
+      const parsed: CheckoutItem[] = JSON.parse(raw);
+      if (!parsed.length) {
+        toast.error('Vui lòng chọn ít nhất một sản phẩm');
+        router.push('/cart');
+        return;
+      }
+      setCheckoutItems(parsed);
+    } catch {
+      toast.error('Dữ liệu đơn hàng không hợp lệ');
+      router.push('/cart');
+    } finally {
+      setItemsReady(true);
+    }
+  }, [router]);
+
+  // ── Fetch payment methods ───────────────────────────────────────────────
   useEffect(() => {
     setMethodsLoading(true);
     paymentMethodApi
@@ -95,6 +128,7 @@ export default function CheckoutPage() {
   const formatPrice = (p: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p);
 
+  const subtotal = checkoutItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
   const total = subtotal + SHIPPING_FEE;
 
   // ── Validate ──────────────────────────────────────────────────────────────
@@ -125,8 +159,8 @@ export default function CheckoutPage() {
       toast.error('Vui lòng điền đầy đủ thông tin giao hàng');
       return;
     }
-    if (!items.length) {
-      toast.error('Giỏ hàng trống');
+    if (!checkoutItems.length) {
+      toast.error('Không có sản phẩm nào để đặt');
       return;
     }
     if (!selectedMethod) {
@@ -140,10 +174,18 @@ export default function CheckoutPage() {
         shippingAddress: form,
         paymentMethod: selectedMethod,
         note: note.trim() || undefined,
+        items: checkoutItems.map((i) => ({
+          cartItemId: i.cartItemId,
+          quantity: i.quantity,
+        })),
       };
+
       const order = await orderApi.createOrder(payload);
 
-      await clearCart();
+      // Xóa session data và refresh cart
+      sessionStorage.removeItem('checkout_items');
+      await fetchCart();
+
       router.push(`/order-success?orderId=${order.id}&orderCode=${order.orderCode}`);
     } catch (err: any) {
       const msg = err.response?.data?.message;
@@ -154,9 +196,9 @@ export default function CheckoutPage() {
     }
   };
 
-  // ── Loading skeleton ──────────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────
 
-  if (isLoading) {
+  if (!itemsReady) {
     return (
       <div className="container-page py-12">
         <div className="animate-pulse max-w-5xl mx-auto grid lg:grid-cols-3 gap-8">
@@ -172,26 +214,7 @@ export default function CheckoutPage() {
     );
   }
 
-  // ── Empty cart guard ──────────────────────────────────────────────────────
-
-  if (!isLoading && !items.length) {
-    return (
-      <div className="container-page py-20 text-center">
-        <ShoppingBag className="w-20 h-20 mx-auto mb-4 text-gray-200 dark:text-slate-700" />
-        <h2 className="text-xl font-semibold mb-2 text-gray-500 dark:text-slate-400">
-          Giỏ hàng trống
-        </h2>
-        <p className="text-sm mb-6 text-gray-400 dark:text-slate-500">
-          Thêm sản phẩm vào giỏ trước khi đặt hàng nhé!
-        </p>
-        <Link href="/">
-          <Button>Khám phá sản phẩm</Button>
-        </Link>
-      </div>
-    );
-  }
-
-  // ── Helper: metadata card cho phương thức đang chọn ──────────────────────
+  // ── Helper: metadata card ─────────────────────────────────────────────────
 
   const activeMethod = paymentMethods.find((m) => m.code === selectedMethod);
 
@@ -199,17 +222,15 @@ export default function CheckoutPage() {
     const { metadata } = method;
     if (!metadata) return null;
 
-    // Bank transfer: hiện thông tin tài khoản
     if (method.code === 'bank_transfer') {
       return (
         <div className="mt-4 p-4 rounded-xl text-sm space-y-1.5
-          bg-blue-50 dark:bg-blue-950/30
-          border border-blue-100 dark:border-blue-900/50">
+          bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50">
           <p className="font-semibold text-blue-700 dark:text-blue-300">Thông tin chuyển khoản:</p>
           {metadata.bankName && (
             <p className="text-gray-700 dark:text-slate-300">
               Ngân hàng: <strong>{metadata.bankName}</strong>
-              {metadata.branch && <span className="text-gray-400 dark:text-slate-500 text-xs ml-1">({metadata.branch})</span>}
+              {metadata.branch && <span className="text-gray-400 text-xs ml-1">({metadata.branch})</span>}
             </p>
           )}
           {metadata.accountNumber && (
@@ -223,20 +244,16 @@ export default function CheckoutPage() {
             </p>
           )}
           {metadata.note && (
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-              * {metadata.note}
-            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">* {metadata.note}</p>
           )}
         </div>
       );
     }
 
-    // MoMo: hiện số điện thoại
     if (method.code === 'momo') {
       return (
         <div className="mt-4 p-4 rounded-xl text-sm space-y-1.5
-          bg-purple-50 dark:bg-purple-950/30
-          border border-purple-100 dark:border-purple-900/50">
+          bg-purple-50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/50">
           <p className="font-semibold text-purple-700 dark:text-purple-300">Thông tin ví MoMo:</p>
           {metadata.phoneNumber && (
             <p className="text-gray-700 dark:text-slate-300">
@@ -249,56 +266,41 @@ export default function CheckoutPage() {
             </p>
           )}
           {metadata.note && (
-            <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
-              * {metadata.note}
-            </p>
+            <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">* {metadata.note}</p>
           )}
         </div>
       );
     }
 
-    // VNPay: hiện danh sách thẻ hỗ trợ
     if (method.code === 'vnpay' && metadata.supportedCards) {
       return (
         <div className="mt-4 p-4 rounded-xl text-sm
-          bg-emerald-50 dark:bg-emerald-950/30
-          border border-emerald-100 dark:border-emerald-900/50">
+          bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
           <p className="font-semibold text-emerald-700 dark:text-emerald-300 mb-2">Hỗ trợ:</p>
           <div className="flex flex-wrap gap-2">
             {(metadata.supportedCards as string[]).map((card: string) => (
-              <span
-                key={card}
-                className="px-2.5 py-1 rounded-full text-xs font-medium
-                  bg-white dark:bg-slate-800
-                  border border-emerald-200 dark:border-emerald-800
-                  text-emerald-700 dark:text-emerald-300"
-              >
+              <span key={card} className="px-2.5 py-1 rounded-full text-xs font-medium
+                bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800
+                text-emerald-700 dark:text-emerald-300">
                 {card}
               </span>
             ))}
           </div>
           {metadata.note && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
-              * {metadata.note}
-            </p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">* {metadata.note}</p>
           )}
         </div>
       );
     }
 
-    // COD hoặc fallback: hiện note nếu có
     if (metadata.note) {
-      return (
-        <p className="mt-3 text-xs text-gray-500 dark:text-slate-400 pl-1">
-          ℹ️ {metadata.note}
-        </p>
-      );
+      return <p className="mt-3 text-xs text-gray-500 dark:text-slate-400 pl-1">ℹ️ {metadata.note}</p>;
     }
 
     return null;
   };
 
-  // ── Input field helper ────────────────────────────────────────────────────
+  // ── Input helper ──────────────────────────────────────────────────────────
 
   const inputCls = (field: keyof ShippingAddress) =>
     `w-full px-3 py-2.5 text-sm rounded-lg border transition-colors
@@ -342,7 +344,6 @@ export default function CheckoutPage() {
             </h2>
 
             <div className="grid sm:grid-cols-2 gap-4">
-              {/* Họ tên */}
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-slate-300">
                   Họ và tên <span className="text-red-500">*</span>
@@ -360,7 +361,6 @@ export default function CheckoutPage() {
                 {errors.fullName && <p className="text-xs text-red-500 mt-1">{errors.fullName}</p>}
               </div>
 
-              {/* Số điện thoại */}
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-slate-300">
                   Số điện thoại <span className="text-red-500">*</span>
@@ -378,7 +378,6 @@ export default function CheckoutPage() {
                 {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
               </div>
 
-              {/* Địa chỉ */}
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-slate-300">
                   Số nhà, tên đường <span className="text-red-500">*</span>
@@ -393,7 +392,6 @@ export default function CheckoutPage() {
                 {errors.address && <p className="text-xs text-red-500 mt-1">{errors.address}</p>}
               </div>
 
-              {/* Phường/Xã */}
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-slate-300">
                   Phường/Xã <span className="text-red-500">*</span>
@@ -408,7 +406,6 @@ export default function CheckoutPage() {
                 {errors.ward && <p className="text-xs text-red-500 mt-1">{errors.ward}</p>}
               </div>
 
-              {/* Quận/Huyện */}
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-slate-300">
                   Quận/Huyện <span className="text-red-500">*</span>
@@ -423,7 +420,6 @@ export default function CheckoutPage() {
                 {errors.district && <p className="text-xs text-red-500 mt-1">{errors.district}</p>}
               </div>
 
-              {/* Tỉnh/Thành phố */}
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-slate-300">
                   Tỉnh/Thành phố <span className="text-red-500">*</span>
@@ -440,20 +436,16 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Phương thức thanh toán — dữ liệu từ DB */}
+          {/* Phương thức thanh toán */}
           <div className="card p-6">
             <h2 className="font-semibold text-base mb-4 text-gray-900 dark:text-slate-100">
               Phương thức thanh toán
             </h2>
 
             {methodsLoading ? (
-              /* Skeleton */
               <div className="space-y-3 animate-pulse">
                 {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="h-16 rounded-xl bg-gray-100 dark:bg-slate-800"
-                  />
+                  <div key={i} className="h-16 rounded-xl bg-gray-100 dark:bg-slate-800" />
                 ))}
               </div>
             ) : paymentMethods.length === 0 ? (
@@ -493,8 +485,6 @@ export default function CheckoutPage() {
                     </label>
                   ))}
                 </div>
-
-                {/* Chi tiết bổ sung của phương thức đang chọn */}
                 {activeMethod && renderMetadataCard(activeMethod)}
               </>
             )}
@@ -513,8 +503,7 @@ export default function CheckoutPage() {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               className="w-full px-3 py-2.5 text-sm rounded-lg border transition-colors resize-none
-                bg-white dark:bg-slate-900/60
-                text-gray-900 dark:text-slate-100
+                bg-white dark:bg-slate-900/60 text-gray-900 dark:text-slate-100
                 placeholder-gray-400 dark:placeholder-slate-500
                 border-gray-300 dark:border-slate-600
                 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
@@ -522,47 +511,46 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* ── Right: Tóm tắt đơn hàng ──────────────────────────────────── */}
+        {/* ── Right: Tóm tắt ───────────────────────────────────────────── */}
         <div className="lg:col-span-1">
           <div className="card p-5 sticky top-20">
             <h2 className="font-semibold mb-4 text-gray-800 dark:text-slate-100">
-              Đơn hàng ({itemCount} sản phẩm)
+              Đơn hàng ({checkoutItems.length} sản phẩm)
             </h2>
 
-            {/* Danh sách sản phẩm */}
+            {/* Danh sách sản phẩm đang đặt */}
             <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1">
-              {items.map((item) => {
-                const price = item.product.salePrice || item.product.price;
-                return (
-                  <div key={item.id} className="flex gap-3 items-center">
-                    <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0
-                      bg-gray-50 dark:bg-slate-800
-                      border border-gray-100 dark:border-slate-700">
-                      {item.product.images?.[0] ? (
-                        <Image
-                          src={item.product.images[0].url}
-                          alt={item.product.name}
-                          fill
-                          className="object-contain p-1"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-100 dark:bg-slate-700" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium line-clamp-2 text-gray-800 dark:text-slate-200">
-                        {item.product.name}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-slate-500 mt-0.5">
-                        x{item.quantity}
-                      </p>
-                    </div>
-                    <p className="text-xs font-semibold text-red-600 dark:text-red-400 shrink-0">
-                      {formatPrice(price * item.quantity)}
+              {checkoutItems.map((item) => (
+                <div key={item.cartItemId} className="flex gap-3 items-center">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0
+                    bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700">
+                    {item.productImage ? (
+                      <Image
+                        src={item.productImage}
+                        alt={item.productName}
+                        fill
+                        className="object-contain p-1"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-100 dark:bg-slate-700" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium line-clamp-2 text-gray-800 dark:text-slate-200">
+                      {item.productName}
+                    </p>
+                    {item.variantId && (
+                      <p className="text-xs text-gray-400 dark:text-slate-500">{item.variantId}</p>
+                    )}
+                    <p className="text-xs text-gray-500 dark:text-slate-500 mt-0.5">
+                      x{item.quantity}
                     </p>
                   </div>
-                );
-              })}
+                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 shrink-0">
+                    {formatPrice(item.unitPrice * item.quantity)}
+                  </p>
+                </div>
+              ))}
             </div>
 
             {/* Tổng tiền */}

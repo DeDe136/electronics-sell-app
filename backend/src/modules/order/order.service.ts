@@ -11,7 +11,7 @@ import { OrderItem } from './entities/order-item.entity';
 import { Payment, PaymentMethod, PaymentStatus } from '../payment/entities/payment.entity';
 import { CartService } from '../cart/cart.service';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray, ValidateNested, IsInt, Min, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ShippingAddressDto {
@@ -40,6 +40,18 @@ export class ShippingAddressDto {
   city: string;
 }
 
+/** Một item được chọn từ giỏ hàng để đặt — có thể đặt số lượng nhỏ hơn cart */
+export class OrderItemInputDto {
+  @ApiProperty({ example: 'uuid-cart-item-id', description: 'ID của cart item' })
+  @IsUUID()
+  cartItemId: string;
+
+  @ApiProperty({ example: 1, description: 'Số lượng muốn đặt (1 ≤ qty ≤ số lượng trong cart)', minimum: 1 })
+  @IsInt()
+  @Min(1)
+  quantity: number;
+}
+
 export class CreateOrderDto {
   @ApiProperty({ type: ShippingAddressDto, description: 'Địa chỉ giao hàng' })
   @ValidateNested()
@@ -61,6 +73,15 @@ export class CreateOrderDto {
   })
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
+
+  @ApiProperty({
+    type: [OrderItemInputDto],
+    description: 'Danh sách items được chọn từ giỏ hàng kèm số lượng muốn đặt',
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemInputDto)
+  items: OrderItemInputDto[];
 }
 
 /** Các trạng thái được phép hủy bởi người dùng */
@@ -80,11 +101,32 @@ export class OrderService {
   ) {}
 
   async createFromCart(userId: string, dto: CreateOrderDto): Promise<Order> {
+    if (!dto.items?.length) throw new BadRequestException('Vui lòng chọn ít nhất một sản phẩm để đặt hàng');
+
+    // Lấy toàn bộ cart của user để validate và lấy thông tin sản phẩm
     const cart = await this.cartService.getCart(userId);
-    if (!cart.items.length) throw new BadRequestException('Cart is empty');
+    const cartMap = new Map(cart.items.map((i) => [i.id, i]));
+
+    // Validate từng item được chọn
+    const resolvedItems = dto.items.map((input) => {
+      const cartItem = cartMap.get(input.cartItemId);
+      if (!cartItem) {
+        throw new BadRequestException(`Cart item "${input.cartItemId}" không tồn tại trong giỏ hàng`);
+      }
+      if (input.quantity > cartItem.quantity) {
+        throw new BadRequestException(
+          `Số lượng đặt (${input.quantity}) vượt quá số lượng trong giỏ (${cartItem.quantity}) cho sản phẩm "${cartItem.product.name}"`,
+        );
+      }
+      return { cartItem, orderQty: input.quantity };
+    });
 
     const SHIPPING_FEE = 30000;
-    const total = cart.subtotal + SHIPPING_FEE;
+    const subtotal = resolvedItems.reduce((sum, { cartItem, orderQty }) => {
+      const price = Number(cartItem.product.salePrice || cartItem.product.price);
+      return sum + price * orderQty;
+    }, 0);
+    const total = subtotal + SHIPPING_FEE;
 
     return this.dataSource.transaction(async (em) => {
       // 1. Tạo Order
@@ -93,7 +135,7 @@ export class OrderService {
         userId,
         shippingAddress: dto.shippingAddress,
         note: dto.note,
-        subtotal: cart.subtotal,
+        subtotal,
         shippingFee: SHIPPING_FEE,
         discount: 0,
         total,
@@ -101,29 +143,28 @@ export class OrderService {
       });
       const savedOrder = await em.save(Order, order);
 
-      // 2. Tạo OrderItems (snapshot tại thời điểm đặt hàng)
-      for (const item of cart.items) {
-        const price = Number(item.product.salePrice || item.product.price);
+      // 2. Tạo OrderItems — snapshot tại thời điểm đặt, dùng orderQty chứ không phải cart qty
+      for (const { cartItem, orderQty } of resolvedItems) {
+        const price = Number(cartItem.product.salePrice || cartItem.product.price);
         await em.save(OrderItem, {
           orderId: savedOrder.id,
-          productId: item.productId,
-          productName: item.product.name,
-          productImage: item.product.images?.[0]?.url ?? null,
-          variantLabel: item.variantId ?? null,
+          productId: cartItem.productId,
+          productName: cartItem.product.name,
+          productImage: cartItem.product.images?.[0]?.url ?? null,
+          variantLabel: cartItem.variantId ?? null,
           unitPrice: price,
-          quantity: item.quantity,
-          subtotal: price * item.quantity,
+          quantity: orderQty,
+          subtotal: price * orderQty,
         });
       }
 
-      // 3. Tạo Payment tương ứng với phương thức thanh toán người dùng chọn
+      // 3. Tạo Payment
       const isCod = dto.paymentMethod === PaymentMethod.COD;
       const payment = em.create(Payment, {
         orderId: savedOrder.id,
         method: dto.paymentMethod,
         amount: total,
         status: isCod ? PaymentStatus.SUCCESS : PaymentStatus.PENDING,
-        // COD: gán transactionId tự động; các phương thức online sẽ cập nhật sau
         transactionId: isCod ? `COD-${savedOrder.id}` : null,
         metadata: isCod
           ? { note: 'Thanh toán khi nhận hàng' }
@@ -131,8 +172,16 @@ export class OrderService {
       });
       await em.save(Payment, payment);
 
-      // 4. Xóa giỏ hàng
-      await this.cartService.clearCart(userId);
+      // 4. Cập nhật cart sau khi đặt:
+      //    - Đặt toàn bộ qty → xóa item khỏi cart
+      //    - Đặt một phần qty → giảm số lượng còn lại trong cart
+      for (const { cartItem, orderQty } of resolvedItems) {
+        if (orderQty >= cartItem.quantity) {
+          await this.cartService.removeItem(userId, cartItem.id);
+        } else {
+          await this.cartService.updateQuantity(userId, cartItem.id, cartItem.quantity - orderQty);
+        }
+      }
 
       // 5. Trả về order kèm đầy đủ relations
       return em.findOneOrFail(Order, {
