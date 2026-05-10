@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -26,6 +27,10 @@ export class CatalogService {
     private readonly categoryRepo: Repository<Category>,
     private readonly storageService: StorageService,
   ) {}
+
+  // ===========================
+  //  Products
+  // ===========================
 
   async findAll(query: ProductQueryDto) {
     const { search, categoryId, brand, minPrice, maxPrice, specs, sort } = query;
@@ -173,7 +178,17 @@ export class CatalogService {
     await this.productRepo.remove(product);
   }
 
-  // === Variants CRUD riêng ===
+  // ===========================
+  //  Variants CRUD
+  // ===========================
+
+  async getVariants(productId: string): Promise<ProductVariant[]> {
+    await this.findById(productId); // đảm bảo product tồn tại
+    return this.variantRepo.find({
+      where: { productId },
+      order: { createdAt: 'ASC' },
+    });
+  }
 
   async findVariant(variantId: string): Promise<ProductVariant> {
     const variant = await this.variantRepo.findOne({ where: { id: variantId } });
@@ -191,6 +206,11 @@ export class CatalogService {
     },
   ): Promise<ProductVariant> {
     await this.findById(productId); // đảm bảo product tồn tại
+
+    // Kiểm tra SKU trùng
+    const existingSku = await this.variantRepo.findOne({ where: { sku: variantDto.sku } });
+    if (existingSku) throw new ConflictException(`SKU "${variantDto.sku}" already exists`);
+
     const variant = this.variantRepo.create({ ...variantDto, productId });
     return this.variantRepo.save(variant);
   }
@@ -205,6 +225,13 @@ export class CatalogService {
     }>,
   ): Promise<ProductVariant> {
     const variant = await this.findVariant(variantId);
+
+    // Kiểm tra SKU trùng nếu có thay đổi SKU
+    if (variantDto.sku && variantDto.sku !== variant.sku) {
+      const existingSku = await this.variantRepo.findOne({ where: { sku: variantDto.sku } });
+      if (existingSku) throw new ConflictException(`SKU "${variantDto.sku}" already exists`);
+    }
+
     Object.assign(variant, variantDto);
     return this.variantRepo.save(variant);
   }
@@ -214,10 +241,89 @@ export class CatalogService {
     await this.variantRepo.remove(variant);
   }
 
-  // === Categories ===
+  // ===========================
+  //  Categories CRUD
+  // ===========================
+
   async getCategories(): Promise<Category[]> {
-    return this.categoryRepo.find();
+    return this.categoryRepo.find({ order: { name: 'ASC' } });
   }
+
+  async getCategoryById(id: string): Promise<Category> {
+    const category = await this.categoryRepo.findOne({ where: { id } });
+    if (!category) throw new NotFoundException(`Category not found`);
+    return category;
+  }
+
+  async createCategory(dto: {
+    name: string;
+    slug?: string;
+    iconUrl?: string;
+    specFields?: string[];
+  }): Promise<Category> {
+    const slug = dto.slug ?? this.generateSlug(dto.name);
+
+    // Kiểm tra trùng name hoặc slug
+    const existingName = await this.categoryRepo.findOne({ where: { name: dto.name } });
+    if (existingName) throw new ConflictException(`Category name "${dto.name}" already exists`);
+
+    const existingSlug = await this.categoryRepo.findOne({ where: { slug } });
+    if (existingSlug) throw new ConflictException(`Category slug "${slug}" already exists`);
+
+    const category = this.categoryRepo.create({
+      name: dto.name,
+      slug,
+      iconUrl: dto.iconUrl ?? null,
+      specFields: dto.specFields ?? [],
+    });
+
+    return this.categoryRepo.save(category);
+  }
+
+  async updateCategory(
+    id: string,
+    dto: {
+      name?: string;
+      slug?: string;
+      iconUrl?: string;
+      specFields?: string[];
+    },
+  ): Promise<Category> {
+    const category = await this.getCategoryById(id);
+
+    // Kiểm tra trùng name nếu có thay đổi
+    if (dto.name && dto.name !== category.name) {
+      const existing = await this.categoryRepo.findOne({ where: { name: dto.name } });
+      if (existing) throw new ConflictException(`Category name "${dto.name}" already exists`);
+    }
+
+    // Kiểm tra trùng slug nếu có thay đổi
+    if (dto.slug && dto.slug !== category.slug) {
+      const existing = await this.categoryRepo.findOne({ where: { slug: dto.slug } });
+      if (existing) throw new ConflictException(`Category slug "${dto.slug}" already exists`);
+    }
+
+    Object.assign(category, dto);
+    return this.categoryRepo.save(category);
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    const category = await this.getCategoryById(id);
+
+    // Kiểm tra còn sản phẩm không (RESTRICT constraint)
+    const productCount = await this.productRepo.count({ where: { categoryId: id } });
+    if (productCount > 0) {
+      throw new ConflictException(
+        `Cannot delete category: it still has ${productCount} product(s). Move or delete them first.`,
+      );
+    }
+
+    await this.categoryRepo.remove(category);
+  }
+
+  // ===========================
+  //  Helpers
+  // ===========================
 
   private generateSlug(name: string): string {
     return name

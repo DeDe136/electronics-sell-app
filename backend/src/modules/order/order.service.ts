@@ -1,5 +1,9 @@
 // order.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
@@ -50,6 +54,12 @@ export class CreateOrderDto {
   note?: string;
 }
 
+/** Các trạng thái được phép hủy bởi người dùng */
+const CANCELLABLE_STATUSES = [OrderStatus.PENDING];
+
+/** Các trạng thái cho phép admin xóa đơn hàng */
+const DELETABLE_STATUSES = [OrderStatus.CANCELLED, OrderStatus.REFUNDED];
+
 @Injectable()
 export class OrderService {
   constructor(
@@ -98,19 +108,80 @@ export class OrderService {
     });
   }
 
-  async getMyOrders(userId: string) {
+  async getMyOrders(userId: string): Promise<Order[]> {
     return this.orderRepo.find({
       where: { userId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async getOrderDetail(userId: string, orderId: string) {
+  async getOrderDetail(userId: string, orderId: string): Promise<Order> {
     const order = await this.orderRepo.findOne({
       where: { id: orderId, userId },
+      relations: ['items', 'payment'],
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  /** Người dùng tự hủy đơn — chỉ khi status = pending */
+  async cancelOrder(userId: string, orderId: string): Promise<Order> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId, userId } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (!CANCELLABLE_STATUSES.includes(order.status)) {
+      throw new BadRequestException(
+        `Cannot cancel order with status "${order.status}". Only orders in status [${CANCELLABLE_STATUSES.join(', ')}] can be cancelled.`,
+      );
+    }
+
+    order.status = OrderStatus.CANCELLED;
+    return this.orderRepo.save(order);
+  }
+
+  // ===========================
+  //  Admin methods
+  // ===========================
+
+  async getAllOrders(): Promise<Order[]> {
+    return this.orderRepo.find({
+      order: { createdAt: 'DESC' },
+      relations: ['items'],
+    });
+  }
+
+  async updateOrderStatus(
+    orderId: string,
+    status: string,
+    note?: string,
+  ): Promise<Order> {
+    const validStatuses = Object.values(OrderStatus);
+    if (!validStatuses.includes(status as OrderStatus)) {
+      throw new BadRequestException(
+        `Invalid status "${status}". Must be one of: ${validStatuses.join(', ')}`,
+      );
+    }
+
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    order.status = status as OrderStatus;
+    if (note) order.note = note;
+
+    return this.orderRepo.save(order);
+  }
+
+  async deleteOrder(orderId: string): Promise<void> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (!DELETABLE_STATUSES.includes(order.status)) {
+      throw new BadRequestException(
+        `Cannot delete order with status "${order.status}". Only orders in status [${DELETABLE_STATUSES.join(', ')}] can be deleted.`,
+      );
+    }
+
+    await this.orderRepo.remove(order);
   }
 
   private generateOrderCode(): string {

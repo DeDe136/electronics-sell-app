@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration from './config/configuration';
+import { HealthController } from './health.controller';
 
 // Business Modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -48,5 +49,6 @@ import { StorageModule } from './modules/storage/storage.module';
     PaymentModule,
     InventoryModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}

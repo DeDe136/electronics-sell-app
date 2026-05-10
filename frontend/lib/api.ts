@@ -7,6 +7,13 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// ── Ping server-side health check → log hiện trong terminal Next.js ──
+if (typeof window !== 'undefined') {
+  fetch('/api/health-check').catch(() => {
+    // Lỗi fetch nội bộ (Next.js chưa ready) — bỏ qua, không cần xử lý
+  });
+}
+
 // Gắn JWT token vào mọi request
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -17,7 +24,6 @@ api.interceptors.request.use((config) => {
 });
 
 // Auto logout nếu 401
-// Dùng flag để tránh redirect nhiều lần liên tiếp khi có nhiều request cùng lúc
 let isRedirectingToLogin = false;
 
 api.interceptors.response.use(
@@ -27,7 +33,7 @@ api.interceptors.response.use(
       err.response?.status === 401 &&
       typeof window !== 'undefined' &&
       !isRedirectingToLogin &&
-      window.location.pathname !== '/login'  // Không redirect nếu đang ở trang login
+      window.location.pathname !== '/login'
     ) {
       isRedirectingToLogin = true;
       localStorage.removeItem('access_token');

@@ -1,5 +1,5 @@
 // payment.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
@@ -61,5 +61,29 @@ export class PaymentService {
 
   async getByOrder(orderId: string): Promise<Payment[]> {
     return this.paymentRepo.find({ where: { orderId }, order: { createdAt: 'DESC' } });
+  }
+
+  async getById(id: string): Promise<Payment> {
+    return this.paymentRepo.findOneOrFail({ where: { id } });
+  }
+
+  async updateStatus(id: string, status: string, transactionId?: string, note?: string): Promise<Payment> {
+    const payment = await this.getById(id);
+    payment.status = status as PaymentStatus;
+    if (transactionId) {
+      payment.transactionId = transactionId;
+    }
+    if (note) {
+      payment.metadata = { ...(payment.metadata || {}), note };
+    }
+    return this.paymentRepo.save(payment);
+  }
+
+  async deletePayment(id: string): Promise<void> {
+    const payment = await this.getById(id);
+    if (payment.status !== PaymentStatus.FAILED) {
+      throw new BadRequestException('Only failed payments can be deleted');
+    }
+    await this.paymentRepo.remove(payment);
   }
 }

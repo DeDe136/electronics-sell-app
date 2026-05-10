@@ -1,10 +1,10 @@
 // user.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import { StorageService } from '../storage/storage.service';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateUserDto {
@@ -55,5 +55,32 @@ export class UserService {
     const result = await this.storageService.uploadFile(file, 'avatars');
     await this.userRepo.update(userId, { avatarUrl: result.url, avatarKey: result.key });
     return this.getProfile(userId);
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return this.userRepo.find({
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async updateUserByAdmin(userId: string, dto: { fullName?: string; phone?: string; address?: string; role?: UserRole; isActive?: boolean }): Promise<User> {
+    await this.userRepo.update(userId, dto);
+    return this.getProfile(userId);
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    const user = await this.getProfile(userId);
+    // Check if user has active orders
+    if (user.orders && user.orders.length > 0) {
+      const activeOrders = user.orders.filter((o: any) => !['completed', 'cancelled'].includes(o.status));
+      if (activeOrders.length > 0) {
+        throw new BadRequestException('Cannot delete user with active orders');
+      }
+    }
+    // Delete avatar if exists
+    if (user.avatarKey) {
+      await this.storageService.deleteFile(user.avatarKey).catch(() => null);
+    }
+    await this.userRepo.remove(user);
   }
 }

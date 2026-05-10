@@ -19,8 +19,8 @@ export class Category {
   @Column({ unique: true })
   slug!: string;
 
-  @Column({ nullable: true })
-  iconUrl!: string;
+  @Column({ type: 'varchar', nullable: true })
+  iconUrl!: string | null;
 
   @Column({ type: 'jsonb', default: [] })
   specFields!: string[];

@@ -5,6 +5,8 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
+  ListBucketsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
@@ -48,6 +50,43 @@ export class StorageService {
           secretAccessKey: this.config.get<string>('storage.aws.secretAccessKey') ?? '',
         },
       });
+    }
+  }
+
+  /** Gọi tự động khi module khởi tạo */
+  async onModuleInit() {
+    await this.checkConnection();
+  }
+ 
+  /** Kiểm tra kết nối MinIO / S3 và log kết quả */
+  async checkConnection(): Promise<void> {
+    const label = this.provider === 'minio' ? 'MinIO' : 'AWS S3';
+    try {
+      // HeadBucketCommand: nhanh, chỉ kiểm tra bucket tồn tại & quyền truy cập
+      await this.s3Client.send(
+        new HeadBucketCommand({ Bucket: this.bucket }),
+      );
+      if (this.provider === 'minio') {
+        const endpoint = this.config.get<string>('storage.minio.endpoint');
+        this.logger.log(
+          `✅ MinIO connected — endpoint: ${endpoint}, bucket: "${this.bucket}"`,
+        );
+      } else {
+        const region = this.config.get<string>('storage.aws.region');
+        this.logger.log(
+          `✅ AWS S3 connected — region: ${region}, bucket: "${this.bucket}"`,
+        );
+      }
+    } catch (err: any) {
+      if (err?.name === 'NotFound' || err?.$metadata?.httpStatusCode === 404) {
+        this.logger.warn(
+          `⚠️  ${label} reachable nhưng bucket "${this.bucket}" không tồn tại. Hãy tạo bucket trước khi upload.`,
+        );
+      } else {
+        this.logger.error(
+          `❌ Không thể kết nối ${label}: ${err?.message ?? err}`,
+        );
+      }
     }
   }
 

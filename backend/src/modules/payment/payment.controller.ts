@@ -1,5 +1,6 @@
 import {
-  Controller, Post, Get, Body, Param, UseGuards, HttpCode, HttpStatus,
+  Controller, Post, Get, Patch, Delete,
+  Body, Param, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -7,15 +8,18 @@ import {
   ApiOperation,
   ApiCreatedResponse,
   ApiOkResponse,
+  ApiNoContentResponse,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
   ApiParam,
   ApiBody,
-  ApiExtraModels,
 } from '@nestjs/swagger';
 import { PaymentService, CreatePaymentDto } from './payment.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -94,6 +98,7 @@ export class PaymentController {
           status: { type: 'string', enum: ['pending', 'success', 'failed', 'refunded'] },
           amount: { type: 'number', example: 30020000 },
           transactionId: { type: 'string', nullable: true, example: 'VNP-TXN-123456' },
+          metadata: { type: 'object', nullable: true, description: 'Dữ liệu thô từ cổng thanh toán' },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
         },
@@ -104,6 +109,110 @@ export class PaymentController {
   @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
   getByOrder(@Param('orderId') orderId: string) {
     return this.paymentService.getByOrder(orderId);
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Lấy chi tiết một giao dịch thanh toán',
+    description: 'Trả về thông tin đầy đủ của một giao dịch thanh toán theo UUID.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của giao dịch thanh toán', format: 'uuid', example: 'uuid-...' })
+  @ApiOkResponse({
+    description: 'Chi tiết giao dịch thanh toán',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        orderId: { type: 'string', format: 'uuid' },
+        method: { type: 'string', enum: ['cod', 'bank_transfer', 'momo', 'vnpay'] },
+        status: { type: 'string', enum: ['pending', 'success', 'failed', 'refunded'] },
+        amount: { type: 'number', example: 30020000 },
+        transactionId: { type: 'string', nullable: true },
+        metadata: { type: 'object', nullable: true },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: 'Giao dịch không tồn tại' })
+  @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
+  getById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.paymentService.getById(id);
+  }
+
+  @Patch('admin/:id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({
+    summary: '[Admin] Cập nhật trạng thái giao dịch',
+    description:
+      'Admin cập nhật thủ công trạng thái của một giao dịch thanh toán. Sử dụng khi cần đối soát hoặc xử lý ngoại lệ (ví dụ: xác nhận chuyển khoản ngân hàng thủ công). Yêu cầu role **admin**.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của giao dịch thanh toán', format: 'uuid', example: 'uuid-...' })
+  @ApiBody({
+    description: 'Trạng thái và thông tin giao dịch mới',
+    schema: {
+      type: 'object',
+      required: ['status'],
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['pending', 'success', 'failed', 'refunded'],
+          example: 'success',
+          description: 'Trạng thái mới của giao dịch',
+        },
+        transactionId: {
+          type: 'string',
+          example: 'BANK-TXN-20260510-001',
+          description: 'Mã giao dịch từ ngân hàng/cổng thanh toán (tuỳ chọn)',
+        },
+        note: {
+          type: 'string',
+          example: 'Đã xác nhận chuyển khoản ngân hàng thủ công',
+          description: 'Ghi chú lý do thay đổi trạng thái',
+        },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: 'Trạng thái giao dịch đã được cập nhật',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        status: { type: 'string', example: 'success' },
+        transactionId: { type: 'string', nullable: true },
+        updatedAt: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Trạng thái không hợp lệ' })
+  @ApiNotFoundResponse({ description: 'Giao dịch không tồn tại' })
+  @ApiForbiddenResponse({ description: 'Không có quyền admin' })
+  updatePaymentStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: { status: string; transactionId?: string; note?: string },
+  ) {
+    return this.paymentService.updateStatus(id, dto.status, dto.transactionId, dto.note);
+  }
+
+  @Delete('admin/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: '[Admin] Xóa giao dịch thanh toán',
+    description:
+      'Xóa vĩnh viễn một giao dịch thanh toán. **Chỉ áp dụng cho giao dịch ở trạng thái `failed`.** Không thể xóa giao dịch đã thành công hoặc đang pending. Yêu cầu role **admin**.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của giao dịch thanh toán', format: 'uuid', example: 'uuid-...' })
+  @ApiNoContentResponse({ description: 'Giao dịch đã bị xóa thành công' })
+  @ApiBadRequestResponse({ description: 'Không thể xóa giao dịch không ở trạng thái failed' })
+  @ApiNotFoundResponse({ description: 'Giao dịch không tồn tại' })
+  @ApiForbiddenResponse({ description: 'Không có quyền admin' })
+  deletePayment(@Param('id', ParseUUIDPipe) id: string) {
+    return this.paymentService.deletePayment(id);
   }
 
   @Post('webhook/vnpay')
