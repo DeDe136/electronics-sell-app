@@ -9,7 +9,7 @@ import {
   ShoppingBag, CheckCircle, Loader2, ArrowLeft,
 } from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
-import { orderApi, paymentMethodApi } from '@/lib/api';
+import { orderApi, paymentMethodApi, type CreateOrderPayload } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
@@ -136,11 +136,12 @@ export default function CheckoutPage() {
 
     setSubmitting(true);
     try {
-      const order = await orderApi.createOrder({
+      const payload: CreateOrderPayload = {
         shippingAddress: form,
-        note: note.trim() || undefined,
         paymentMethod: selectedMethod,
-      });
+        note: note.trim() || undefined,
+      };
+      const order = await orderApi.createOrder(payload);
 
       await clearCart();
       router.push(`/order-success?orderId=${order.id}&orderCode=${order.orderCode}`);

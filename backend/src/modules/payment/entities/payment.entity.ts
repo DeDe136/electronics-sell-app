@@ -45,8 +45,8 @@ export class Payment {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount!: number;
 
-  @Column({ nullable: true })
-  transactionId!: string;
+  @Column({ type: 'varchar', nullable: true })
+  transactionId!: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata!: Record<string, any>;

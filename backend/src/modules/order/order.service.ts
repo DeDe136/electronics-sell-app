@@ -8,9 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
+import { Payment, PaymentMethod, PaymentStatus } from '../payment/entities/payment.entity';
 import { CartService } from '../cart/cart.service';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsEnum, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ShippingAddressDto {
@@ -52,6 +53,14 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiProperty({
+    enum: PaymentMethod,
+    example: PaymentMethod.COD,
+    description: 'Phương thức thanh toán: cod | bank_transfer | momo | vnpay',
+  })
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
 }
 
 /** Các trạng thái được phép hủy bởi người dùng */
@@ -65,6 +74,7 @@ export class OrderService {
   constructor(
     @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
     @InjectRepository(OrderItem) private readonly itemRepo: Repository<OrderItem>,
+    @InjectRepository(Payment) private readonly paymentRepo: Repository<Payment>,
     private readonly cartService: CartService,
     private readonly dataSource: DataSource,
   ) {}
@@ -74,8 +84,10 @@ export class OrderService {
     if (!cart.items.length) throw new BadRequestException('Cart is empty');
 
     const SHIPPING_FEE = 30000;
+    const total = cart.subtotal + SHIPPING_FEE;
 
     return this.dataSource.transaction(async (em) => {
+      // 1. Tạo Order
       const order = em.create(Order, {
         orderCode: this.generateOrderCode(),
         userId,
@@ -84,27 +96,49 @@ export class OrderService {
         subtotal: cart.subtotal,
         shippingFee: SHIPPING_FEE,
         discount: 0,
-        total: cart.subtotal + SHIPPING_FEE,
+        total,
         status: OrderStatus.PENDING,
       });
       const savedOrder = await em.save(Order, order);
 
+      // 2. Tạo OrderItems (snapshot tại thời điểm đặt hàng)
       for (const item of cart.items) {
         const price = Number(item.product.salePrice || item.product.price);
         await em.save(OrderItem, {
           orderId: savedOrder.id,
           productId: item.productId,
           productName: item.product.name,
-          productImage: item.product.images?.[0]?.url,
-          variantLabel: item.variantId,
+          productImage: item.product.images?.[0]?.url ?? null,
+          variantLabel: item.variantId ?? null,
           unitPrice: price,
           quantity: item.quantity,
           subtotal: price * item.quantity,
         });
       }
 
+      // 3. Tạo Payment tương ứng với phương thức thanh toán người dùng chọn
+      const isCod = dto.paymentMethod === PaymentMethod.COD;
+      const payment = em.create(Payment, {
+        orderId: savedOrder.id,
+        method: dto.paymentMethod,
+        amount: total,
+        status: isCod ? PaymentStatus.SUCCESS : PaymentStatus.PENDING,
+        // COD: gán transactionId tự động; các phương thức online sẽ cập nhật sau
+        transactionId: isCod ? `COD-${savedOrder.id}` : null,
+        metadata: isCod
+          ? { note: 'Thanh toán khi nhận hàng' }
+          : { note: 'Chờ xác nhận thanh toán' },
+      });
+      await em.save(Payment, payment);
+
+      // 4. Xóa giỏ hàng
       await this.cartService.clearCart(userId);
-      return savedOrder;
+
+      // 5. Trả về order kèm đầy đủ relations
+      return em.findOneOrFail(Order, {
+        where: { id: savedOrder.id },
+        relations: ['items', 'payment'],
+      });
     });
   }
 

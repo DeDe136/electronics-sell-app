@@ -39,10 +39,10 @@ export class OrderController {
   })
   @ApiBody({
     type: CreateOrderDto,
-    description: 'Địa chỉ giao hàng và ghi chú',
+    description: 'Địa chỉ giao hàng, phương thức thanh toán và ghi chú',
     examples: {
       basic: {
-        summary: 'Ví dụ đặt hàng',
+        summary: 'Ví dụ đặt hàng COD',
         value: {
           shippingAddress: {
             fullName: 'Nguyen Van A',
@@ -52,7 +52,23 @@ export class OrderController {
             district: 'Quan 5',
             city: 'Ho Chi Minh',
           },
+          paymentMethod: 'cod',
           note: 'Giao giờ hành chính, gọi trước 30 phút',
+        },
+      },
+      bank_transfer: {
+        summary: 'Ví dụ đặt hàng chuyển khoản',
+        value: {
+          shippingAddress: {
+            fullName: 'Tran Thi B',
+            phone: '0912345678',
+            address: '456 Le Van Sy',
+            ward: 'Phuong 14',
+            district: 'Quan 3',
+            city: 'Ho Chi Minh',
+          },
+          paymentMethod: 'bank_transfer',
+          note: '',
         },
       },
     },

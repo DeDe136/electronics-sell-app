@@ -89,10 +89,23 @@ export const userApi = {
 };
 
 // ===== Order API =====
+export interface CreateOrderPayload {
+  shippingAddress: {
+    fullName: string;
+    phone: string;
+    address: string;
+    ward: string;
+    district: string;
+    city: string;
+  };
+  paymentMethod: string;
+  note?: string;
+}
+
 export const orderApi = {
   getMyOrders: () => api.get('/orders').then((r) => r.data),
   getOrder: (id: string) => api.get(`/orders/${id}`).then((r) => r.data),
-  createOrder: (data: any) => api.post('/orders', data).then((r) => r.data),
+  createOrder: (data: CreateOrderPayload) => api.post('/orders', data).then((r) => r.data),
 };
 
 // ===== Payment Method Options API =====
