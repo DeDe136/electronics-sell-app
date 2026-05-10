@@ -9,6 +9,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Payment, PaymentMethod, PaymentStatus } from '../payment/entities/payment.entity';
+import { ProductVariant } from '../catalog/entities/product-variant.entity';
 import { CartService } from '../cart/cart.service';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEnum, IsArray, ValidateNested, IsInt, Min, IsUUID } from 'class-validator';
@@ -50,6 +51,45 @@ export class OrderItemInputDto {
   @IsInt()
   @Min(1)
   quantity: number;
+}
+
+/** Item cho luồng Mua ngay — không cần cartItemId */
+export class BuyNowItemDto {
+  @ApiProperty({ example: 'uuid-product-id', description: 'ID của sản phẩm' })
+  @IsUUID()
+  productId: string;
+
+  @ApiPropertyOptional({ example: 'uuid-variant-id', description: 'ID của variant (nếu có)' })
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
+
+  @ApiProperty({ example: 1, description: 'Số lượng muốn mua', minimum: 1 })
+  @IsInt()
+  @Min(1)
+  quantity: number;
+}
+
+export class BuyNowOrderDto {
+  @ApiProperty({ type: ShippingAddressDto })
+  @ValidateNested()
+  @Type(() => ShippingAddressDto)
+  shippingAddress: ShippingAddressDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @ApiProperty({ enum: PaymentMethod, example: PaymentMethod.COD })
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
+
+  @ApiProperty({ type: [BuyNowItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BuyNowItemDto)
+  items: BuyNowItemDto[];
 }
 
 export class CreateOrderDto {
@@ -96,6 +136,7 @@ export class OrderService {
     @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
     @InjectRepository(OrderItem) private readonly itemRepo: Repository<OrderItem>,
     @InjectRepository(Payment) private readonly paymentRepo: Repository<Payment>,
+    @InjectRepository(ProductVariant) private readonly variantRepo: Repository<ProductVariant>,
     private readonly cartService: CartService,
     private readonly dataSource: DataSource,
   ) {}
@@ -121,9 +162,22 @@ export class OrderService {
       return { cartItem, orderQty: input.quantity };
     });
 
+    // Resolve variantLabel: lookup label từ bảng product_variants thay vì dùng UUID
+    const variantIds = resolvedItems
+      .map(({ cartItem }) => cartItem.variantId)
+      .filter((id): id is string => !!id);
+
+    const variantLabelMap = new Map<string, string>();
+    if (variantIds.length) {
+      const variants = await this.variantRepo.findByIds(variantIds);
+      variants.forEach((v) => variantLabelMap.set(v.id, v.label));
+    }
+
     const SHIPPING_FEE = 30000;
+    // Dùng giá variant nếu có, nếu không dùng salePrice/price của product
     const subtotal = resolvedItems.reduce((sum, { cartItem, orderQty }) => {
-      const price = Number(cartItem.product.salePrice || cartItem.product.price);
+      const variant = cartItem.variantId ? cartItem.product.variants?.find((v: any) => v.id === cartItem.variantId) : null;
+      const price = variant ? Number(variant.price) : Number(cartItem.product.salePrice || cartItem.product.price);
       return sum + price * orderQty;
     }, 0);
     const total = subtotal + SHIPPING_FEE;
@@ -145,13 +199,18 @@ export class OrderService {
 
       // 2. Tạo OrderItems — snapshot tại thời điểm đặt, dùng orderQty chứ không phải cart qty
       for (const { cartItem, orderQty } of resolvedItems) {
-        const price = Number(cartItem.product.salePrice || cartItem.product.price);
+        const variant = cartItem.variantId ? cartItem.product.variants?.find((v: any) => v.id === cartItem.variantId) : null;
+        const price = variant ? Number(variant.price) : Number(cartItem.product.salePrice || cartItem.product.price);
+        // variantLabel: lấy tên label (vd: "8GB/128GB") thay vì UUID
+        const variantLabel = cartItem.variantId
+          ? (variantLabelMap.get(cartItem.variantId) ?? cartItem.variantId)
+          : null;
         await em.save(OrderItem, {
           orderId: savedOrder.id,
           productId: cartItem.productId,
           productName: cartItem.product.name,
-          productImage: cartItem.product.images?.[0]?.url ?? null,
-          variantLabel: cartItem.variantId ?? null,
+          productImage: cartItem.product.images?.[0]?.url ?? undefined,
+          variantLabel: variantLabel ?? undefined,
           unitPrice: price,
           quantity: orderQty,
           subtotal: price * orderQty,
@@ -188,6 +247,98 @@ export class OrderService {
         where: { id: savedOrder.id },
         relations: ['items', 'payment'],
       });
+    });
+  }
+
+  /** Mua ngay — tạo order trực tiếp từ productId/variantId, không qua cart */
+  async buyNow(userId: string, dto: BuyNowOrderDto): Promise<Order> {
+    if (!dto.items?.length) throw new BadRequestException('Vui lòng chọn ít nhất một sản phẩm');
+
+    // Resolve product + variant cho từng item
+    const { DataSource: _DS, ..._ } = await import('typeorm');
+    const productRepo = this.dataSource.getRepository('products');
+
+    // Lấy product info qua DataSource để tránh circular dependency
+    const resolvedItems: Array<{
+      productId: string; productName: string; productImage: string | null;
+      variantId: string | null; variantLabel: string | null;
+      unitPrice: number; quantity: number;
+    }> = [];
+
+    for (const item of dto.items) {
+      const product = await this.dataSource
+        .getRepository('Product')
+        .findOne({ where: { id: item.productId }, relations: ['variants'] })
+        .catch(() => null);
+
+      if (!product) throw new BadRequestException(`Sản phẩm "${item.productId}" không tồn tại`);
+
+      let unitPrice: number;
+      let variantLabel: string | null = null;
+      let variantId: string | null = item.variantId ?? null;
+
+      if (item.variantId) {
+        const variant = (product as any).variants?.find((v: any) => v.id === item.variantId);
+        if (!variant) throw new BadRequestException(`Variant "${item.variantId}" không tồn tại`);
+        unitPrice = Number(variant.price);
+        variantLabel = variant.label;
+      } else {
+        unitPrice = Number((product as any).salePrice || (product as any).price);
+      }
+
+      resolvedItems.push({
+        productId: item.productId,
+        productName: (product as any).name,
+        productImage: (product as any).images?.[0]?.url ?? null,
+        variantId,
+        variantLabel,
+        unitPrice,
+        quantity: item.quantity,
+      });
+    }
+
+    const SHIPPING_FEE = 30000;
+    const subtotal = resolvedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    const total = subtotal + SHIPPING_FEE;
+
+    return this.dataSource.transaction(async (em) => {
+      const order = em.create(Order, {
+        orderCode: this.generateOrderCode(),
+        userId,
+        shippingAddress: dto.shippingAddress,
+        note: dto.note,
+        subtotal,
+        shippingFee: SHIPPING_FEE,
+        discount: 0,
+        total,
+        status: OrderStatus.PENDING,
+      });
+      const savedOrder = await em.save(Order, order);
+
+      for (const item of resolvedItems) {
+        await em.save(OrderItem, {
+          orderId: savedOrder.id,
+          productId: item.productId,
+          productName: item.productName,
+          productImage: item.productImage ?? undefined,
+          variantLabel: item.variantLabel ?? undefined,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          subtotal: item.unitPrice * item.quantity,
+        });
+      }
+
+      const isCod = dto.paymentMethod === PaymentMethod.COD;
+      await em.save(Payment, em.create(Payment, {
+        orderId: savedOrder.id,
+        method: dto.paymentMethod,
+        amount: total,
+        status: isCod ? PaymentStatus.SUCCESS : PaymentStatus.PENDING,
+        transactionId: isCod ? `COD-${savedOrder.id}` : null,
+        metadata: isCod ? { note: 'Thanh toán khi nhận hàng' } : { note: 'Chờ xác nhận thanh toán' },
+      }));
+
+      return em.findOneOrFail(Order, { where: { id: savedOrder.id }, relations: ['items', 'payment'] });
     });
   }
 

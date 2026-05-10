@@ -18,7 +18,6 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   const [quantity, setQuantity]             = useState(1);
   const { addItem } = useCart();
   const router = useRouter();
-  const [buyingNow, setBuyingNow] = useState(false);
 
   useEffect(() => {
     catalogApi.getProduct(params.slug)
@@ -55,22 +54,28 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   const formatPrice = (p: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p);
 
-  const handleBuyNow = async () => {
+  const handleBuyNow = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     if (!token) {
       toast.error('Vui lòng đăng nhập để mua hàng');
       router.push('/login');
       return;
     }
-    setBuyingNow(true);
-    try {
-      await addItem(product.id, quantity, selectedVariant?.id);
-      router.push('/checkout');
-    } catch {
-      // addItem đã show toast lỗi
-    } finally {
-      setBuyingNow(false);
-    }
+
+    const unitPrice = selectedVariant ? Number(selectedVariant.price) : (product.salePrice || product.price);
+    const payload = [{
+      cartItemId: null, // buy-now không có cartItemId
+      quantity,
+      productId: product.id,
+      productName: product.name,
+      productImage: product.images?.[0]?.url ?? null,
+      unitPrice: Number(unitPrice),
+      variantId: selectedVariant?.id ?? null,
+      variantLabel: selectedVariant?.label ?? null,
+    }];
+
+    sessionStorage.setItem('buynow_items', JSON.stringify(payload));
+    router.push('/buy-now');
   };
 
   const images = product.images?.length
@@ -169,14 +174,24 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
           <div className="rounded-xl p-4 mb-4 bg-gray-50 dark:bg-slate-800/60 border border-gray-100 dark:border-slate-700/50">
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-bold text-red-600 dark:text-red-400">
-                {formatPrice(price)}
+                {formatPrice(price * quantity)}
               </span>
-              {hasDiscount && (
+              {quantity > 1 && (
+                <span className="text-sm text-gray-400 dark:text-slate-500">
+                  ({formatPrice(price)} / sp)
+                </span>
+              )}
+              {hasDiscount && quantity === 1 && (
                 <span className="text-lg text-gray-400 dark:text-slate-500 line-through">
                   {formatPrice(product.price)}
                 </span>
               )}
             </div>
+            {hasDiscount && quantity > 1 && (
+              <p className="text-xs text-gray-400 dark:text-slate-500 mt-1 line-through">
+                {formatPrice(product.price * quantity)}
+              </p>
+            )}
           </div>
 
           {/* Variants */}
@@ -240,7 +255,6 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
               size="lg"
               variant="outline"
               className="flex-1"
-              loading={buyingNow}
               onClick={handleBuyNow}
             >
               <Zap className="w-5 h-5" />

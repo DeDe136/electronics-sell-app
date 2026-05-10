@@ -110,10 +110,24 @@ export interface CreateOrderPayload {
   note?: string;
 }
 
+export interface BuyNowItemPayload {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}
+
+export interface BuyNowPayload {
+  shippingAddress: CreateOrderPayload['shippingAddress'];
+  paymentMethod: string;
+  items: BuyNowItemPayload[];
+  note?: string;
+}
+
 export const orderApi = {
   getMyOrders: () => api.get('/orders').then((r) => r.data),
   getOrder: (id: string) => api.get(`/orders/${id}`).then((r) => r.data),
   createOrder: (data: CreateOrderPayload) => api.post('/orders', data).then((r) => r.data),
+  buyNow: (data: BuyNowPayload) => api.post('/orders/buy-now', data).then((r) => r.data),
 };
 
 // ===== Payment Method Options API =====

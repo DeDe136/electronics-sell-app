@@ -55,8 +55,17 @@ export const useCart = create<CartState>((set, get) => ({
 
   addItem: async (productId, quantity = 1, variantId) => {
     try {
-      await cartApi.addItem({ productId, quantity, variantId });
-      toast.success('Đã thêm vào giỏ hàng');
+      // Nếu sản phẩm (+ variant) đã có trong cart → tăng số lượng thay vì add mới
+      const existing = get().items.find(
+        (i) => i.productId === productId && (i.variantId ?? null) === (variantId ?? null),
+      );
+      if (existing) {
+        await cartApi.updateQuantity(existing.id, existing.quantity + quantity);
+        toast.success('Đã cập nhật số lượng trong giỏ hàng');
+      } else {
+        await cartApi.addItem({ productId, quantity, variantId });
+        toast.success('Đã thêm vào giỏ hàng');
+      }
       get().fetchCart();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Không thể thêm sản phẩm');

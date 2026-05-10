@@ -16,7 +16,7 @@ import {
   ApiParam,
   ApiBody,
 } from '@nestjs/swagger';
-import { OrderService, CreateOrderDto } from './order.service';
+import { OrderService, CreateOrderDto, BuyNowOrderDto } from './order.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -94,6 +94,18 @@ export class OrderController {
   @ApiBadRequestResponse({ description: 'Giỏ hàng trống hoặc dữ liệu địa chỉ không đầy đủ' })
   create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
     return this.orderService.createFromCart(user.id, dto);
+  }
+
+  @Post('buy-now')
+  @ApiOperation({
+    summary: 'Mua ngay — tạo đơn hàng trực tiếp từ sản phẩm, không qua giỏ hàng',
+    description: 'Tạo đơn hàng ngay lập tức từ productId + variantId + quantity, không thêm vào giỏ hàng.',
+  })
+  @ApiBody({ type: BuyNowOrderDto })
+  @ApiCreatedResponse({ description: 'Đơn hàng đã được tạo thành công' })
+  @ApiBadRequestResponse({ description: 'Sản phẩm không tồn tại hoặc dữ liệu không hợp lệ' })
+  buyNow(@CurrentUser() user: User, @Body() dto: BuyNowOrderDto) {
+    return this.orderService.buyNow(user.id, dto);
   }
 
   @Get()
