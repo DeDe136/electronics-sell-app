@@ -1,16 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart, User, Search, Menu, X, Zap, Sun, Moon } from 'lucide-react';
+import { ShoppingCart, User, Search, Zap, Sun, Moon } from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
 import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
+import { useRouter } from 'next/navigation';
 
 export function Navbar() {
   const { itemCount, fetchCart } = useCart();
-  const [menuOpen, setMenuOpen]   = useState(false);
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [mounted, setMounted]     = useState(false);
+  const [query, setQuery]         = useState('');
   const { theme, setTheme }       = useTheme();
 
   useEffect(() => {
@@ -18,12 +20,17 @@ export function Navbar() {
     fetchCart();
   }, [fetchCart]);
 
-  const categories = [
-    { label: 'Điện thoại', href: '/?category=smartphone' },
-    { label: 'Laptop',     href: '/?category=laptop' },
-    { label: 'Tablet',     href: '/?category=tablet' },
-    { label: 'Phụ kiện',  href: '/?category=accessory' },
-  ];
+  // Navbar không lặp lại category pills / sort / lọc giá (đã có sẵn ở
+  // page.tsx) — thay vào đó xử lý đúng chức năng riêng của nó: tìm kiếm.
+  // Trước đây input này không có value/onChange nên gõ gì cũng vô tác dụng.
+  // `search` param đã được backend hỗ trợ sẵn (ILIKE trên p.name/p.brand)
+  // nên chỉ cần điều hướng về `/?search=<query>` là chạy được ngay.
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    router.push(q ? `/?search=${encodeURIComponent(q)}` : '/');
+    setSearchOpen(false);
+  };
 
   const inputCls = `w-full pl-9 pr-4 py-2 rounded-lg text-sm
     border border-gray-200 dark:border-slate-600/70
@@ -53,30 +60,21 @@ export function Navbar() {
             TechShop
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-1 ml-2">
-            {categories.map((c) => (
-              <Link
-                key={c.label}
-                href={c.href}
-                className="text-sm font-medium px-3 py-1.5 rounded-lg transition-colors
-                  text-gray-600 dark:text-slate-300
-                  hover:text-blue-600 dark:hover:text-blue-400
-                  hover:bg-blue-50 dark:hover:bg-blue-950/40"
-              >
-                {c.label}
-              </Link>
-            ))}
-          </nav>
-
-          {/* Search bar desktop */}
-          <div className="flex-1 hidden md:block mx-4">
+          {/* Search bar desktop — chức năng riêng của Navbar, không trùng
+              với sort/filter đã có ở page.tsx */}
+          <form onSubmit={handleSearch} className="flex-1 hidden md:block mx-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4
                 text-gray-400 dark:text-slate-500" />
-              <input type="text" placeholder="Tìm điện thoại, laptop..." className={inputCls} />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Tìm điện thoại, laptop..."
+                className={inputCls}
+              />
             </div>
-          </div>
+          </form>
 
           {/* Actions */}
           <div className="flex items-center gap-0.5 ml-auto">
@@ -112,41 +110,25 @@ export function Navbar() {
             <Link href="/profile" className={iconBtn}>
               <User className="w-5 h-5" />
             </Link>
-
-            <button className={`md:hidden ${iconBtn}`} onClick={() => setMenuOpen(!menuOpen)}>
-              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
           </div>
         </div>
 
         {/* Mobile search */}
         {searchOpen && (
-          <div className="md:hidden pb-3">
+          <form onSubmit={handleSearch} className="md:hidden pb-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4
                 text-gray-400 dark:text-slate-500" />
-              <input type="text" placeholder="Tìm sản phẩm..." autoFocus className={inputCls} />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Tìm sản phẩm..."
+                autoFocus
+                className={inputCls}
+              />
             </div>
-          </div>
-        )}
-
-        {/* Mobile menu */}
-        {menuOpen && (
-          <nav className="md:hidden border-t border-gray-100 dark:border-slate-700/60 py-2">
-            {categories.map((c) => (
-              <Link
-                key={c.label}
-                href={c.href}
-                onClick={() => setMenuOpen(false)}
-                className="block px-3 py-2.5 text-sm font-medium rounded-lg transition-colors
-                  text-gray-700 dark:text-slate-300
-                  hover:text-blue-600 dark:hover:text-blue-400
-                  hover:bg-blue-50 dark:hover:bg-slate-700/60"
-              >
-                {c.label}
-              </Link>
-            ))}
-          </nav>
+          </form>
         )}
       </div>
     </header>

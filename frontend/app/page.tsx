@@ -41,7 +41,7 @@ const SORT_OPTIONS = [
   { value: 'price_desc',label: 'Giá giảm dần' },
 ];
 
-const BRANDS = ['Apple', 'Samsung', 'Xiaomi', 'OPPO', 'Vivo', 'Dell', 'Asus', 'Lenovo', 'HP'];
+const BRANDS = ['Apple', 'Samsung', 'Xiaomi', 'OPPO', 'Vivo', 'Dell', 'Asus', 'Lenovo', 'HP', 'Sony'];
 
 const banners = [
   { label: '📱 iPhone 16 Series', sub: 'Từ 22.990.000đ',      color: 'from-slate-700 to-slate-900',   ring: 'ring-slate-600/30' },

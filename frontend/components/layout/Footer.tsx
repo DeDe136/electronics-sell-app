@@ -1,7 +1,28 @@
 import Link from 'next/link';
 import { Zap, MapPin, Phone, Mail } from 'lucide-react';
+import { catalogApi } from '@/lib/api';
 
-export function Footer() {
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+async function getCategories(): Promise<Category[]> {
+  try {
+    const data = await catalogApi.getCategories();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function Footer() {
+  // Lấy danh mục thật từ backend (id = UUID) — trước đây Footer hardcode
+  // tên tiếng Việt và link `/?search=<tên>`, nhưng backend chỉ search theo
+  // p.name/p.brand nên không bao giờ khớp, luôn ra "Không có sản phẩm nào"
+  const categories = await getCategories();
+
   return (
     <footer className="bg-gray-900 text-gray-300 mt-16">
       <div className="container-page py-12">
@@ -26,13 +47,21 @@ export function Footer() {
           <div>
             <h3 className="text-white font-semibold mb-3">Sản phẩm</h3>
             <ul className="space-y-2 text-sm">
-              {['Điện thoại', 'Laptop', 'Tablet', 'Đồng hồ thông minh', 'Phụ kiện'].map((item) => (
-                <li key={item}>
-                  <Link href={`/?search=${item}`} className="hover:text-white transition-colors">
-                    {item}
+              {categories.length > 0 ? (
+                categories.map((cat) => (
+                  <li key={cat.id}>
+                    <Link href={`/?category=${cat.id}`} className="hover:text-white transition-colors">
+                      {cat.name}
+                    </Link>
+                  </li>
+                ))
+              ) : (
+                <li>
+                  <Link href="/" className="hover:text-white transition-colors">
+                    Xem tất cả sản phẩm
                   </Link>
                 </li>
-              ))}
+              )}
             </ul>
           </div>
 
