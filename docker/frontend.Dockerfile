@@ -14,25 +14,35 @@
 # ============================================================================
 
 
-# ── STAGE 1: DEPS ─────────────────────────────────────────────────────────
-# Mục đích: cài đặt toàn bộ dependencies (kể cả devDependencies vì Next.js
-# cần TypeScript, Tailwind, ESLint... trong lúc build).
-FROM node:20-alpine AS deps
-WORKDIR /app
-
-# Chỉ copy package.json + package-lock.json trước để tận dụng Docker layer
-# cache: nếu chưa đổi dependency, các lần build sau sẽ không cần "npm ci" lại.
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
-
-
-# ── STAGE 2: BUILDER ─────────────────────────────────────────────────────
-# Mục đích: copy source code và build ra bản production ("next build").
+# ── STAGE 1: BUILDER ─────────────────────────────────────────────────────
+# Mục đích: cài dependencies VÀ build ra bản production ("next build")
+# trong cùng 1 stage.
+#
+# LƯU Ý: không cần tách riêng 1 stage "deps" chỉ để cài node_modules rồi
+# COPY --from=deps sang. Lý do:
+#   - Docker cache theo từng LAYER (từng lệnh), không phải theo từng stage.
+#     Miễn là COPY package.json + npm ci nằm TRƯỚC COPY source code (như bên
+#     dưới), thì dù source code (app/, components/...) đổi liên tục, layer
+#     "npm ci" vẫn được cache lại y như khi tách stage riêng.
+#   - node_modules được tạo ở đây cũng KHÔNG được copy sang stage "runner"
+#     cuối cùng — runner chỉ lấy .next/standalone (Next.js đã tự động
+#     "trace" và đóng gói sẵn các module cần thiết vào đó) và .next/static.
+#     Vì vậy tách stage riêng cho node_modules ở đây không mang lại lợi ích
+#     gì thêm ngoài việc cache — mà cache thì gộp 1 stage vẫn hoạt động y hệt.
+#
+# (Khác với backend.Dockerfile: ở đó bắt buộc phải tách stage "deps" riêng
+# vì nó tạo ra một node_modules PRODUCTION-ONLY --omit=dev khác với
+# node_modules của stage build — đây là 2 artifact khác nhau thật sự,
+# không đơn thuần là vấn đề cache.)
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Lấy lại node_modules đã cài ở stage "deps" (tránh phải "npm ci" lại lần nữa)
-COPY --from=deps /app/node_modules ./node_modules
+# Chỉ copy package.json + package-lock.json trước để tận dụng Docker layer
+# cache: nếu chưa đổi dependency, các lần build sau sẽ không cần "npm ci" lại,
+# dù các COPY/RUN phía dưới (source code, build) có thay đổi liên tục.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
 # Copy toàn bộ source code frontend (app/, components/, lib/, config...)
 COPY frontend/. .
 
@@ -53,7 +63,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 
-# ── STAGE 3: RUNNER (image chạy thực tế trong production) ───────────────
+# ── STAGE 2: RUNNER (image chạy thực tế trong production) ───────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 
@@ -72,13 +82,13 @@ RUN apk add --no-cache dumb-init
 # Tạo user riêng không phải root để chạy app (bảo mật tốt hơn)
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 
-# Đảm bảo luôn có thư mục /app/public dù project hiện tại chưa có thư mục
+# Đảm bảo luôn có thư mục /app/public dự phòng dù project hiện tại chưa có thư mục
 # "public" nào (next.config.js standalone output vẫn mong đợi copy public/,
 # nếu thiếu thư mục này COPY phía dưới sẽ lỗi ở một số version Docker).
 RUN mkdir -p /app/public
 
 # Copy các file tĩnh (ảnh, favicon, ...) nếu có
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Copy server đã build ở chế độ "standalone" — bao gồm server.js và
 # node_modules TỐI THIỂU cần thiết (đã được Next.js tự động trace/prune).

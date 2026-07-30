@@ -72,11 +72,23 @@ RUN apk add --no-cache dumb-init
 RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
 
 # Copy node_modules "sạch" (chỉ production deps) từ stage "deps"
-COPY --from=deps    /app/node_modules ./node_modules
+#
+# --chown=nestjs:nodejs: đổi quyền sở hữu file ngay lúc copy, để file thuộc
+# đúng user sẽ chạy app (nestjs) thay vì mặc định thuộc về root.
+# Lưu ý: nếu KHÔNG có --chown, file copy vào vẫn mang quyền sở hữu root,
+# nhưng thường vẫn "chạy được" vì quyền đọc mặc định (644/755) đã mở sẵn
+# cho user khác (others) — đó là lý do nhiều Dockerfile bỏ qua --chown mà
+# vẫn hoạt động. Tuy nhiên nếu sau này backend cần GHI file vào các thư mục
+# này lúc runtime (vd: ghi log ra file, lưu file tạm...), thiếu --chown sẽ
+# gây lỗi "EACCES: permission denied" vì user "nestjs" không có quyền ghi
+# lên file do root sở hữu. Nên thêm --chown ngay từ đầu để nhất quán & an
+# toàn, tránh phải debug quyền hạn (permission) khi phát sinh nhu cầu ghi
+# file về sau.
+COPY --from=deps    --chown=nestjs:nodejs /app/node_modules ./node_modules
 # Copy code đã build (JavaScript thuần) từ stage "builder"
-COPY --from=builder /app/dist         ./dist
+COPY --from=builder --chown=nestjs:nodejs /app/dist         ./dist
 # Copy package.json để Node có thể đọc metadata (version, main entry, ...)
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
 
 # Chuyển sang user không phải root trước khi chạy app
 USER nestjs
