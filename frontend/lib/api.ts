@@ -8,11 +8,11 @@ export const api = axios.create({
 });
 
 // ── Ping server-side health check → log hiện trong terminal Next.js ──
-if (typeof window !== 'undefined') {
-  fetch('/api/health-check').catch(() => {
-    // Lỗi fetch nội bộ (Next.js chưa ready) — bỏ qua, không cần xử lý
-  });
-}
+// if (typeof window !== 'undefined') {
+//   fetch('/api/health-check').catch(() => {
+//     // Lỗi fetch nội bộ (Next.js chưa ready) — bỏ qua, không cần xử lý
+//   });
+// }
 
 // Gắn JWT token vào mọi request
 api.interceptors.request.use((config) => {
