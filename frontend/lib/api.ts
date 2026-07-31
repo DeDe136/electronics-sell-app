@@ -1,6 +1,30 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+// axios instance này được dùng ở CẢ 2 nơi:
+//   1. Client Components trong useEffect/event handler -> chạy TRONG TRÌNH
+//      DUYỆT của người dùng.
+//   2. Server Components (vd: app/page.tsx gọi trực tiếp lúc render, không
+//      qua useEffect) -> chạy TRÊN SERVER, tức BÊN TRONG container frontend.
+//
+// 2 ngữ cảnh này cần 2 địa chỉ backend khác nhau:
+//   - Trình duyệt cần gọi tới cổng đã publish ra máy host (NEXT_PUBLIC_API_URL,
+//     vd "http://localhost:3001"), vì trình duyệt không nằm trong docker network.
+//   - Server (bên trong container frontend) cần gọi sang container backend
+//     bằng TÊN SERVICE (INTERNAL_API_URL, vd "http://backend:3001"), vì
+//     "localhost" từ trong container frontend sẽ trỏ về chính nó, không
+//     phải container backend.
+//
+// "typeof window === 'undefined'" là cách chuẩn để phân biệt: Next.js build
+// ra 2 bundle riêng (server bundle & browser bundle) — trên server, "window"
+// không tồn tại (undefined); trong trình duyệt, "window" luôn có sẵn.
+const API_URL =
+  typeof window === 'undefined'
+    ? // Đang chạy trên SERVER (SSR / Server Component)
+      process.env.INTERNAL_API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://localhost:3001/api/v1'
+    : // Đang chạy trong TRÌNH DUYỆT
+      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 export const api = axios.create({
   baseURL: API_URL,

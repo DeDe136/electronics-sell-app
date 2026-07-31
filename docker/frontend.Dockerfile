@@ -55,7 +55,7 @@ COPY frontend/. .
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Tắt việc Next.js gửi dữ liệu thống kê sử dụng (telemetry) về Vercel.
+# Tắt việc Next.js gửi dữ liệu thống kê sử dụng (telemetry) về Vercel (công ty đứng sau Next.js).
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build production: tạo ra .next/standalone, .next/static nhờ cấu hình
