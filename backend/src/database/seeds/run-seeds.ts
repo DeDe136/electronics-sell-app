@@ -37,7 +37,20 @@ import { seedCartItems }              from './cart.seed';
 async function main() {
   const dataSource = new DataSource({
     type: 'postgres',
-    host:     process.env.DB_HOST     || 'localhost',
+    // Script này LUÔN chạy trên MÁY DEV (host), không chạy bên trong
+    // container (xem hướng dẫn "Chạy: npx ts-node ..." ở đầu file) — nên
+    // phải kết nối Postgres qua cổng đã publish ra host (localhost:5432),
+    // KHÔNG dùng tên service "postgres" (chỉ phân giải được BÊN TRONG
+    // docker network, máy dev không biết tên đó).
+    //
+    // Cố tình KHÔNG dùng process.env.DB_HOST ở đây: biến đó thường được
+    // set trong backend/.env theo giá trị dành cho CONTAINER (thường là
+    // "postgres", để backend chạy trong compose gọi đúng service) — nếu
+    // seed script lỡ đọc theo DB_HOST, sẽ không kết nối được từ máy dev.
+    // Dùng riêng SEED_DB_HOST (tuỳ chọn, hiếm khi cần đổi, chỉ dùng nếu
+    // Postgres không chạy trên chính máy dev, vd DB trên server khác) để
+    // không phụ thuộc/đụng chạm vào DB_HOST dùng chung với container.
+    host:     process.env.SEED_DB_HOST || 'localhost',
     port:     parseInt(process.env.DB_PORT ?? '5432', 10),
     username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
