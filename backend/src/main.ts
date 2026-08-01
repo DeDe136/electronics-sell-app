@@ -27,7 +27,23 @@ async function bootstrap() {
   );
 
   // Swagger docs
-  if (process.env.NODE_ENV !== 'production') {
+  //
+  // Trước đây điều kiện này chỉ dựa vào NODE_ENV !== 'production', nhưng
+  // NODE_ENV=production lại là giá trị NÊN dùng cho container (giúp
+  // Express/NestJS tối ưu hiệu năng), kể cả khi đây chỉ là môi trường
+  // local/staging chạy bằng Docker Compose (không phải deploy thật lên
+  // production cho người dùng cuối) — dẫn tới Swagger bị tắt "oan" dù ta
+  // vẫn muốn xem tài liệu API lúc test bằng Docker.
+  //
+  // Giải pháp: tách riêng biến ENABLE_SWAGGER, không còn gắn chặt với
+  // NODE_ENV. Mặc định (không set biến gì) vẫn giữ hành vi an toàn cũ:
+  // chỉ bật khi NODE_ENV !== 'production' — để nếu ai deploy thật lên môi
+  // trường production công khai mà quên set biến, Swagger vẫn tắt như
+  // trước, không lộ tài liệu API ra ngoài ý muốn.
+  const swaggerEnabled =
+    process.env.ENABLE_SWAGGER === 'true' || process.env.NODE_ENV !== 'production';
+
+  if (swaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle('Electronics Shop API')
       .setDescription(

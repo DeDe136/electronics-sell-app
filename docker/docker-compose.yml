@@ -78,6 +78,11 @@ services:
     environment:
       PORT: 3001
       NODE_ENV: production
+      # NODE_ENV=production tắt Swagger theo mặc định trong main.ts (an
+      # toàn cho deploy thật). Nhưng docker-compose này là môi trường
+      # local/staging để bạn TEST full stack, không phải deploy công khai
+      # thật sự — nên bật lại Swagger tường minh qua biến riêng.
+      ENABLE_SWAGGER: 'true'
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-postgres}

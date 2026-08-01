@@ -1,0 +1,30 @@
+# .dockerignore RIÊNG cho docker/frontend.Dockerfile
+#
+# BuildKit tự động ưu tiên file này (đặt cùng thư mục, cùng tên với
+# Dockerfile) thay vì .dockerignore ở gốc context, khi build đúng
+# frontend.Dockerfile. Không cần khai báo gì thêm trong docker-compose.yml.
+
+# --- Toàn bộ mã nguồn + tài nguyên của backend — build frontend hoàn toàn
+#     không cần tới.
+backend
+
+# --- Dependencies & build output cũ trên máy host của frontend.
+frontend/node_modules
+frontend/.next
+
+# --- Biến môi trường / secrets của frontend.
+frontend/.env
+frontend/.env.*
+!frontend/.env.local.example
+
+# --- Git, IDE, docs, script không cần thiết để build/chạy image.
+.git
+.gitignore
+.vscode
+.idea
+**/*.md
+scripts
+security
+
+# --- Chính thư mục docker/ — không cần đóng gói vào image.
+docker
