@@ -7,21 +7,29 @@ const nextConfig = {
     // fetch ảnh gốc từ URL trong "src" để resize/nén trước khi trả về
     // trình duyệt.
     //
-    // Ảnh sản phẩm của project này trỏ tới MinIO qua "http://localhost:9000"
-    // (địa chỉ mà TRÌNH DUYỆT cần dùng). Nếu để Next.js tối ưu ảnh, chính
-    // server bên trong container frontend sẽ cố fetch "localhost:9000" —
-    // nhưng "localhost" trong container frontend trỏ về chính nó (không có
-    // MinIO), không phải container "minio" → fetch thất bại → ảnh vỡ, dù
-    // dán thẳng URL đó vào trình duyệt vẫn xem được bình thường (vì đó là
-    // browser tự gọi trực tiếp, không qua container).
+    // Vì bước fetch ảnh gốc xảy ra TRÊN SERVER (container frontend), URL
+    // ảnh lưu trong DB (do backend/seed sinh ra) PHẢI là địa chỉ mà
+    // CONTAINER FRONTEND phân giải được, tức "http://minio:9000" (tên
+    // service trong docker network) — KHÔNG dùng "http://localhost:9000",
+    // vì "localhost" từ trong container frontend trỏ về chính nó, không
+    // phải container "minio".
+    // (Xem SEED_MEDIA_BASE_URL trong backend/src/database/seeds/*.seed.ts
+    // — phải set = "http://minio:9000/electronics-shop" khi seed dữ liệu
+    // cho môi trường chạy qua Docker Compose.)
     //
-    // unoptimized: true -> <Image> hoạt động gần giống <img> thường: trình
-    // duyệt tự tải thẳng URL gốc, không qua bước server-fetch nữa -> tránh
-    // hẳn vấn đề trên. Đánh đổi: mất tính năng Next.js tự động resize/nén
-    // ảnh theo từng kích thước màn hình (ảnh vẫn hiển thị bình thường).
-    unoptimized: true,
+    // Lưu ý: cách này CHỈ hoạt động khi frontend luôn chạy trong Docker.
+    // Nếu chạy "npm run dev" trực tiếp trên máy host (không qua container)
+    // trong khi DB đã seed với "minio:9000", ảnh sẽ vỡ vì host không phân
+    // giải được "minio" — lúc đó cần seed lại với
+    // SEED_MEDIA_BASE_URL=http://localhost:9000/electronics-shop.
     remotePatterns: [
-      // MinIO local
+      // MinIO — chạy trong Docker network (server-side fetch, xem giải
+      // thích ở trên). Đây là hostname mà CONTAINER FRONTEND dùng.
+      { protocol: 'http', hostname: 'minio', port: '9000' },
+      // MinIO — trường hợp chạy Next.js server TRỰC TIẾP trên máy host
+      // (không qua Docker), lúc đó "localhost" mới đúng là địa chỉ MinIO.
+      // Giữ lại cả 2 pattern để linh hoạt chạy được cả 2 kiểu triển khai
+      // mà không cần sửa next.config.js qua lại.
       { protocol: 'http', hostname: 'localhost', port: '9000' },
       // AWS S3
       { protocol: 'https', hostname: '*.amazonaws.com' },

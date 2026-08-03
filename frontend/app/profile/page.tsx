@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { User, Package, MapPin, Phone, Mail, Camera, LogOut } from 'lucide-react';
 import { userApi, orderApi } from '@/lib/api';
@@ -123,8 +124,13 @@ export default function ProfilePage() {
               border-white dark:border-slate-700
               flex items-center justify-center">
               {user.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                <Image
+                  src={user.avatarUrl}
+                  alt="avatar"
+                  width={80}
+                  height={80}
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <User className="w-9 h-9 text-blue-400" />
               )}

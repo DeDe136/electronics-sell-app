@@ -2,6 +2,11 @@ import { DataSource } from 'typeorm';
 import { Product, ProductStatus } from '../../modules/catalog/entities/product.entity';
 import { Category } from '../../modules/catalog/entities/category.entity';
 
+// Xem giải thích chi tiết trong category.seed.ts — cùng 1 hằng số, tách
+// riêng ở đây vì file này chạy độc lập (import trong run-seeds.ts).
+const MEDIA_BASE_URL =
+  process.env.SEED_MEDIA_BASE_URL || 'http://localhost:9000/electronics-shop';
+
 export async function seedProducts(dataSource: DataSource) {
   const productRepo = dataSource.getRepository(Product);
   const categoryRepo = dataSource.getRepository(Category);
@@ -29,9 +34,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 34990000,
       salePrice: 32990000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/iphone17promax/1.jpg', key: 'products/iphone17promax/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/iphone17promax/2.jpg', key: 'products/iphone17promax/2.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/iphone17promax/3.jpg', key: 'products/iphone17promax/3.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/iphone17promax/1.jpg`, key: 'products/iphone17promax/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/iphone17promax/2.jpg`, key: 'products/iphone17promax/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/iphone17promax/3.jpg`, key: 'products/iphone17promax/3.jpg' },
       ],
       specs: {
         'Màn hình': '6.7 inch Super Retina XDR LTPO OLED 120Hz',
@@ -56,9 +61,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 31990000,
       salePrice: 29990000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/s24ultra/1.jpg', key: 'products/s24ultra/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/s24ultra/2.jpg', key: 'products/s24ultra/2.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/s24ultra/3.jpg', key: 'products/s24ultra/3.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/s24ultra/1.jpg`, key: 'products/s24ultra/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/s24ultra/2.jpg`, key: 'products/s24ultra/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/s24ultra/3.jpg`, key: 'products/s24ultra/3.jpg' },
       ],
       specs: {
         'Màn hình': '6.8 inch Dynamic AMOLED 2X 120Hz',
@@ -83,9 +88,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 22990000,
       salePrice: 20990000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/xiaomi17ultra/1.jpg', key: 'products/xiaomi17ultra/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/xiaomi17ultra/2.jpg', key: 'products/xiaomi17ultra/2.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/xiaomi17ultra/3.jpg', key: 'products/xiaomi17ultra/3.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/1.jpg`, key: 'products/xiaomi17ultra/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/2.jpg`, key: 'products/xiaomi17ultra/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/3.jpg`, key: 'products/xiaomi17ultra/3.jpg' },
       ],
       specs: {
         'Màn hình': '6.73 inch AMOLED 120Hz',
@@ -112,8 +117,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 69990000,
       salePrice: 66990000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/mbp16m3pro/1.jpg', key: 'products/mbp16m3pro/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/mbp16m3pro/2.jpg', key: 'products/mbp16m3pro/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/mbp16m3pro/1.jpg`, key: 'products/mbp16m3pro/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/mbp16m3pro/2.jpg`, key: 'products/mbp16m3pro/2.jpg' },
       ],
       specs: {
         'CPU': 'Apple M3 Pro 12-core',
@@ -138,8 +143,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 45990000,
       salePrice: 42990000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/dellxps15/1.jpg', key: 'products/dellxps15/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/dellxps15/2.jpg', key: 'products/dellxps15/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/dellxps15/1.jpg`, key: 'products/dellxps15/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/dellxps15/2.jpg`, key: 'products/dellxps15/2.jpg' },
       ],
       specs: {
         'CPU': 'Intel Core i7-13700H',
@@ -164,8 +169,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 39990000,
       salePrice: undefined,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/rogg14-2024/1.jpg', key: 'products/rogg14-2024/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/rogg14-2024/2.jpg', key: 'products/rogg14-2024/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/rogg14-2024/1.jpg`, key: 'products/rogg14-2024/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/rogg14-2024/2.jpg`, key: 'products/rogg14-2024/2.jpg' },
       ],
       specs: {
         'CPU': 'AMD Ryzen 9 8945HS',
@@ -192,8 +197,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 8990000,
       salePrice: 7490000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/sonywh1000xm5/1.jpg', key: 'products/sonywh1000xm5/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/sonywh1000xm5/2.jpg', key: 'products/sonywh1000xm5/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/1.jpg`, key: 'products/sonywh1000xm5/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/2.jpg`, key: 'products/sonywh1000xm5/2.jpg' },
       ],
       specs: {
         'Loại kết nối': 'Bluetooth 5.2 / 3.5mm jack',
@@ -216,9 +221,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 6490000,
       salePrice: 5990000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/airpodspro2/1.jpg', key: 'products/airpodspro2/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/airpodspro2/2.jpg', key: 'products/airpodspro2/2.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/airpodspro2/3.jpg', key: 'products/airpodspro2/3.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/airpodspro2/1.jpg`, key: 'products/airpodspro2/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/airpodspro2/2.jpg`, key: 'products/airpodspro2/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/airpodspro2/3.jpg`, key: 'products/airpodspro2/3.jpg' },
       ],
       specs: {
         'Loại kết nối': 'Bluetooth 5.3',
@@ -243,9 +248,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 12990000,
       salePrice: 11490000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/applewatch-s9-45/1.jpg', key: 'products/applewatch-s9-45/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/applewatch-s9-45/2.jpg', key: 'products/applewatch-s9-45/2.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/applewatch-s9-45/3.jpg', key: 'products/applewatch-s9-45/3.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/1.jpg`, key: 'products/applewatch-s9-45/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/2.jpg`, key: 'products/applewatch-s9-45/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/3.jpg`, key: 'products/applewatch-s9-45/3.jpg' },
       ],
       specs: {
         'Màn hình': '45 mm Always-On Retina LTPO OLED',
@@ -268,8 +273,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 9490000,
       salePrice: 8290000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/gw6classic47/1.jpg', key: 'products/gw6classic47/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/gw6classic47/2.jpg', key: 'products/gw6classic47/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/gw6classic47/1.jpg`, key: 'products/gw6classic47/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/gw6classic47/2.jpg`, key: 'products/gw6classic47/2.jpg' },
       ],
       specs: {
         'Màn hình': '47 mm Super AMOLED 480×480',
@@ -294,8 +299,8 @@ export async function seedProducts(dataSource: DataSource) {
       price: 23990000,
       salePrice: 22490000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/ipadpro11m4/1.jpg', key: 'products/ipadpro11m4/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/ipadpro11m4/2.jpg', key: 'products/ipadpro11m4/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/ipadpro11m4/1.jpg`, key: 'products/ipadpro11m4/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/ipadpro11m4/2.jpg`, key: 'products/ipadpro11m4/2.jpg' },
       ],
       specs: {
         'Màn hình': '11 inch Ultra Retina XDR OLED tandem 120Hz',
@@ -320,9 +325,9 @@ export async function seedProducts(dataSource: DataSource) {
       price: 10490000,
       salePrice: 9290000,
       images: [
-        { url: 'http://localhost:9000/electronics-shop/products/tabs9fe/1.jpg', key: 'products/tabs9fe/1.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/tabs9fe/2.jpg', key: 'products/tabs9fe/2.jpg' },
-        { url: 'http://localhost:9000/electronics-shop/products/tabs9fe/3.jpg', key: 'products/tabs9fe/3.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/tabs9fe/1.jpg`, key: 'products/tabs9fe/1.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/tabs9fe/2.jpg`, key: 'products/tabs9fe/2.jpg' },
+        { url: `${MEDIA_BASE_URL}/products/tabs9fe/3.jpg`, key: 'products/tabs9fe/3.jpg' },
       ],
       specs: {
         'Màn hình': '10.9 inch TFT 90Hz',
