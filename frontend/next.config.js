@@ -2,6 +2,24 @@
 const nextConfig = {
   output: 'standalone',
   images: {
+    // Next.js mặc định TỰ TỐI ƯU ảnh qua route nội bộ /_next/image — bước
+    // này chạy TRÊN SERVER (bên trong container frontend), server sẽ tự đi
+    // fetch ảnh gốc từ URL trong "src" để resize/nén trước khi trả về
+    // trình duyệt.
+    //
+    // Ảnh sản phẩm của project này trỏ tới MinIO qua "http://localhost:9000"
+    // (địa chỉ mà TRÌNH DUYỆT cần dùng). Nếu để Next.js tối ưu ảnh, chính
+    // server bên trong container frontend sẽ cố fetch "localhost:9000" —
+    // nhưng "localhost" trong container frontend trỏ về chính nó (không có
+    // MinIO), không phải container "minio" → fetch thất bại → ảnh vỡ, dù
+    // dán thẳng URL đó vào trình duyệt vẫn xem được bình thường (vì đó là
+    // browser tự gọi trực tiếp, không qua container).
+    //
+    // unoptimized: true -> <Image> hoạt động gần giống <img> thường: trình
+    // duyệt tự tải thẳng URL gốc, không qua bước server-fetch nữa -> tránh
+    // hẳn vấn đề trên. Đánh đổi: mất tính năng Next.js tự động resize/nén
+    // ảnh theo từng kích thước màn hình (ảnh vẫn hiển thị bình thường).
+    unoptimized: true,
     remotePatterns: [
       // MinIO local
       { protocol: 'http', hostname: 'localhost', port: '9000' },
