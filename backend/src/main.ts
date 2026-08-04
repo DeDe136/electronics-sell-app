@@ -41,29 +41,30 @@ async function bootstrap() {
   // trường production công khai mà quên set biến, Swagger vẫn tắt như
   // trước, không lộ tài liệu API ra ngoài ý muốn.
   const swaggerEnabled =
-    process.env.ENABLE_SWAGGER === 'true' || process.env.NODE_ENV !== 'production';
+    process.env.ENABLE_SWAGGER === 'true' ||
+    process.env.NODE_ENV !== 'production';
 
   if (swaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle('Electronics Shop API')
       .setDescription(
         `## API cho hệ thống bán đồ điện tử\n\n` +
-        `### Các nhóm API:\n` +
-        `- **Auth** — Đăng ký, đăng nhập, nhận JWT token\n` +
-        `- **User** — Quản lý thông tin cá nhân, avatar; Admin quản lý toàn bộ users\n` +
-        `- **Catalog** — Danh mục (CRUD), sản phẩm (CRUD) và variants (CRUD + danh sách)\n` +
-        `- **Cart** — Giỏ hàng (yêu cầu JWT)\n` +
-        `- **Orders** — Đặt hàng, xem lịch sử, hủy đơn; Admin quản lý trạng thái và xóa đơn\n` +
-        `- **Payments** — Khởi tạo thanh toán, webhook VNPay; Admin cập nhật trạng thái và xóa giao dịch\n` +
-        `- **Inventory** — Quản lý tồn kho (Admin only)\n\n` +
-        `### Xác thực:\n` +
-        `Đăng nhập tại \`POST /api/v1/auth/login\` để lấy token, sau đó click **Authorize** và nhập token.\n\n` +
-        `### Phân quyền:\n` +
-        `- **Public**: Không cần JWT\n` +
-        `- **JWT**: Cần đăng nhập (role customer hoặc admin)\n` +
-        `- **Admin**: Cần JWT + role \`admin\`\n\n` +
-        `### Quy ước endpoint Admin:\n` +
-        `Các endpoint dành riêng cho admin được đánh dấu **[Admin]** trong summary và đều yêu cầu role \`admin\`.`
+          `### Các nhóm API:\n` +
+          `- **Auth** — Đăng ký, đăng nhập, nhận JWT token\n` +
+          `- **User** — Quản lý thông tin cá nhân, avatar; Admin quản lý toàn bộ users\n` +
+          `- **Catalog** — Danh mục (CRUD), sản phẩm (CRUD) và variants (CRUD + danh sách)\n` +
+          `- **Cart** — Giỏ hàng (yêu cầu JWT)\n` +
+          `- **Orders** — Đặt hàng, xem lịch sử, hủy đơn; Admin quản lý trạng thái và xóa đơn\n` +
+          `- **Payments** — Khởi tạo thanh toán, webhook VNPay; Admin cập nhật trạng thái và xóa giao dịch\n` +
+          `- **Inventory** — Quản lý tồn kho (Admin only)\n\n` +
+          `### Xác thực:\n` +
+          `Đăng nhập tại \`POST /api/v1/auth/login\` để lấy token, sau đó click **Authorize** và nhập token.\n\n` +
+          `### Phân quyền:\n` +
+          `- **Public**: Không cần JWT\n` +
+          `- **JWT**: Cần đăng nhập (role customer hoặc admin)\n` +
+          `- **Admin**: Cần JWT + role \`admin\`\n\n` +
+          `### Quy ước endpoint Admin:\n` +
+          `Các endpoint dành riêng cho admin được đánh dấu **[Admin]** trong summary và đều yêu cầu role \`admin\`.`,
       )
       .setVersion('1.0')
       .addServer('http://localhost:3001', 'Local Development')

@@ -18,9 +18,7 @@ declare global {
     }
     interface Request {
       file?: Multer.File;
-      files?:
-        | { [fieldname: string]: Multer.File[] }
-        | Multer.File[];
+      files?: { [fieldname: string]: Multer.File[] } | Multer.File[];
     }
   }
 }

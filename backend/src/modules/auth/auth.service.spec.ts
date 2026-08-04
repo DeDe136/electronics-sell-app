@@ -65,7 +65,9 @@ describe('AuthService', () => {
 
     it('hashes the password and returns a signed token for a new user', async () => {
       userRepo.findOne.mockResolvedValue(null);
-      const hashSpy = jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-password' as never);
+      const hashSpy = jest
+        .spyOn(bcrypt, 'hash')
+        .mockResolvedValue('hashed-password' as never);
 
       const result = await service.register({
         email: 'new@example.com',
@@ -94,7 +96,10 @@ describe('AuthService', () => {
       userRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.login({ email: 'missing@example.com', password: 'whatever123' }),
+        service.login({
+          email: 'missing@example.com',
+          password: 'whatever123',
+        }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -103,7 +108,10 @@ describe('AuthService', () => {
       jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
 
       await expect(
-        service.login({ email: 'user@example.com', password: 'wrong-password' }),
+        service.login({
+          email: 'user@example.com',
+          password: 'wrong-password',
+        }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -112,7 +120,10 @@ describe('AuthService', () => {
       jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
       await expect(
-        service.login({ email: 'user@example.com', password: 'securePassword123' }),
+        service.login({
+          email: 'user@example.com',
+          password: 'securePassword123',
+        }),
       ).rejects.toThrow(UnauthorizedException);
     });
 

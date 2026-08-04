@@ -20,7 +20,8 @@ export class AuthController {
   @Post('register')
   @ApiOperation({
     summary: 'Đăng ký tài khoản mới',
-    description: 'Tạo tài khoản người dùng mới với role mặc định là `customer`. Email phải là duy nhất trong hệ thống.',
+    description:
+      'Tạo tài khoản người dùng mới với role mặc định là `customer`. Email phải là duy nhất trong hệ thống.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiCreatedResponse({
@@ -28,7 +29,11 @@ export class AuthController {
     type: AuthResponseDto,
   })
   @ApiConflictResponse({ description: 'Email đã tồn tại trong hệ thống' })
-  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ (email sai định dạng, password < 8 ký tự, ...)' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Dữ liệu không hợp lệ (email sai định dạng, password < 8 ký tự, ...)',
+  })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
@@ -37,7 +42,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Đăng nhập, nhận JWT token',
-    description: 'Xác thực thông tin đăng nhập và trả về JWT access token. Token có giá trị trong 7 ngày.',
+    description:
+      'Xác thực thông tin đăng nhập và trả về JWT access token. Token có giá trị trong 7 ngày.',
   })
   @ApiBody({ type: LoginDto })
   @ApiOkResponse({
