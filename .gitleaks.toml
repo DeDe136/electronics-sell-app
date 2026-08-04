@@ -1,0 +1,53 @@
+# =============================================================================
+# .GITLEAKS.TOML — Cấu hình tùy biến cho GitLeaks
+# -----------------------------------------------------------------------------
+# GitLeaks đã có sẵn hàng trăm rule mặc định (AWS key, Stripe key, JWT,
+# private key RSA...). File này KẾ THỪA toàn bộ rule mặc định đó
+# ("useDefault = true") và chỉ bổ sung/loại trừ thêm cho phù hợp với
+# đặc thù của project electronics-shop.
+# =============================================================================
+
+title = "GitLeaks config - electronics-shop"
+
+[extend]
+# Kế thừa toàn bộ bộ rule mặc định của GitLeaks (đã bao phủ rất nhiều loại
+# secret phổ biến: AWS, GCP, Slack, Stripe, Twilio, private key, JWT...).
+# Ta chỉ cần "extend" thêm phần allowlist bên dưới, không cần định nghĩa
+# lại rule từ đầu.
+useDefault = true
+
+# -----------------------------------------------------------------------------
+# ALLOWLIST — các file/pattern được PHÉP chứa chuỗi trông giống secret nhưng
+# thực chất là giá trị mẫu (placeholder), không phải secret thật.
+# -----------------------------------------------------------------------------
+[allowlist]
+description = "Bỏ qua các file mẫu/env example không chứa secret thật"
+
+paths = [
+  # File .env.example / .env.local.example chỉ chứa TÊN biến + giá trị mẫu
+  # (VD: DB_PASSWORD=changeme123), không phải secret thật đang dùng.
+  '''backend/\.env\.example''',
+  '''frontend/\.env\.local\.example''',
+
+  # File lock của package manager — chứa hash của package, GitLeaks đôi khi
+  # false-positive nhận nhầm hash dài là secret.
+  '''package-lock\.json''',
+
+  # Thư mục test/fixture nếu sau này có seed data giả lập token/api key
+  # để test mà không phải secret thật.
+  '''.*/__tests__/fixtures/.*''',
+  '''scripts/seed\.sh''',
+]
+
+# Các biến/placeholder thường gặp trong file .example — nếu GitLeaks bắt được
+# đúng các chuỗi generic này thì bỏ qua (không phải secret thật bị rò rỉ).
+regexes = [
+  '''changeme''',
+  '''your[-_]?(api|secret|access)?[-_]?key[-_]?here''',
+  '''<.*(PASSWORD|SECRET|TOKEN|KEY).*>''',
+  '''xxxxxxxx''',
+]
+
+# Bỏ qua các commit đã được xác nhận là "đã xoay vòng secret" (rotated),
+# thêm SHA của commit vào đây sau khi đã xử lý xong secret bị lộ trong quá khứ.
+commits = []

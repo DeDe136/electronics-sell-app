@@ -211,6 +211,9 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       # ---- Cài dependency để Sonar type-check TypeScript chính xác hơn ----
       # (không chạy lại lint/test ở đây nữa — đã chạy và pass ở 2 job
@@ -266,6 +269,7 @@ jobs:
     permissions:
       contents: read
       security-events: write   # cần để upload SARIF lên tab "Security"
+      actions: read
 
     steps:
       - name: Checkout code
