@@ -29,12 +29,15 @@ import {
   ApiUnauthorizedResponse,
   ApiParam,
   ApiBody,
-  ApiQuery,
   ApiConflictResponse,
 } from '@nestjs/swagger';
 import { CatalogService } from './catalog.service';
-import { CreateProductDto, CreateVariantDto, UpdateVariantDto } from './dto/create-product.dto';
-import { ProductQueryDto, SortOrder } from './dto/product-query.dto';
+import {
+  CreateProductDto,
+  CreateVariantDto,
+  UpdateVariantDto,
+} from './dto/create-product.dto';
+import { ProductQueryDto } from './dto/product-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -63,7 +66,11 @@ export class CatalogController {
           id: { type: 'string', format: 'uuid', example: 'uuid-...' },
           name: { type: 'string', example: 'Điện thoại' },
           slug: { type: 'string', example: 'dien-thoai' },
-          iconUrl: { type: 'string', example: 'https://cdn.example.com/icons/smartphone.png', nullable: true },
+          iconUrl: {
+            type: 'string',
+            example: 'https://cdn.example.com/icons/smartphone.png',
+            nullable: true,
+          },
           specFields: {
             type: 'array',
             items: { type: 'string' },
@@ -83,9 +90,15 @@ export class CatalogController {
   @Get('categories/:id')
   @ApiOperation({
     summary: 'Lấy chi tiết một danh mục',
-    description: 'Trả về thông tin đầy đủ của một danh mục theo UUID. Không yêu cầu đăng nhập.',
+    description:
+      'Trả về thông tin đầy đủ của một danh mục theo UUID. Không yêu cầu đăng nhập.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của danh mục', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của danh mục',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiOkResponse({
     description: 'Chi tiết danh mục',
     schema: {
@@ -125,8 +138,16 @@ export class CatalogController {
       type: 'object',
       required: ['name'],
       properties: {
-        name: { type: 'string', example: 'Laptop', description: 'Tên danh mục (duy nhất trong hệ thống)' },
-        slug: { type: 'string', example: 'laptop', description: 'Slug URL-friendly (tự động tạo từ name nếu bỏ trống)' },
+        name: {
+          type: 'string',
+          example: 'Laptop',
+          description: 'Tên danh mục (duy nhất trong hệ thống)',
+        },
+        slug: {
+          type: 'string',
+          example: 'laptop',
+          description: 'Slug URL-friendly (tự động tạo từ name nếu bỏ trống)',
+        },
         iconUrl: {
           type: 'string',
           example: 'https://cdn.example.com/icons/laptop.png',
@@ -137,7 +158,8 @@ export class CatalogController {
           type: 'array',
           items: { type: 'string' },
           example: ['ram', 'storage', 'cpu', 'screen'],
-          description: 'Các trường spec đặc trưng dùng để filter sản phẩm trong danh mục này',
+          description:
+            'Các trường spec đặc trưng dùng để filter sản phẩm trong danh mục này',
         },
       },
     },
@@ -157,11 +179,21 @@ export class CatalogController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'Dữ liệu không hợp lệ (thiếu name, ...)' })
+  @ApiBadRequestResponse({
+    description: 'Dữ liệu không hợp lệ (thiếu name, ...)',
+  })
   @ApiConflictResponse({ description: 'Tên hoặc slug danh mục đã tồn tại' })
   @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
-  createCategory(@Body() dto: { name: string; slug?: string; iconUrl?: string; specFields?: string[] }) {
+  createCategory(
+    @Body()
+    dto: {
+      name: string;
+      slug?: string;
+      iconUrl?: string;
+      specFields?: string[];
+    },
+  ) {
     return this.catalogService.createCategory(dto);
   }
 
@@ -174,31 +206,57 @@ export class CatalogController {
     description:
       'Cập nhật một phần hoặc toàn bộ thông tin danh mục. Chỉ truyền các trường cần thay đổi. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của danh mục', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của danh mục',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiBody({
     description: 'Các trường cần cập nhật (đều là optional)',
     schema: {
       type: 'object',
       properties: {
-        name: { type: 'string', example: 'Laptop Gaming', description: 'Tên mới của danh mục' },
-        slug: { type: 'string', example: 'laptop-gaming', description: 'Slug mới' },
-        iconUrl: { type: 'string', example: 'https://cdn.example.com/icons/laptop-gaming.png', nullable: true },
+        name: {
+          type: 'string',
+          example: 'Laptop Gaming',
+          description: 'Tên mới của danh mục',
+        },
+        slug: {
+          type: 'string',
+          example: 'laptop-gaming',
+          description: 'Slug mới',
+        },
+        iconUrl: {
+          type: 'string',
+          example: 'https://cdn.example.com/icons/laptop-gaming.png',
+          nullable: true,
+        },
         specFields: {
           type: 'array',
           items: { type: 'string' },
           example: ['ram', 'storage', 'gpu', 'cpu'],
-          description: 'Danh sách trường spec mới (ghi đè hoàn toàn danh sách cũ)',
+          description:
+            'Danh sách trường spec mới (ghi đè hoàn toàn danh sách cũ)',
         },
       },
     },
   })
   @ApiOkResponse({ description: 'Danh mục đã được cập nhật' })
   @ApiNotFoundResponse({ description: 'Danh mục không tồn tại' })
-  @ApiConflictResponse({ description: 'Tên hoặc slug đã được sử dụng bởi danh mục khác' })
+  @ApiConflictResponse({
+    description: 'Tên hoặc slug đã được sử dụng bởi danh mục khác',
+  })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   updateCategory(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: { name?: string; slug?: string; iconUrl?: string; specFields?: string[] },
+    @Body()
+    dto: {
+      name?: string;
+      slug?: string;
+      iconUrl?: string;
+      specFields?: string[];
+    },
   ) {
     return this.catalogService.updateCategory(id, dto);
   }
@@ -213,10 +271,17 @@ export class CatalogController {
     description:
       'Xóa vĩnh viễn một danh mục. **Lưu ý:** Không thể xóa danh mục đang có sản phẩm (sẽ trả về lỗi 409). Hãy di chuyển hoặc xóa các sản phẩm trước. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của danh mục', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của danh mục',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiNoContentResponse({ description: 'Danh mục đã bị xóa thành công' })
   @ApiNotFoundResponse({ description: 'Danh mục không tồn tại' })
-  @ApiConflictResponse({ description: 'Không thể xóa: danh mục vẫn đang chứa sản phẩm' })
+  @ApiConflictResponse({
+    description: 'Không thể xóa: danh mục vẫn đang chứa sản phẩm',
+  })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   deleteCategory(@Param('id', ParseUUIDPipe) id: string) {
     return this.catalogService.deleteCategory(id);
@@ -291,7 +356,10 @@ export class CatalogController {
           },
         },
         specs: { type: 'object', additionalProperties: { type: 'string' } },
-        status: { type: 'string', enum: ['active', 'inactive', 'discontinued'] },
+        status: {
+          type: 'string',
+          enum: ['active', 'inactive', 'discontinued'],
+        },
         soldCount: { type: 'number', example: 142 },
         viewCount: { type: 'number', example: 3200 },
         category: { type: 'object' },
@@ -374,7 +442,12 @@ export class CatalogController {
     description:
       'Cập nhật một phần hoặc toàn bộ thông tin sản phẩm. Chỉ truyền các trường cần thay đổi. Ảnh mới sẽ được thêm vào danh sách hiện tại. Nếu truyền `variants`, toàn bộ variants cũ sẽ bị thay thế. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của sản phẩm', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của sản phẩm',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiBody({
     description: 'Các trường cần cập nhật (đều là optional)',
     schema: {
@@ -394,7 +467,8 @@ export class CatalogController {
         },
         variants: {
           type: 'string',
-          description: 'JSON string mảng variants — **ghi đè hoàn toàn** danh sách variants cũ',
+          description:
+            'JSON string mảng variants — **ghi đè hoàn toàn** danh sách variants cũ',
           example: '[{"label":"12GB/256GB","sku":"SKU-002","price":32990000}]',
         },
         images: {
@@ -426,7 +500,12 @@ export class CatalogController {
     description:
       'Xóa vĩnh viễn sản phẩm và toàn bộ variants, ảnh liên quan. **Không thể khôi phục.** Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của sản phẩm', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của sản phẩm',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiNoContentResponse({ description: 'Sản phẩm đã bị xóa thành công' })
   @ApiNotFoundResponse({ description: 'Sản phẩm không tồn tại' })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
@@ -444,7 +523,12 @@ export class CatalogController {
     description:
       'Trả về toàn bộ variants (phiên bản RAM/ROM, màu sắc, ...) của một sản phẩm. Không yêu cầu đăng nhập.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của sản phẩm', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của sản phẩm',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiOkResponse({
     description: 'Danh sách variants của sản phẩm',
     schema: {
@@ -476,9 +560,15 @@ export class CatalogController {
   @Get('variants/:variantId')
   @ApiOperation({
     summary: 'Lấy chi tiết một variant',
-    description: 'Trả về thông tin đầy đủ của một variant cụ thể theo UUID. Không yêu cầu đăng nhập.',
+    description:
+      'Trả về thông tin đầy đủ của một variant cụ thể theo UUID. Không yêu cầu đăng nhập.',
   })
-  @ApiParam({ name: 'variantId', description: 'UUID của variant', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'variantId',
+    description: 'UUID của variant',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiOkResponse({
     description: 'Chi tiết variant',
     schema: {
@@ -513,7 +603,12 @@ export class CatalogController {
     description:
       'Thêm một phiên bản mới (RAM/ROM, màu sắc, ...) cho sản phẩm. Mỗi variant có SKU, giá và specs riêng. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của sản phẩm cha', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của sản phẩm cha',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiBody({ type: CreateVariantDto })
   @ApiCreatedResponse({
     description: 'Variant đã được thêm thành công',
@@ -550,11 +645,18 @@ export class CatalogController {
     description:
       'Cập nhật thông tin của một variant cụ thể. Chỉ truyền các trường cần thay đổi. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'variantId', description: 'UUID của variant', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'variantId',
+    description: 'UUID của variant',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiBody({ type: UpdateVariantDto })
   @ApiOkResponse({ description: 'Variant đã được cập nhật' })
   @ApiNotFoundResponse({ description: 'Variant không tồn tại' })
-  @ApiConflictResponse({ description: 'SKU mới đã được sử dụng bởi variant khác' })
+  @ApiConflictResponse({
+    description: 'SKU mới đã được sử dụng bởi variant khác',
+  })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   updateVariant(
     @Param('variantId', ParseUUIDPipe) variantId: string,
@@ -573,7 +675,12 @@ export class CatalogController {
     description:
       'Xóa một variant khỏi sản phẩm. **Lưu ý:** Không thể xóa variant đang được tham chiếu trong các đơn hàng chưa hoàn thành. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'variantId', description: 'UUID của variant', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'variantId',
+    description: 'UUID của variant',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiNoContentResponse({ description: 'Variant đã bị xóa thành công' })
   @ApiNotFoundResponse({ description: 'Variant không tồn tại' })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })

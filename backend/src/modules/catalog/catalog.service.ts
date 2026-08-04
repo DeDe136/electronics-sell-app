@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -33,7 +32,8 @@ export class CatalogService {
   // ===========================
 
   async findAll(query: ProductQueryDto) {
-    const { search, categoryId, brand, minPrice, maxPrice, specs, sort } = query;
+    const { search, categoryId, brand, minPrice, maxPrice, specs, sort } =
+      query;
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -45,7 +45,9 @@ export class CatalogService {
       .where('p.status = :status', { status: 'active' });
 
     if (search) {
-      qb.andWhere('(p.name ILIKE :s OR p.brand ILIKE :s)', { s: `%${search}%` });
+      qb.andWhere('(p.name ILIKE :s OR p.brand ILIKE :s)', {
+        s: `%${search}%`,
+      });
     }
     if (categoryId) qb.andWhere('p.categoryId = :categoryId', { categoryId });
     if (brand) qb.andWhere('p.brand ILIKE :brand', { brand: `%${brand}%` });
@@ -101,10 +103,7 @@ export class CatalogService {
     return product;
   }
 
-  async create(
-    dto: CreateProductDto,
-    images?: MulterFile[],
-  ): Promise<Product> {
+  async create(dto: CreateProductDto, images?: MulterFile[]): Promise<Product> {
     const slug = this.generateSlug(dto.name);
     const existing = await this.productRepo.findOne({ where: { slug } });
     if (existing) throw new ConflictException('Product slug already exists');
@@ -163,6 +162,7 @@ export class CatalogService {
     }
 
     const { variants: _variants, ...rest } = dto;
+    _variants; // tránh warning unused variable
     Object.assign(product, rest);
 
     return this.productRepo.save(product);
@@ -191,7 +191,9 @@ export class CatalogService {
   }
 
   async findVariant(variantId: string): Promise<ProductVariant> {
-    const variant = await this.variantRepo.findOne({ where: { id: variantId } });
+    const variant = await this.variantRepo.findOne({
+      where: { id: variantId },
+    });
     if (!variant) throw new NotFoundException(`Variant not found`);
     return variant;
   }
@@ -208,8 +210,11 @@ export class CatalogService {
     await this.findById(productId); // đảm bảo product tồn tại
 
     // Kiểm tra SKU trùng
-    const existingSku = await this.variantRepo.findOne({ where: { sku: variantDto.sku } });
-    if (existingSku) throw new ConflictException(`SKU "${variantDto.sku}" already exists`);
+    const existingSku = await this.variantRepo.findOne({
+      where: { sku: variantDto.sku },
+    });
+    if (existingSku)
+      throw new ConflictException(`SKU "${variantDto.sku}" already exists`);
 
     const variant = this.variantRepo.create({ ...variantDto, productId });
     return this.variantRepo.save(variant);
@@ -228,8 +233,11 @@ export class CatalogService {
 
     // Kiểm tra SKU trùng nếu có thay đổi SKU
     if (variantDto.sku && variantDto.sku !== variant.sku) {
-      const existingSku = await this.variantRepo.findOne({ where: { sku: variantDto.sku } });
-      if (existingSku) throw new ConflictException(`SKU "${variantDto.sku}" already exists`);
+      const existingSku = await this.variantRepo.findOne({
+        where: { sku: variantDto.sku },
+      });
+      if (existingSku)
+        throw new ConflictException(`SKU "${variantDto.sku}" already exists`);
     }
 
     Object.assign(variant, variantDto);
@@ -264,11 +272,15 @@ export class CatalogService {
     const slug = dto.slug ?? this.generateSlug(dto.name);
 
     // Kiểm tra trùng name hoặc slug
-    const existingName = await this.categoryRepo.findOne({ where: { name: dto.name } });
-    if (existingName) throw new ConflictException(`Category name "${dto.name}" already exists`);
+    const existingName = await this.categoryRepo.findOne({
+      where: { name: dto.name },
+    });
+    if (existingName)
+      throw new ConflictException(`Category name "${dto.name}" already exists`);
 
     const existingSlug = await this.categoryRepo.findOne({ where: { slug } });
-    if (existingSlug) throw new ConflictException(`Category slug "${slug}" already exists`);
+    if (existingSlug)
+      throw new ConflictException(`Category slug "${slug}" already exists`);
 
     const category = this.categoryRepo.create({
       name: dto.name,
@@ -293,14 +305,24 @@ export class CatalogService {
 
     // Kiểm tra trùng name nếu có thay đổi
     if (dto.name && dto.name !== category.name) {
-      const existing = await this.categoryRepo.findOne({ where: { name: dto.name } });
-      if (existing) throw new ConflictException(`Category name "${dto.name}" already exists`);
+      const existing = await this.categoryRepo.findOne({
+        where: { name: dto.name },
+      });
+      if (existing)
+        throw new ConflictException(
+          `Category name "${dto.name}" already exists`,
+        );
     }
 
     // Kiểm tra trùng slug nếu có thay đổi
     if (dto.slug && dto.slug !== category.slug) {
-      const existing = await this.categoryRepo.findOne({ where: { slug: dto.slug } });
-      if (existing) throw new ConflictException(`Category slug "${dto.slug}" already exists`);
+      const existing = await this.categoryRepo.findOne({
+        where: { slug: dto.slug },
+      });
+      if (existing)
+        throw new ConflictException(
+          `Category slug "${dto.slug}" already exists`,
+        );
     }
 
     Object.assign(category, dto);
@@ -311,7 +333,9 @@ export class CatalogService {
     const category = await this.getCategoryById(id);
 
     // Kiểm tra còn sản phẩm không (RESTRICT constraint)
-    const productCount = await this.productRepo.count({ where: { categoryId: id } });
+    const productCount = await this.productRepo.count({
+      where: { categoryId: id },
+    });
     if (productCount > 0) {
       throw new ConflictException(
         `Cannot delete category: it still has ${productCount} product(s). Move or delete them first.`,

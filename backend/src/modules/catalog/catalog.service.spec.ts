@@ -61,7 +61,9 @@ describe('CatalogService', () => {
     it('throws NotFoundException when the product does not exist', async () => {
       productRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findBySlug('missing-slug')).rejects.toThrow(NotFoundException);
+      await expect(service.findBySlug('missing-slug')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('increments the view count and returns the product', async () => {
@@ -70,7 +72,11 @@ describe('CatalogService', () => {
 
       const result = await service.findBySlug('iphone-16');
 
-      expect(productRepo.increment).toHaveBeenCalledWith({ id: 'product-1' }, 'viewCount', 1);
+      expect(productRepo.increment).toHaveBeenCalledWith(
+        { id: 'product-1' },
+        'viewCount',
+        1,
+      );
       expect(result).toBe(product);
     });
   });
@@ -79,7 +85,9 @@ describe('CatalogService', () => {
     it('throws NotFoundException when the product does not exist', async () => {
       productRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findById('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('returns the product when found', async () => {
@@ -102,7 +110,10 @@ describe('CatalogService', () => {
     it('generates a URL-friendly, lowercase, hyphenated slug from the product name', async () => {
       productRepo.findOne.mockResolvedValue(null);
 
-      await service.create({ name: 'Dien thoai Samsung Galaxy S24', variants: [] } as any);
+      await service.create({
+        name: 'Dien thoai Samsung Galaxy S24',
+        variants: [],
+      } as any);
 
       expect(productRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ slug: 'dien-thoai-samsung-galaxy-s24' }),
@@ -111,12 +122,13 @@ describe('CatalogService', () => {
 
     it('uploads images when provided', async () => {
       productRepo.findOne.mockResolvedValue(null);
-      storageService.uploadFiles.mockResolvedValue([{ url: 'http://x/1.jpg', key: 'products/1.jpg' }]);
+      storageService.uploadFiles.mockResolvedValue([
+        { url: 'http://x/1.jpg', key: 'products/1.jpg' },
+      ]);
 
-      await service.create(
-        { name: 'Laptop Dell', variants: [] } as any,
-        [{ originalname: '1.jpg' } as any],
-      );
+      await service.create({ name: 'Laptop Dell', variants: [] } as any, [
+        { originalname: '1.jpg' } as any,
+      ]);
 
       expect(storageService.uploadFiles).toHaveBeenCalled();
       expect(productRepo.create).toHaveBeenCalledWith(
@@ -148,7 +160,11 @@ describe('CatalogService', () => {
       variantRepo.findOne.mockResolvedValue({ id: 'variant-1', sku: 'SKU-1' });
 
       await expect(
-        service.addVariant('product-1', { label: '8/128', sku: 'SKU-1', price: 100 }),
+        service.addVariant('product-1', {
+          label: '8/128',
+          sku: 'SKU-1',
+          price: 100,
+        }),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -156,7 +172,11 @@ describe('CatalogService', () => {
       productRepo.findOne.mockResolvedValue({ id: 'product-1' });
       variantRepo.findOne.mockResolvedValue(null);
 
-      await service.addVariant('product-1', { label: '8/128', sku: 'SKU-2', price: 100 });
+      await service.addVariant('product-1', {
+        label: '8/128',
+        sku: 'SKU-2',
+        price: 100,
+      });
 
       expect(variantRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ sku: 'SKU-2', productId: 'product-1' }),
@@ -167,11 +187,14 @@ describe('CatalogService', () => {
 
   describe('createCategory', () => {
     it('throws ConflictException when the name already exists', async () => {
-      categoryRepo.findOne.mockResolvedValueOnce({ id: 'cat-1', name: 'Điện thoại' });
+      categoryRepo.findOne.mockResolvedValueOnce({
+        id: 'cat-1',
+        name: 'Điện thoại',
+      });
 
-      await expect(service.createCategory({ name: 'Điện thoại' })).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.createCategory({ name: 'Điện thoại' }),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('throws ConflictException when the slug already exists', async () => {
@@ -179,9 +202,9 @@ describe('CatalogService', () => {
         .mockResolvedValueOnce(null) // name check
         .mockResolvedValueOnce({ id: 'cat-1', slug: 'dien-thoai' }); // slug check
 
-      await expect(service.createCategory({ name: 'Điện thoại' })).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.createCategory({ name: 'Điện thoại' }),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('creates a category with a generated slug when none is provided', async () => {
@@ -190,7 +213,10 @@ describe('CatalogService', () => {
       await service.createCategory({ name: 'Laptop Gaming' });
 
       expect(categoryRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'Laptop Gaming', slug: 'laptop-gaming' }),
+        expect.objectContaining({
+          name: 'Laptop Gaming',
+          slug: 'laptop-gaming',
+        }),
       );
     });
   });
@@ -199,14 +225,18 @@ describe('CatalogService', () => {
     it('throws NotFoundException when the category does not exist', async () => {
       categoryRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.deleteCategory('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteCategory('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws ConflictException when the category still has products', async () => {
       categoryRepo.findOne.mockResolvedValue({ id: 'cat-1', name: 'Laptop' });
       productRepo.count.mockResolvedValue(3);
 
-      await expect(service.deleteCategory('cat-1')).rejects.toThrow(ConflictException);
+      await expect(service.deleteCategory('cat-1')).rejects.toThrow(
+        ConflictException,
+      );
       expect(categoryRepo.remove).not.toHaveBeenCalled();
     });
 

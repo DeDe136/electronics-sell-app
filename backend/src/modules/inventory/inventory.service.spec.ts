@@ -37,7 +37,9 @@ describe('InventoryService', () => {
       const result = await service.getStock('product-1');
 
       expect(result).toBe(0);
-      expect(inventoryRepo.findOne).toHaveBeenCalledWith({ where: { sku: 'product-1' } });
+      expect(inventoryRepo.findOne).toHaveBeenCalledWith({
+        where: { sku: 'product-1' },
+      });
     });
 
     it('returns quantity minus reserved for a plain product', async () => {

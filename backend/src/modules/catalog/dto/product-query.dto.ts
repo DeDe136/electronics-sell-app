@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsNumber, Min, Max, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  Min,
+  Max,
+  IsEnum,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -12,7 +19,8 @@ export enum SortOrder {
 export class ProductQueryDto {
   @ApiPropertyOptional({
     example: 'Galaxy S24',
-    description: 'Tìm kiếm theo tên sản phẩm hoặc thương hiệu (full-text search)',
+    description:
+      'Tìm kiếm theo tên sản phẩm hoặc thương hiệu (full-text search)',
   })
   @IsOptional()
   @IsString()
@@ -56,7 +64,8 @@ export class ProductQueryDto {
 
   @ApiPropertyOptional({
     example: { ram: '8GB', storage: '128GB' },
-    description: 'Lọc theo thông số kỹ thuật. Ví dụ: `?specs[ram]=8GB&specs[storage]=256GB`',
+    description:
+      'Lọc theo thông số kỹ thuật. Ví dụ: `?specs[ram]=8GB&specs[storage]=256GB`',
   })
   @IsOptional()
   specs?: Record<string, string>;
@@ -64,7 +73,8 @@ export class ProductQueryDto {
   @ApiPropertyOptional({
     enum: SortOrder,
     default: SortOrder.NEWEST,
-    description: 'Thứ tự sắp xếp: `price_asc` | `price_desc` | `newest` | `popular`',
+    description:
+      'Thứ tự sắp xếp: `price_asc` | `price_desc` | `newest` | `popular`',
   })
   @IsOptional()
   @IsEnum(SortOrder)

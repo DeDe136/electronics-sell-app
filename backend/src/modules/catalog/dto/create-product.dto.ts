@@ -37,7 +37,8 @@ export class CreateVariantDto {
 
   @ApiPropertyOptional({
     example: { ram: '8GB', storage: '128GB' },
-    description: 'Thông số kỹ thuật riêng của variant (override hoặc bổ sung specs của sản phẩm)',
+    description:
+      'Thông số kỹ thuật riêng của variant (override hoặc bổ sung specs của sản phẩm)',
   })
   @IsObject()
   @IsOptional()
@@ -45,12 +46,18 @@ export class CreateVariantDto {
 }
 
 export class UpdateVariantDto {
-  @ApiPropertyOptional({ example: '12GB / 256GB', description: 'Nhãn hiển thị mới của variant' })
+  @ApiPropertyOptional({
+    example: '12GB / 256GB',
+    description: 'Nhãn hiển thị mới của variant',
+  })
   @IsString()
   @IsOptional()
   label?: string;
 
-  @ApiPropertyOptional({ example: 'SKU-GALAXY-S24-12-256', description: 'Mã SKU mới' })
+  @ApiPropertyOptional({
+    example: 'SKU-GALAXY-S24-12-256',
+    description: 'Mã SKU mới',
+  })
   @IsString()
   @IsOptional()
   sku?: string;
@@ -62,7 +69,10 @@ export class UpdateVariantDto {
   @Type(() => Number)
   price?: number;
 
-  @ApiPropertyOptional({ example: { ram: '12GB', storage: '256GB' }, description: 'Thông số kỹ thuật mới' })
+  @ApiPropertyOptional({
+    example: { ram: '12GB', storage: '256GB' },
+    description: 'Thông số kỹ thuật mới',
+  })
   @IsObject()
   @IsOptional()
   specs?: Record<string, string>;
@@ -81,7 +91,8 @@ export class CreateProductDto {
   brand: string;
 
   @ApiPropertyOptional({
-    example: 'Flagship cao cấp nhất của Samsung năm 2024 với chip Snapdragon 8 Gen 3.',
+    example:
+      'Flagship cao cấp nhất của Samsung năm 2024 với chip Snapdragon 8 Gen 3.',
     description: 'Mô tả chi tiết sản phẩm (hỗ trợ HTML)',
   })
   @IsString()
@@ -104,7 +115,11 @@ export class CreateProductDto {
   salePrice?: number;
 
   @ApiProperty({
-    example: { battery: '5000mAh', chipset: 'Snapdragon 8 Gen 3', screen: '6.8 inch Dynamic AMOLED 2X' },
+    example: {
+      battery: '5000mAh',
+      chipset: 'Snapdragon 8 Gen 3',
+      screen: '6.8 inch Dynamic AMOLED 2X',
+    },
     description: 'Thông số kỹ thuật chung của sản phẩm (key-value)',
   })
   @IsObject()
@@ -112,7 +127,8 @@ export class CreateProductDto {
 
   @ApiPropertyOptional({
     type: [CreateVariantDto],
-    description: 'Danh sách các phiên bản (RAM/ROM) của sản phẩm. Mỗi variant có giá và SKU riêng.',
+    description:
+      'Danh sách các phiên bản (RAM/ROM) của sản phẩm. Mỗi variant có giá và SKU riêng.',
   })
   @IsArray()
   @IsOptional()
