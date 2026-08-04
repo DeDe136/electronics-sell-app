@@ -39,18 +39,27 @@ describe('UserService', () => {
 
       const result = await service.getProfile('user-1');
 
-      expect(userRepo.findOneOrFail).toHaveBeenCalledWith({ where: { id: 'user-1' } });
+      expect(userRepo.findOneOrFail).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+      });
       expect(result).toEqual({ id: 'user-1' });
     });
   });
 
   describe('updateProfile', () => {
     it('updates the given fields and returns the fresh profile', async () => {
-      userRepo.findOneOrFail.mockResolvedValue({ id: 'user-1', fullName: 'Updated Name' });
+      userRepo.findOneOrFail.mockResolvedValue({
+        id: 'user-1',
+        fullName: 'Updated Name',
+      });
 
-      const result = await service.updateProfile('user-1', { fullName: 'Updated Name' });
+      const result = await service.updateProfile('user-1', {
+        fullName: 'Updated Name',
+      });
 
-      expect(userRepo.update).toHaveBeenCalledWith('user-1', { fullName: 'Updated Name' });
+      expect(userRepo.update).toHaveBeenCalledWith('user-1', {
+        fullName: 'Updated Name',
+      });
       expect(result.fullName).toBe('Updated Name');
     });
   });
@@ -99,7 +108,9 @@ describe('UserService', () => {
         orders: [{ status: 'pending' }],
       });
 
-      await expect(service.deleteUser('user-1')).rejects.toThrow(BadRequestException);
+      await expect(service.deleteUser('user-1')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(userRepo.remove).not.toHaveBeenCalled();
     });
 

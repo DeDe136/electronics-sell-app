@@ -4,17 +4,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
 import { StorageService } from '../storage/storage.service';
-import { IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateUserDto {
-  @ApiPropertyOptional({ example: 'Nguyen Van B', description: 'Họ tên mới (tối đa 100 ký tự)' })
+  @ApiPropertyOptional({
+    example: 'Nguyen Van B',
+    description: 'Họ tên mới (tối đa 100 ký tự)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   fullName?: string;
 
-  @ApiPropertyOptional({ example: '0909999888', description: 'Số điện thoại mới (tối đa 20 ký tự)' })
+  @ApiPropertyOptional({
+    example: '0909999888',
+    description: 'Số điện thoại mới (tối đa 20 ký tự)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(20)
@@ -53,7 +59,10 @@ export class UserService {
       await this.storageService.deleteFile(user.avatarKey).catch(() => null);
     }
     const result = await this.storageService.uploadFile(file, 'avatars');
-    await this.userRepo.update(userId, { avatarUrl: result.url, avatarKey: result.key });
+    await this.userRepo.update(userId, {
+      avatarUrl: result.url,
+      avatarKey: result.key,
+    });
     return this.getProfile(userId);
   }
 
@@ -63,7 +72,16 @@ export class UserService {
     });
   }
 
-  async updateUserByAdmin(userId: string, dto: { fullName?: string; phone?: string; address?: string; role?: UserRole; isActive?: boolean }): Promise<User> {
+  async updateUserByAdmin(
+    userId: string,
+    dto: {
+      fullName?: string;
+      phone?: string;
+      address?: string;
+      role?: UserRole;
+      isActive?: boolean;
+    },
+  ): Promise<User> {
     await this.userRepo.update(userId, dto);
     return this.getProfile(userId);
   }
@@ -72,7 +90,9 @@ export class UserService {
     const user = await this.getProfile(userId);
     // Check if user has active orders
     if (user.orders && user.orders.length > 0) {
-      const activeOrders = user.orders.filter((o: any) => !['completed', 'cancelled'].includes(o.status));
+      const activeOrders = user.orders.filter(
+        (o: any) => !['completed', 'cancelled'].includes(o.status),
+      );
       if (activeOrders.length > 0) {
         throw new BadRequestException('Cannot delete user with active orders');
       }

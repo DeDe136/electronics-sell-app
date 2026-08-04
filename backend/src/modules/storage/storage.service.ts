@@ -6,7 +6,6 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
-  ListBucketsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,24 +29,32 @@ export class StorageService {
     this.provider = this.config.get<string>('storage.provider') ?? 'minio';
 
     if (this.provider === 'minio') {
-      const endpoint = this.config.get<string>('storage.minio.endpoint') ?? 'http://localhost:9000';
-      this.bucket = this.config.get<string>('storage.minio.bucket') ?? 'electronics-shop';
+      const endpoint =
+        this.config.get<string>('storage.minio.endpoint') ??
+        'http://localhost:9000';
+      this.bucket =
+        this.config.get<string>('storage.minio.bucket') ?? 'electronics-shop';
       this.s3Client = new S3Client({
         endpoint,
         region: 'us-east-1',
         credentials: {
-          accessKeyId: this.config.get<string>('storage.minio.accessKey') ?? 'minioadmin',
-          secretAccessKey: this.config.get<string>('storage.minio.secretKey') ?? 'minioadmin',
+          accessKeyId:
+            this.config.get<string>('storage.minio.accessKey') ?? 'minioadmin',
+          secretAccessKey:
+            this.config.get<string>('storage.minio.secretKey') ?? 'minioadmin',
         },
         forcePathStyle: true,
       });
     } else {
-      this.bucket = this.config.get<string>('storage.aws.bucket') ?? 'electronics-shop';
+      this.bucket =
+        this.config.get<string>('storage.aws.bucket') ?? 'electronics-shop';
       this.s3Client = new S3Client({
-        region: this.config.get<string>('storage.aws.region') ?? 'ap-southeast-1',
+        region:
+          this.config.get<string>('storage.aws.region') ?? 'ap-southeast-1',
         credentials: {
           accessKeyId: this.config.get<string>('storage.aws.accessKeyId') ?? '',
-          secretAccessKey: this.config.get<string>('storage.aws.secretAccessKey') ?? '',
+          secretAccessKey:
+            this.config.get<string>('storage.aws.secretAccessKey') ?? '',
         },
       });
     }
@@ -57,15 +64,13 @@ export class StorageService {
   async onModuleInit() {
     await this.checkConnection();
   }
- 
+
   /** Kiểm tra kết nối MinIO / S3 và log kết quả */
   async checkConnection(): Promise<void> {
     const label = this.provider === 'minio' ? 'MinIO' : 'AWS S3';
     try {
       // HeadBucketCommand: nhanh, chỉ kiểm tra bucket tồn tại & quyền truy cập
-      await this.s3Client.send(
-        new HeadBucketCommand({ Bucket: this.bucket }),
-      );
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
       if (this.provider === 'minio') {
         const endpoint = this.config.get<string>('storage.minio.endpoint');
         this.logger.log(

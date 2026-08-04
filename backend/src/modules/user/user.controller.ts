@@ -1,7 +1,16 @@
 import {
-  Controller, Get, Patch, Delete,
-  Body, Param, UseGuards, ParseUUIDPipe, HttpCode, HttpStatus,
-  UseInterceptors, UploadedFile,
+  Controller,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -42,7 +51,9 @@ class UserProfileResponse {
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT')
-@ApiUnauthorizedResponse({ description: 'Chưa đăng nhập hoặc token không hợp lệ' })
+@ApiUnauthorizedResponse({
+  description: 'Chưa đăng nhập hoặc token không hợp lệ',
+})
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
@@ -66,10 +77,14 @@ export class UserController {
   @Patch('me')
   @ApiOperation({
     summary: 'Cập nhật thông tin cá nhân',
-    description: 'Cập nhật họ tên, số điện thoại hoặc địa chỉ. Chỉ truyền các trường cần thay đổi.',
+    description:
+      'Cập nhật họ tên, số điện thoại hoặc địa chỉ. Chỉ truyền các trường cần thay đổi.',
   })
   @ApiBody({ type: UpdateUserDto })
-  @ApiOkResponse({ description: 'Thông tin đã được cập nhật', type: UserProfileResponse })
+  @ApiOkResponse({
+    description: 'Thông tin đã được cập nhật',
+    type: UserProfileResponse,
+  })
   @ApiBadRequestResponse({ description: 'Dữ liệu không hợp lệ' })
   updateProfile(@CurrentUser() user: User, @Body() dto: UpdateUserDto) {
     return this.userService.updateProfile(user.id, dto);
@@ -97,7 +112,10 @@ export class UserController {
       },
     },
   })
-  @ApiOkResponse({ description: 'Avatar đã được cập nhật thành công', type: UserProfileResponse })
+  @ApiOkResponse({
+    description: 'Avatar đã được cập nhật thành công',
+    type: UserProfileResponse,
+  })
   @ApiBadRequestResponse({ description: 'File không hợp lệ hoặc thiếu file' })
   updateAvatar(
     @CurrentUser() user: User,
@@ -114,7 +132,9 @@ export class UserController {
       'Người dùng tự xóa tài khoản của mình. **Không thể khôi phục.** Tất cả dữ liệu cá nhân sẽ bị xóa. Đơn hàng đã hoàn thành sẽ được giữ lại cho mục đích kế toán nhưng sẽ không còn liên kết với tài khoản.',
   })
   @ApiNoContentResponse({ description: 'Tài khoản đã bị xóa thành công' })
-  @ApiBadRequestResponse({ description: 'Không thể xóa tài khoản đang có đơn hàng chưa hoàn thành' })
+  @ApiBadRequestResponse({
+    description: 'Không thể xóa tài khoản đang có đơn hàng chưa hoàn thành',
+  })
   deleteMyAccount(@CurrentUser() user: User) {
     return this.userService.deleteUser(user.id);
   }
@@ -161,10 +181,19 @@ export class UserController {
   @Roles('admin')
   @ApiOperation({
     summary: '[Admin] Lấy chi tiết người dùng',
-    description: 'Admin xem đầy đủ thông tin của một người dùng theo UUID. Yêu cầu role **admin**.',
+    description:
+      'Admin xem đầy đủ thông tin của một người dùng theo UUID. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của người dùng', format: 'uuid', example: 'uuid-...' })
-  @ApiOkResponse({ description: 'Chi tiết người dùng', type: UserProfileResponse })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của người dùng',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
+  @ApiOkResponse({
+    description: 'Chi tiết người dùng',
+    type: UserProfileResponse,
+  })
   @ApiNotFoundResponse({ description: 'Người dùng không tồn tại' })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   getUserById(@Param('id', ParseUUIDPipe) id: string) {
@@ -179,14 +208,27 @@ export class UserController {
     description:
       'Admin cập nhật thông tin của bất kỳ người dùng nào, bao gồm đổi role hoặc khoá/mở khoá tài khoản. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của người dùng', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của người dùng',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiBody({
     description: 'Các trường cần cập nhật (đều là optional)',
     schema: {
       type: 'object',
       properties: {
-        fullName: { type: 'string', example: 'Nguyen Van B', description: 'Họ tên mới' },
-        phone: { type: 'string', example: '0909999888', description: 'Số điện thoại mới' },
+        fullName: {
+          type: 'string',
+          example: 'Nguyen Van B',
+          description: 'Họ tên mới',
+        },
+        phone: {
+          type: 'string',
+          example: '0909999888',
+          description: 'Số điện thoại mới',
+        },
         address: { type: 'string', description: 'Địa chỉ mới' },
         role: {
           type: 'string',
@@ -202,13 +244,23 @@ export class UserController {
       },
     },
   })
-  @ApiOkResponse({ description: 'Thông tin người dùng đã được cập nhật', type: UserProfileResponse })
+  @ApiOkResponse({
+    description: 'Thông tin người dùng đã được cập nhật',
+    type: UserProfileResponse,
+  })
   @ApiNotFoundResponse({ description: 'Người dùng không tồn tại' })
   @ApiBadRequestResponse({ description: 'Dữ liệu không hợp lệ' })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   updateUserByAdmin(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: { fullName?: string; phone?: string; address?: string; role?: UserRole; isActive?: boolean },
+    @Body()
+    dto: {
+      fullName?: string;
+      phone?: string;
+      address?: string;
+      role?: UserRole;
+      isActive?: boolean;
+    },
   ) {
     return this.userService.updateUserByAdmin(id, dto);
   }
@@ -222,9 +274,16 @@ export class UserController {
     description:
       'Admin xóa vĩnh viễn một người dùng khỏi hệ thống. **Không thể khôi phục.** Không thể xóa người dùng đang có đơn hàng chưa hoàn thành. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của người dùng', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của người dùng',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiNoContentResponse({ description: 'Người dùng đã bị xóa thành công' })
-  @ApiBadRequestResponse({ description: 'Không thể xóa người dùng đang có đơn hàng chưa hoàn thành' })
+  @ApiBadRequestResponse({
+    description: 'Không thể xóa người dùng đang có đơn hàng chưa hoàn thành',
+  })
   @ApiNotFoundResponse({ description: 'Người dùng không tồn tại' })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   deleteUser(@Param('id', ParseUUIDPipe) id: string) {
