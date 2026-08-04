@@ -35,9 +35,9 @@ name: CI
 # ---------------------------------------------------------------------------
 on:
   push:
-    branches: [main, develop]          # Quét mỗi khi có code mới trên nhánh chính
+    branches: [main, thanhde]          # Quét mỗi khi có code mới trên nhánh chính
   pull_request:
-    branches: [main, develop]          # Quét mọi PR trước khi cho phép merge
+    branches: [main, thanhde]          # Quét mọi PR trước khi cho phép merge
   schedule:
     # Quét định kỳ 03:00 sáng (UTC) mỗi thứ 2 để bắt các CVE mới phát hiện
     # sau này trên dependency cũ (không phải do code thay đổi mà do CSDL CVE
