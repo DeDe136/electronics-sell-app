@@ -37,7 +37,10 @@ describe('CartService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CartService, { provide: getRepositoryToken(CartItem), useValue: cartRepo }],
+      providers: [
+        CartService,
+        { provide: getRepositoryToken(CartItem), useValue: cartRepo },
+      ],
     }).compile();
 
     service = module.get<CartService>(CartService);
@@ -46,8 +49,15 @@ describe('CartService', () => {
   describe('getCart', () => {
     it('computes subtotal using salePrice when available', async () => {
       cartRepo.find.mockResolvedValue([
-        buildItem({ quantity: 2, product: { price: 100000, salePrice: 80000 } as any }),
-        buildItem({ id: 'item-2', quantity: 1, product: { price: 50000, salePrice: null } as any }),
+        buildItem({
+          quantity: 2,
+          product: { price: 100000, salePrice: 80000 } as any,
+        }),
+        buildItem({
+          id: 'item-2',
+          quantity: 1,
+          product: { price: 50000, salePrice: null } as any,
+        }),
       ]);
 
       const result = await service.getCart('user-1');
@@ -82,7 +92,10 @@ describe('CartService', () => {
       const existing = buildItem({ quantity: 3 });
       cartRepo.findOne.mockResolvedValue(existing);
 
-      const result = await service.addItem('user-1', { productId: 'product-1', quantity: 2 });
+      const result = await service.addItem('user-1', {
+        productId: 'product-1',
+        quantity: 2,
+      });
 
       expect(result.quantity).toBe(5);
       expect(cartRepo.save).toHaveBeenCalledWith(existing);
@@ -117,7 +130,11 @@ describe('CartService', () => {
       const existing = buildItem({ quantity: 1 });
       cartRepo.findOne.mockResolvedValue(existing);
 
-      const result = (await service.updateQuantity('user-1', 'item-1', 5)) as CartItem;
+      const result = (await service.updateQuantity(
+        'user-1',
+        'item-1',
+        5,
+      )) as CartItem;
 
       expect(result.quantity).toBe(5);
       expect(cartRepo.save).toHaveBeenCalledWith(existing);
@@ -126,9 +143,9 @@ describe('CartService', () => {
     it('throws NotFoundException when the item is not found', async () => {
       cartRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.updateQuantity('user-1', 'missing', 2)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.updateQuantity('user-1', 'missing', 2),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -145,7 +162,9 @@ describe('CartService', () => {
     it('throws NotFoundException when the item does not belong to the user', async () => {
       cartRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.removeItem('user-1', 'item-1')).rejects.toThrow(NotFoundException);
+      await expect(service.removeItem('user-1', 'item-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -166,7 +185,11 @@ describe('CartService', () => {
     });
 
     it('removes only the matching items', async () => {
-      const items = [buildItem({ id: 'a' }), buildItem({ id: 'b' }), buildItem({ id: 'c' })];
+      const items = [
+        buildItem({ id: 'a' }),
+        buildItem({ id: 'b' }),
+        buildItem({ id: 'c' }),
+      ];
       cartRepo.find.mockResolvedValue(items);
 
       await service.removeItems('user-1', ['a', 'c']);

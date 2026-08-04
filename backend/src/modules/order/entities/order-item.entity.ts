@@ -25,7 +25,11 @@ export class OrderItem {
   productId!: string;
 
   // Giữ FK để có thể join query sản phẩm hiện tại
-  @ManyToOne(() => Product, { onDelete: 'SET NULL', nullable: true, eager: false })
+  @ManyToOne(() => Product, {
+    onDelete: 'SET NULL',
+    nullable: true,
+    eager: false,
+  })
   @JoinColumn({ name: 'productId' })
   product!: Product;
 

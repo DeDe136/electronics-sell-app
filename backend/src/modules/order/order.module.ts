@@ -9,7 +9,10 @@ import { ProductVariant } from '../catalog/entities/product-variant.entity';
 import { CartModule } from '../cart/cart.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Order, OrderItem, Payment, ProductVariant]), CartModule],
+  imports: [
+    TypeOrmModule.forFeature([Order, OrderItem, Payment, ProductVariant]),
+    CartModule,
+  ],
   controllers: [OrderController],
   providers: [OrderService],
   exports: [OrderService],

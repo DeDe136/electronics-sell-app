@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { CartItem } from './entities/cart-item.entity';
@@ -6,11 +10,18 @@ import { IsUUID, IsInt, IsOptional, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AddToCartDto {
-  @ApiProperty({ example: 'uuid-product-id', description: 'UUID của sản phẩm cần thêm vào giỏ' })
+  @ApiProperty({
+    example: 'uuid-product-id',
+    description: 'UUID của sản phẩm cần thêm vào giỏ',
+  })
   @IsUUID()
   productId!: string;
 
-  @ApiProperty({ example: 1, description: 'Số lượng cần thêm (tối thiểu 1)', minimum: 1 })
+  @ApiProperty({
+    example: 1,
+    description: 'Số lượng cần thêm (tối thiểu 1)',
+    minimum: 1,
+  })
   @IsInt()
   @Min(1)
   quantity!: number;
@@ -46,10 +57,15 @@ export class CartService {
   }
 
   async addItem(userId: string, dto: AddToCartDto): Promise<CartItem> {
-    if (dto.quantity < 1) throw new BadRequestException('Quantity must be >= 1');
+    if (dto.quantity < 1)
+      throw new BadRequestException('Quantity must be >= 1');
 
     const existing = await this.cartRepo.findOne({
-      where: { userId, productId: dto.productId, variantId: dto.variantId ?? IsNull() },
+      where: {
+        userId,
+        productId: dto.productId,
+        variantId: dto.variantId ?? IsNull(),
+      },
     });
 
     if (existing) {
@@ -57,9 +73,7 @@ export class CartService {
       return this.cartRepo.save(existing);
     }
 
-    return this.cartRepo.save(
-      this.cartRepo.create({ userId, ...dto }),
-    );
+    return this.cartRepo.save(this.cartRepo.create({ userId, ...dto }));
   }
 
   async updateQuantity(userId: string, itemId: string, quantity: number) {

@@ -5,19 +5,36 @@ import { DataSource } from 'typeorm';
 import { OrderService } from './order.service';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Payment, PaymentMethod, PaymentStatus } from '../payment/entities/payment.entity';
+import {
+  Payment,
+  PaymentMethod,
+  PaymentStatus,
+} from '../payment/entities/payment.entity';
 import { ProductVariant } from '../catalog/entities/product-variant.entity';
 import { CartService } from '../cart/cart.service';
 
 describe('OrderService', () => {
   let service: OrderService;
-  let orderRepo: { find: jest.Mock; findOne: jest.Mock; save: jest.Mock; remove: jest.Mock };
+  let orderRepo: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    save: jest.Mock;
+    remove: jest.Mock;
+  };
   let itemRepo: Record<string, jest.Mock>;
   let paymentRepo: Record<string, jest.Mock>;
   let variantRepo: { findByIds: jest.Mock };
-  let cartService: { getCart: jest.Mock; removeItem: jest.Mock; updateQuantity: jest.Mock };
+  let cartService: {
+    getCart: jest.Mock;
+    removeItem: jest.Mock;
+    updateQuantity: jest.Mock;
+  };
   let dataSource: { transaction: jest.Mock };
-  let entityManager: { create: jest.Mock; save: jest.Mock; findOneOrFail: jest.Mock };
+  let entityManager: {
+    create: jest.Mock;
+    save: jest.Mock;
+    findOneOrFail: jest.Mock;
+  };
 
   beforeEach(async () => {
     orderRepo = {
@@ -65,7 +82,13 @@ describe('OrderService', () => {
       productId: 'product-1',
       variantId: null,
       quantity: 3,
-      product: { name: 'Laptop', price: 1000000, salePrice: null, images: [], variants: [] },
+      product: {
+        name: 'Laptop',
+        price: 1000000,
+        salePrice: null,
+        images: [],
+        variants: [],
+      },
     };
 
     it('throws BadRequestException when no items are provided', async () => {
@@ -75,7 +98,11 @@ describe('OrderService', () => {
     });
 
     it('throws BadRequestException when a cart item is not found', async () => {
-      cartService.getCart.mockResolvedValue({ items: [], subtotal: 0, itemCount: 0 });
+      cartService.getCart.mockResolvedValue({
+        items: [],
+        subtotal: 0,
+        itemCount: 0,
+      });
 
       await expect(
         service.createFromCart('user-1', {
@@ -87,7 +114,11 @@ describe('OrderService', () => {
     });
 
     it('throws BadRequestException when the requested quantity exceeds the cart quantity', async () => {
-      cartService.getCart.mockResolvedValue({ items: [cartItem], subtotal: 0, itemCount: 1 });
+      cartService.getCart.mockResolvedValue({
+        items: [cartItem],
+        subtotal: 0,
+        itemCount: 1,
+      });
 
       await expect(
         service.createFromCart('user-1', {
@@ -99,8 +130,16 @@ describe('OrderService', () => {
     });
 
     it('creates an order, marks COD payments as successful, and removes fully-ordered cart items', async () => {
-      cartService.getCart.mockResolvedValue({ items: [cartItem], subtotal: 0, itemCount: 1 });
-      entityManager.findOneOrFail.mockResolvedValue({ id: 'order-1', items: [], payment: {} });
+      cartService.getCart.mockResolvedValue({
+        items: [cartItem],
+        subtotal: 0,
+        itemCount: 1,
+      });
+      entityManager.findOneOrFail.mockResolvedValue({
+        id: 'order-1',
+        items: [],
+        payment: {},
+      });
 
       const result = await service.createFromCart('user-1', {
         items: [{ cartItemId: 'cart-item-1', quantity: 3 }],
@@ -111,20 +150,31 @@ describe('OrderService', () => {
       expect(dataSource.transaction).toHaveBeenCalled();
       expect(entityManager.save).toHaveBeenCalledWith(
         Order,
-        expect.objectContaining({ subtotal: 3000000, shippingFee: 30000, total: 3030000 }),
+        expect.objectContaining({
+          subtotal: 3000000,
+          shippingFee: 30000,
+          total: 3030000,
+        }),
       );
       expect(entityManager.save).toHaveBeenCalledWith(
         Payment,
         expect.objectContaining({ status: PaymentStatus.SUCCESS }),
       );
       // Ordered the full cart quantity -> item should be removed, not just decremented
-      expect(cartService.removeItem).toHaveBeenCalledWith('user-1', 'cart-item-1');
+      expect(cartService.removeItem).toHaveBeenCalledWith(
+        'user-1',
+        'cart-item-1',
+      );
       expect(cartService.updateQuantity).not.toHaveBeenCalled();
       expect(result).toEqual({ id: 'order-1', items: [], payment: {} });
     });
 
     it('decrements the cart quantity when only part of it is ordered', async () => {
-      cartService.getCart.mockResolvedValue({ items: [cartItem], subtotal: 0, itemCount: 1 });
+      cartService.getCart.mockResolvedValue({
+        items: [cartItem],
+        subtotal: 0,
+        itemCount: 1,
+      });
       entityManager.findOneOrFail.mockResolvedValue({ id: 'order-1' });
 
       await service.createFromCart('user-1', {
@@ -133,12 +183,20 @@ describe('OrderService', () => {
         paymentMethod: PaymentMethod.COD,
       } as any);
 
-      expect(cartService.updateQuantity).toHaveBeenCalledWith('user-1', 'cart-item-1', 2);
+      expect(cartService.updateQuantity).toHaveBeenCalledWith(
+        'user-1',
+        'cart-item-1',
+        2,
+      );
       expect(cartService.removeItem).not.toHaveBeenCalled();
     });
 
     it('leaves non-COD payments pending', async () => {
-      cartService.getCart.mockResolvedValue({ items: [cartItem], subtotal: 0, itemCount: 1 });
+      cartService.getCart.mockResolvedValue({
+        items: [cartItem],
+        subtotal: 0,
+        itemCount: 1,
+      });
       entityManager.findOneOrFail.mockResolvedValue({ id: 'order-1' });
 
       await service.createFromCart('user-1', {
@@ -195,11 +253,16 @@ describe('OrderService', () => {
     it('throws NotFoundException when the order is not found', async () => {
       orderRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.cancelOrder('user-1', 'order-1')).rejects.toThrow(NotFoundException);
+      await expect(service.cancelOrder('user-1', 'order-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('cancels a pending order', async () => {
-      orderRepo.findOne.mockResolvedValue({ id: 'order-1', status: OrderStatus.PENDING });
+      orderRepo.findOne.mockResolvedValue({
+        id: 'order-1',
+        status: OrderStatus.PENDING,
+      });
 
       const result = await service.cancelOrder('user-1', 'order-1');
 
@@ -208,7 +271,10 @@ describe('OrderService', () => {
     });
 
     it('throws BadRequestException when the order is not cancellable', async () => {
-      orderRepo.findOne.mockResolvedValue({ id: 'order-1', status: OrderStatus.SHIPPING });
+      orderRepo.findOne.mockResolvedValue({
+        id: 'order-1',
+        status: OrderStatus.SHIPPING,
+      });
 
       await expect(service.cancelOrder('user-1', 'order-1')).rejects.toThrow(
         BadRequestException,
@@ -234,7 +300,10 @@ describe('OrderService', () => {
     });
 
     it('updates the order status and optional note', async () => {
-      orderRepo.findOne.mockResolvedValue({ id: 'order-1', status: OrderStatus.PENDING });
+      orderRepo.findOne.mockResolvedValue({
+        id: 'order-1',
+        status: OrderStatus.PENDING,
+      });
 
       const result = await service.updateOrderStatus(
         'order-1',
@@ -251,13 +320,20 @@ describe('OrderService', () => {
     it('throws NotFoundException when the order does not exist', async () => {
       orderRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.deleteOrder('order-1')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteOrder('order-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws BadRequestException when the order is not in a deletable status', async () => {
-      orderRepo.findOne.mockResolvedValue({ id: 'order-1', status: OrderStatus.PENDING });
+      orderRepo.findOne.mockResolvedValue({
+        id: 'order-1',
+        status: OrderStatus.PENDING,
+      });
 
-      await expect(service.deleteOrder('order-1')).rejects.toThrow(BadRequestException);
+      await expect(service.deleteOrder('order-1')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(orderRepo.remove).not.toHaveBeenCalled();
     });
 

@@ -2,7 +2,11 @@ import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { PaymentService } from './payment.service';
-import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
+import {
+  Payment,
+  PaymentMethod,
+  PaymentStatus,
+} from './entities/payment.entity';
 import { PaymentMethodOption } from './entities/payment-method-option.entity';
 
 describe('PaymentService', () => {
@@ -27,7 +31,10 @@ describe('PaymentService', () => {
       providers: [
         PaymentService,
         { provide: getRepositoryToken(Payment), useValue: paymentRepo },
-        { provide: getRepositoryToken(PaymentMethodOption), useValue: methodOptionRepo },
+        {
+          provide: getRepositoryToken(PaymentMethodOption),
+          useValue: methodOptionRepo,
+        },
       ],
     }).compile();
 
@@ -107,7 +114,10 @@ describe('PaymentService', () => {
 
       expect(result.status).toBe(PaymentStatus.FAILED);
       expect(result.transactionId).toBe('TXN-999');
-      expect(result.metadata).toEqual({ existing: true, note: 'Insufficient funds' });
+      expect(result.metadata).toEqual({
+        existing: true,
+        note: 'Insufficient funds',
+      });
     });
   });
 
@@ -118,7 +128,9 @@ describe('PaymentService', () => {
         status: PaymentStatus.SUCCESS,
       });
 
-      await expect(service.deletePayment('payment-1')).rejects.toThrow(BadRequestException);
+      await expect(service.deletePayment('payment-1')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(paymentRepo.remove).not.toHaveBeenCalled();
     });
 

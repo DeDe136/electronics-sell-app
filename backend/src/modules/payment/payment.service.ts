@@ -2,14 +2,21 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
+import {
+  Payment,
+  PaymentMethod,
+  PaymentStatus,
+} from './entities/payment.entity';
 import { PaymentMethodOption } from './entities/payment-method-option.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsEnum, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreatePaymentDto {
-  @ApiProperty({ example: 'uuid-order-id', description: 'UUID của đơn hàng cần thanh toán' })
+  @ApiProperty({
+    example: 'uuid-order-id',
+    description: 'UUID của đơn hàng cần thanh toán',
+  })
   @IsUUID()
   orderId: string;
 
@@ -21,7 +28,11 @@ export class CreatePaymentDto {
   @IsEnum(PaymentMethod)
   method: PaymentMethod;
 
-  @ApiProperty({ example: 30020000, description: 'Số tiền cần thanh toán (VNĐ)', minimum: 0 })
+  @ApiProperty({
+    example: 30020000,
+    description: 'Số tiền cần thanh toán (VNĐ)',
+    minimum: 0,
+  })
   @IsNumber()
   @Min(0)
   @Type(() => Number)
@@ -73,21 +84,31 @@ export class PaymentService {
   }
 
   async confirm(paymentId: string, transactionId: string): Promise<Payment> {
-    const payment = await this.paymentRepo.findOneOrFail({ where: { id: paymentId } });
+    const payment = await this.paymentRepo.findOneOrFail({
+      where: { id: paymentId },
+    });
     payment.status = PaymentStatus.SUCCESS;
     payment.transactionId = transactionId;
     return this.paymentRepo.save(payment);
   }
 
   async getByOrder(orderId: string): Promise<Payment[]> {
-    return this.paymentRepo.find({ where: { orderId }, order: { createdAt: 'DESC' } });
+    return this.paymentRepo.find({
+      where: { orderId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async getById(id: string): Promise<Payment> {
     return this.paymentRepo.findOneOrFail({ where: { id } });
   }
 
-  async updateStatus(id: string, status: string, transactionId?: string, note?: string): Promise<Payment> {
+  async updateStatus(
+    id: string,
+    status: string,
+    transactionId?: string,
+    note?: string,
+  ): Promise<Payment> {
     const payment = await this.getById(id);
     payment.status = status as PaymentStatus;
     if (transactionId) {

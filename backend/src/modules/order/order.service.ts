@@ -8,11 +8,24 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Payment, PaymentMethod, PaymentStatus } from '../payment/entities/payment.entity';
+import {
+  Payment,
+  PaymentMethod,
+  PaymentStatus,
+} from '../payment/entities/payment.entity';
 import { ProductVariant } from '../catalog/entities/product-variant.entity';
 import { CartService } from '../cart/cart.service';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsArray, ValidateNested, IsInt, Min, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  ValidateNested,
+  IsInt,
+  Min,
+  IsUUID,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ShippingAddressDto {
@@ -20,7 +33,10 @@ export class ShippingAddressDto {
   @IsString()
   fullName: string;
 
-  @ApiProperty({ example: '0901234567', description: 'Số điện thoại người nhận' })
+  @ApiProperty({
+    example: '0901234567',
+    description: 'Số điện thoại người nhận',
+  })
   @IsString()
   phone: string;
 
@@ -43,11 +59,18 @@ export class ShippingAddressDto {
 
 /** Một item được chọn từ giỏ hàng để đặt — có thể đặt số lượng nhỏ hơn cart */
 export class OrderItemInputDto {
-  @ApiProperty({ example: 'uuid-cart-item-id', description: 'ID của cart item' })
+  @ApiProperty({
+    example: 'uuid-cart-item-id',
+    description: 'ID của cart item',
+  })
   @IsUUID()
   cartItemId: string;
 
-  @ApiProperty({ example: 1, description: 'Số lượng muốn đặt (1 ≤ qty ≤ số lượng trong cart)', minimum: 1 })
+  @ApiProperty({
+    example: 1,
+    description: 'Số lượng muốn đặt (1 ≤ qty ≤ số lượng trong cart)',
+    minimum: 1,
+  })
   @IsInt()
   @Min(1)
   quantity: number;
@@ -59,7 +82,10 @@ export class BuyNowItemDto {
   @IsUUID()
   productId: string;
 
-  @ApiPropertyOptional({ example: 'uuid-variant-id', description: 'ID của variant (nếu có)' })
+  @ApiPropertyOptional({
+    example: 'uuid-variant-id',
+    description: 'ID của variant (nếu có)',
+  })
   @IsOptional()
   @IsUUID()
   variantId?: string;
@@ -134,15 +160,21 @@ const DELETABLE_STATUSES = [OrderStatus.CANCELLED, OrderStatus.REFUNDED];
 export class OrderService {
   constructor(
     @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
-    @InjectRepository(OrderItem) private readonly itemRepo: Repository<OrderItem>,
-    @InjectRepository(Payment) private readonly paymentRepo: Repository<Payment>,
-    @InjectRepository(ProductVariant) private readonly variantRepo: Repository<ProductVariant>,
+    @InjectRepository(OrderItem)
+    private readonly itemRepo: Repository<OrderItem>,
+    @InjectRepository(Payment)
+    private readonly paymentRepo: Repository<Payment>,
+    @InjectRepository(ProductVariant)
+    private readonly variantRepo: Repository<ProductVariant>,
     private readonly cartService: CartService,
     private readonly dataSource: DataSource,
   ) {}
 
   async createFromCart(userId: string, dto: CreateOrderDto): Promise<Order> {
-    if (!dto.items?.length) throw new BadRequestException('Vui lòng chọn ít nhất một sản phẩm để đặt hàng');
+    if (!dto.items?.length)
+      throw new BadRequestException(
+        'Vui lòng chọn ít nhất một sản phẩm để đặt hàng',
+      );
 
     // Lấy toàn bộ cart của user để validate và lấy thông tin sản phẩm
     const cart = await this.cartService.getCart(userId);
@@ -152,7 +184,9 @@ export class OrderService {
     const resolvedItems = dto.items.map((input) => {
       const cartItem = cartMap.get(input.cartItemId);
       if (!cartItem) {
-        throw new BadRequestException(`Cart item "${input.cartItemId}" không tồn tại trong giỏ hàng`);
+        throw new BadRequestException(
+          `Cart item "${input.cartItemId}" không tồn tại trong giỏ hàng`,
+        );
       }
       if (input.quantity > cartItem.quantity) {
         throw new BadRequestException(
@@ -176,8 +210,14 @@ export class OrderService {
     const SHIPPING_FEE = 30000;
     // Dùng giá variant nếu có, nếu không dùng salePrice/price của product
     const subtotal = resolvedItems.reduce((sum, { cartItem, orderQty }) => {
-      const variant = cartItem.variantId ? cartItem.product.variants?.find((v: any) => v.id === cartItem.variantId) : null;
-      const price = variant ? Number(variant.price) : Number(cartItem.product.salePrice || cartItem.product.price);
+      const variant = cartItem.variantId
+        ? cartItem.product.variants?.find(
+            (v: any) => v.id === cartItem.variantId,
+          )
+        : null;
+      const price = variant
+        ? Number(variant.price)
+        : Number(cartItem.product.salePrice || cartItem.product.price);
       return sum + price * orderQty;
     }, 0);
     const total = subtotal + SHIPPING_FEE;
@@ -199,8 +239,14 @@ export class OrderService {
 
       // 2. Tạo OrderItems — snapshot tại thời điểm đặt, dùng orderQty chứ không phải cart qty
       for (const { cartItem, orderQty } of resolvedItems) {
-        const variant = cartItem.variantId ? cartItem.product.variants?.find((v: any) => v.id === cartItem.variantId) : null;
-        const price = variant ? Number(variant.price) : Number(cartItem.product.salePrice || cartItem.product.price);
+        const variant = cartItem.variantId
+          ? cartItem.product.variants?.find(
+              (v: any) => v.id === cartItem.variantId,
+            )
+          : null;
+        const price = variant
+          ? Number(variant.price)
+          : Number(cartItem.product.salePrice || cartItem.product.price);
         // variantLabel: lấy tên label (vd: "8GB/128GB") thay vì UUID
         const variantLabel = cartItem.variantId
           ? (variantLabelMap.get(cartItem.variantId) ?? cartItem.variantId)
@@ -238,7 +284,11 @@ export class OrderService {
         if (orderQty >= cartItem.quantity) {
           await this.cartService.removeItem(userId, cartItem.id);
         } else {
-          await this.cartService.updateQuantity(userId, cartItem.id, cartItem.quantity - orderQty);
+          await this.cartService.updateQuantity(
+            userId,
+            cartItem.id,
+            cartItem.quantity - orderQty,
+          );
         }
       }
 
@@ -252,17 +302,25 @@ export class OrderService {
 
   /** Mua ngay — tạo order trực tiếp từ productId/variantId, không qua cart */
   async buyNow(userId: string, dto: BuyNowOrderDto): Promise<Order> {
-    if (!dto.items?.length) throw new BadRequestException('Vui lòng chọn ít nhất một sản phẩm');
+    if (!dto.items?.length)
+      throw new BadRequestException('Vui lòng chọn ít nhất một sản phẩm');
 
     // Resolve product + variant cho từng item
     const { DataSource: _DS, ..._ } = await import('typeorm');
+    _DS; // tránh warning unused variable
+    _; // tránh warning unused variable
     const productRepo = this.dataSource.getRepository('products');
+    productRepo; // tránh warning unused variable
 
     // Lấy product info qua DataSource để tránh circular dependency
     const resolvedItems: Array<{
-      productId: string; productName: string; productImage: string | null;
-      variantId: string | null; variantLabel: string | null;
-      unitPrice: number; quantity: number;
+      productId: string;
+      productName: string;
+      productImage: string | null;
+      variantId: string | null;
+      variantLabel: string | null;
+      unitPrice: number;
+      quantity: number;
     }> = [];
 
     for (const item of dto.items) {
@@ -271,19 +329,29 @@ export class OrderService {
         .findOne({ where: { id: item.productId }, relations: ['variants'] })
         .catch(() => null);
 
-      if (!product) throw new BadRequestException(`Sản phẩm "${item.productId}" không tồn tại`);
+      if (!product)
+        throw new BadRequestException(
+          `Sản phẩm "${item.productId}" không tồn tại`,
+        );
 
       let unitPrice: number;
       let variantLabel: string | null = null;
-      let variantId: string | null = item.variantId ?? null;
+      const variantId: string | null = item.variantId ?? null;
 
       if (item.variantId) {
-        const variant = (product as any).variants?.find((v: any) => v.id === item.variantId);
-        if (!variant) throw new BadRequestException(`Variant "${item.variantId}" không tồn tại`);
+        const variant = (product as any).variants?.find(
+          (v: any) => v.id === item.variantId,
+        );
+        if (!variant)
+          throw new BadRequestException(
+            `Variant "${item.variantId}" không tồn tại`,
+          );
         unitPrice = Number(variant.price);
         variantLabel = variant.label;
       } else {
-        unitPrice = Number((product as any).salePrice || (product as any).price);
+        unitPrice = Number(
+          (product as any).salePrice || (product as any).price,
+        );
       }
 
       resolvedItems.push({
@@ -298,7 +366,10 @@ export class OrderService {
     }
 
     const SHIPPING_FEE = 30000;
-    const subtotal = resolvedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+    const subtotal = resolvedItems.reduce(
+      (s, i) => s + i.unitPrice * i.quantity,
+      0,
+    );
     const total = subtotal + SHIPPING_FEE;
 
     return this.dataSource.transaction(async (em) => {
@@ -329,16 +400,24 @@ export class OrderService {
       }
 
       const isCod = dto.paymentMethod === PaymentMethod.COD;
-      await em.save(Payment, em.create(Payment, {
-        orderId: savedOrder.id,
-        method: dto.paymentMethod,
-        amount: total,
-        status: isCod ? PaymentStatus.SUCCESS : PaymentStatus.PENDING,
-        transactionId: isCod ? `COD-${savedOrder.id}` : null,
-        metadata: isCod ? { note: 'Thanh toán khi nhận hàng' } : { note: 'Chờ xác nhận thanh toán' },
-      }));
+      await em.save(
+        Payment,
+        em.create(Payment, {
+          orderId: savedOrder.id,
+          method: dto.paymentMethod,
+          amount: total,
+          status: isCod ? PaymentStatus.SUCCESS : PaymentStatus.PENDING,
+          transactionId: isCod ? `COD-${savedOrder.id}` : null,
+          metadata: isCod
+            ? { note: 'Thanh toán khi nhận hàng' }
+            : { note: 'Chờ xác nhận thanh toán' },
+        }),
+      );
 
-      return em.findOneOrFail(Order, { where: { id: savedOrder.id }, relations: ['items', 'payment'] });
+      return em.findOneOrFail(Order, {
+        where: { id: savedOrder.id },
+        relations: ['items', 'payment'],
+      });
     });
   }
 
@@ -360,7 +439,9 @@ export class OrderService {
 
   /** Người dùng tự hủy đơn — chỉ khi status = pending */
   async cancelOrder(userId: string, orderId: string): Promise<Order> {
-    const order = await this.orderRepo.findOne({ where: { id: orderId, userId } });
+    const order = await this.orderRepo.findOne({
+      where: { id: orderId, userId },
+    });
     if (!order) throw new NotFoundException('Order not found');
 
     if (!CANCELLABLE_STATUSES.includes(order.status)) {

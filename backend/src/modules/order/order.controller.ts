@@ -1,6 +1,15 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Body, Param, UseGuards, ParseUUIDPipe, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,7 +36,9 @@ import { User } from '../user/entities/user.entity';
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT')
-@ApiUnauthorizedResponse({ description: 'Chưa đăng nhập hoặc token không hợp lệ' })
+@ApiUnauthorizedResponse({
+  description: 'Chưa đăng nhập hoặc token không hợp lệ',
+})
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
@@ -91,19 +102,25 @@ export class OrderController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'Giỏ hàng trống hoặc dữ liệu địa chỉ không đầy đủ' })
+  @ApiBadRequestResponse({
+    description: 'Giỏ hàng trống hoặc dữ liệu địa chỉ không đầy đủ',
+  })
   create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
     return this.orderService.createFromCart(user.id, dto);
   }
 
   @Post('buy-now')
   @ApiOperation({
-    summary: 'Mua ngay — tạo đơn hàng trực tiếp từ sản phẩm, không qua giỏ hàng',
-    description: 'Tạo đơn hàng ngay lập tức từ productId + variantId + quantity, không thêm vào giỏ hàng.',
+    summary:
+      'Mua ngay — tạo đơn hàng trực tiếp từ sản phẩm, không qua giỏ hàng',
+    description:
+      'Tạo đơn hàng ngay lập tức từ productId + variantId + quantity, không thêm vào giỏ hàng.',
   })
   @ApiBody({ type: BuyNowOrderDto })
   @ApiCreatedResponse({ description: 'Đơn hàng đã được tạo thành công' })
-  @ApiBadRequestResponse({ description: 'Sản phẩm không tồn tại hoặc dữ liệu không hợp lệ' })
+  @ApiBadRequestResponse({
+    description: 'Sản phẩm không tồn tại hoặc dữ liệu không hợp lệ',
+  })
   buyNow(@CurrentUser() user: User, @Body() dto: BuyNowOrderDto) {
     return this.orderService.buyNow(user.id, dto);
   }
@@ -125,7 +142,14 @@ export class OrderController {
           orderCode: { type: 'string', example: 'ORD-20260510-AB123' },
           status: {
             type: 'string',
-            enum: ['pending', 'confirmed', 'shipping', 'delivered', 'cancelled', 'refunded'],
+            enum: [
+              'pending',
+              'confirmed',
+              'shipping',
+              'delivered',
+              'cancelled',
+              'refunded',
+            ],
           },
           subtotal: { type: 'number', example: 29990000 },
           shippingFee: { type: 'number', example: 30000 },
@@ -147,7 +171,12 @@ export class OrderController {
     description:
       'Trả về đầy đủ thông tin đơn hàng bao gồm danh sách sản phẩm, địa chỉ giao hàng và trạng thái thanh toán. Chỉ xem được đơn hàng của chính mình.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của đơn hàng', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của đơn hàng',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiOkResponse({
     description: 'Chi tiết đơn hàng kèm items và thông tin thanh toán',
     schema: {
@@ -157,7 +186,14 @@ export class OrderController {
         orderCode: { type: 'string', example: 'ORD-20260510-AB123' },
         status: {
           type: 'string',
-          enum: ['pending', 'confirmed', 'shipping', 'delivered', 'cancelled', 'refunded'],
+          enum: [
+            'pending',
+            'confirmed',
+            'shipping',
+            'delivered',
+            'cancelled',
+            'refunded',
+          ],
         },
         subtotal: { type: 'number', example: 29990000 },
         shippingFee: { type: 'number', example: 30000 },
@@ -197,7 +233,9 @@ export class OrderController {
       },
     },
   })
-  @ApiNotFoundResponse({ description: 'Đơn hàng không tồn tại hoặc không thuộc về user này' })
+  @ApiNotFoundResponse({
+    description: 'Đơn hàng không tồn tại hoặc không thuộc về user này',
+  })
   getDetail(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.orderService.getOrderDetail(user.id, id);
   }
@@ -208,7 +246,12 @@ export class OrderController {
     description:
       'Người dùng tự hủy đơn hàng của mình. Chỉ có thể hủy khi đơn hàng đang ở trạng thái `pending`. Đơn hàng đã xác nhận hoặc đang giao không thể hủy.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của đơn hàng', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của đơn hàng',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiOkResponse({
     description: 'Đơn hàng đã được hủy thành công',
     schema: {
@@ -220,9 +263,17 @@ export class OrderController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'Không thể hủy đơn hàng ở trạng thái hiện tại (chỉ hủy được khi pending)' })
-  @ApiNotFoundResponse({ description: 'Đơn hàng không tồn tại hoặc không thuộc về user này' })
-  cancelOrder(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+  @ApiBadRequestResponse({
+    description:
+      'Không thể hủy đơn hàng ở trạng thái hiện tại (chỉ hủy được khi pending)',
+  })
+  @ApiNotFoundResponse({
+    description: 'Đơn hàng không tồn tại hoặc không thuộc về user này',
+  })
+  cancelOrder(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.orderService.cancelOrder(user.id, id);
   }
 
@@ -248,7 +299,17 @@ export class OrderController {
           id: { type: 'string', format: 'uuid' },
           orderCode: { type: 'string', example: 'ORD-20260510-AB123' },
           userId: { type: 'string', format: 'uuid' },
-          status: { type: 'string', enum: ['pending', 'confirmed', 'shipping', 'delivered', 'cancelled', 'refunded'] },
+          status: {
+            type: 'string',
+            enum: [
+              'pending',
+              'confirmed',
+              'shipping',
+              'delivered',
+              'cancelled',
+              'refunded',
+            ],
+          },
           total: { type: 'number', example: 30020000 },
           createdAt: { type: 'string', format: 'date-time' },
         },
@@ -268,7 +329,12 @@ export class OrderController {
     description:
       'Admin cập nhật trạng thái của bất kỳ đơn hàng nào. Luồng trạng thái thông thường: `pending` → `confirmed` → `shipping` → `delivered`. Admin cũng có thể chuyển sang `cancelled` hoặc `refunded`. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của đơn hàng', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của đơn hàng',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiBody({
     description: 'Trạng thái mới của đơn hàng',
     schema: {
@@ -277,7 +343,14 @@ export class OrderController {
       properties: {
         status: {
           type: 'string',
-          enum: ['pending', 'confirmed', 'shipping', 'delivered', 'cancelled', 'refunded'],
+          enum: [
+            'pending',
+            'confirmed',
+            'shipping',
+            'delivered',
+            'cancelled',
+            'refunded',
+          ],
           example: 'confirmed',
           description: 'Trạng thái mới',
         },
@@ -320,9 +393,16 @@ export class OrderController {
     description:
       'Xóa vĩnh viễn một đơn hàng khỏi hệ thống. **Chỉ áp dụng cho đơn hàng đã hủy hoặc đã hoàn tiền.** Đơn hàng đang xử lý không thể xóa. Yêu cầu role **admin**.',
   })
-  @ApiParam({ name: 'id', description: 'UUID của đơn hàng', format: 'uuid', example: 'uuid-...' })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID của đơn hàng',
+    format: 'uuid',
+    example: 'uuid-...',
+  })
   @ApiNoContentResponse({ description: 'Đơn hàng đã bị xóa thành công' })
-  @ApiBadRequestResponse({ description: 'Không thể xóa đơn hàng đang trong quá trình xử lý' })
+  @ApiBadRequestResponse({
+    description: 'Không thể xóa đơn hàng đang trong quá trình xử lý',
+  })
   @ApiNotFoundResponse({ description: 'Đơn hàng không tồn tại' })
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   deleteOrder(@Param('id', ParseUUIDPipe) id: string) {

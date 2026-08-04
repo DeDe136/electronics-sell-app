@@ -4,9 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
 } from 'typeorm';
-import { Payment } from './payment.entity';
+//import { Payment } from './payment.entity';
 
 /**
  * Bảng payment_method_options — danh mục các phương thức thanh toán
