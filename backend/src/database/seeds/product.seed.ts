@@ -1,5 +1,8 @@
 import { DataSource } from 'typeorm';
-import { Product, ProductStatus } from '../../modules/catalog/entities/product.entity';
+import {
+  Product,
+  ProductStatus,
+} from '../../modules/catalog/entities/product.entity';
 import { Category } from '../../modules/catalog/entities/category.entity';
 
 // Xem giải thích chi tiết trong category.seed.ts — cùng 1 hằng số, tách
@@ -17,10 +20,10 @@ export async function seedProducts(dataSource: DataSource) {
     return c;
   };
 
-  const dienThoai   = await cat('dien-thoai');
-  const laptop      = await cat('laptop');
-  const taiNghe     = await cat('tai-nghe');
-  const dongHo      = await cat('dong-ho-thong-minh');
+  const dienThoai = await cat('dien-thoai');
+  const laptop = await cat('laptop');
+  const taiNghe = await cat('tai-nghe');
+  const dongHo = await cat('dong-ho-thong-minh');
   const mayTinhBang = await cat('may-tinh-bang');
 
   const products: Partial<Product>[] = [
@@ -34,15 +37,24 @@ export async function seedProducts(dataSource: DataSource) {
       price: 34990000,
       salePrice: 32990000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/iphone17promax/1.jpg`, key: 'products/iphone17promax/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/iphone17promax/2.jpg`, key: 'products/iphone17promax/2.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/iphone17promax/3.jpg`, key: 'products/iphone17promax/3.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/iphone17promax/1.jpg`,
+          key: 'products/iphone17promax/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/iphone17promax/2.jpg`,
+          key: 'products/iphone17promax/2.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/iphone17promax/3.jpg`,
+          key: 'products/iphone17promax/3.jpg',
+        },
       ],
       specs: {
         'Màn hình': '6.7 inch Super Retina XDR LTPO OLED 120Hz',
-        'Camera': '48MP chính + 12MP góc siêu rộng + 12MP tele 5x',
-        'Pin': '4422 mAh',
-        'RAM': '8 GB',
+        Camera: '48MP chính + 12MP góc siêu rộng + 12MP tele 5x',
+        Pin: '4422 mAh',
+        RAM: '8 GB',
         'Bộ nhớ': '256 GB',
         'Chip xử lý': 'Apple A17 Pro',
         'Hệ điều hành': 'iOS 17',
@@ -61,15 +73,25 @@ export async function seedProducts(dataSource: DataSource) {
       price: 31990000,
       salePrice: 29990000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/s24ultra/1.jpg`, key: 'products/s24ultra/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/s24ultra/2.jpg`, key: 'products/s24ultra/2.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/s24ultra/3.jpg`, key: 'products/s24ultra/3.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/s24ultra/1.jpg`,
+          key: 'products/s24ultra/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/s24ultra/2.jpg`,
+          key: 'products/s24ultra/2.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/s24ultra/3.jpg`,
+          key: 'products/s24ultra/3.jpg',
+        },
       ],
       specs: {
         'Màn hình': '6.8 inch Dynamic AMOLED 2X 120Hz',
-        'Camera': '200MP chính + 12MP góc siêu rộng + 10MP tele 3x + 50MP tele 5x',
-        'Pin': '5000 mAh',
-        'RAM': '12 GB',
+        Camera:
+          '200MP chính + 12MP góc siêu rộng + 10MP tele 3x + 50MP tele 5x',
+        Pin: '5000 mAh',
+        RAM: '12 GB',
         'Bộ nhớ': '256 GB',
         'Chip xử lý': 'Snapdragon 8 Gen 3',
         'Hệ điều hành': 'Android 14 / One UI 6.1',
@@ -88,15 +110,25 @@ export async function seedProducts(dataSource: DataSource) {
       price: 22990000,
       salePrice: 20990000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/1.jpg`, key: 'products/xiaomi17ultra/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/2.jpg`, key: 'products/xiaomi17ultra/2.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/3.jpg`, key: 'products/xiaomi17ultra/3.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/1.jpg`,
+          key: 'products/xiaomi17ultra/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/2.jpg`,
+          key: 'products/xiaomi17ultra/2.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/3.jpg`,
+          key: 'products/xiaomi17ultra/3.jpg',
+        },
       ],
       specs: {
         'Màn hình': '6.73 inch AMOLED 120Hz',
-        'Camera': '50MP chính Leica + 50MP góc siêu rộng + 50MP tele 3.2x + 50MP tele 5x',
-        'Pin': '5000 mAh',
-        'RAM': '16 GB',
+        Camera:
+          '50MP chính Leica + 50MP góc siêu rộng + 50MP tele 3.2x + 50MP tele 5x',
+        Pin: '5000 mAh',
+        RAM: '16 GB',
         'Bộ nhớ': '512 GB',
         'Chip xử lý': 'Snapdragon 8 Gen 3',
         'Hệ điều hành': 'Android 14 / HyperOS',
@@ -117,16 +149,22 @@ export async function seedProducts(dataSource: DataSource) {
       price: 69990000,
       salePrice: 66990000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/mbp16m3pro/1.jpg`, key: 'products/mbp16m3pro/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/mbp16m3pro/2.jpg`, key: 'products/mbp16m3pro/2.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/mbp16m3pro/1.jpg`,
+          key: 'products/mbp16m3pro/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/mbp16m3pro/2.jpg`,
+          key: 'products/mbp16m3pro/2.jpg',
+        },
       ],
       specs: {
-        'CPU': 'Apple M3 Pro 12-core',
-        'RAM': '18 GB Unified Memory',
+        CPU: 'Apple M3 Pro 12-core',
+        RAM: '18 GB Unified Memory',
         'Ổ cứng': '512 GB SSD',
         'Màn hình': '16.2 inch Liquid Retina XDR 120Hz',
         'Card đồ họa': '18-core GPU',
-        'Pin': '100Wh — ~22 giờ',
+        Pin: '100Wh — ~22 giờ',
         'Hệ điều hành': 'macOS Sonoma',
       },
       status: ProductStatus.ACTIVE,
@@ -143,16 +181,22 @@ export async function seedProducts(dataSource: DataSource) {
       price: 45990000,
       salePrice: 42990000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/dellxps15/1.jpg`, key: 'products/dellxps15/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/dellxps15/2.jpg`, key: 'products/dellxps15/2.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/dellxps15/1.jpg`,
+          key: 'products/dellxps15/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/dellxps15/2.jpg`,
+          key: 'products/dellxps15/2.jpg',
+        },
       ],
       specs: {
-        'CPU': 'Intel Core i7-13700H',
-        'RAM': '16 GB DDR5 4800MHz',
+        CPU: 'Intel Core i7-13700H',
+        RAM: '16 GB DDR5 4800MHz',
         'Ổ cứng': '512 GB PCIe NVMe SSD',
         'Màn hình': '15.6 inch OLED 3.5K cảm ứng 60Hz',
         'Card đồ họa': 'NVIDIA RTX 4060 8GB',
-        'Pin': '86Wh — ~8 giờ',
+        Pin: '86Wh — ~8 giờ',
         'Hệ điều hành': 'Windows 11 Home',
       },
       status: ProductStatus.ACTIVE,
@@ -169,16 +213,22 @@ export async function seedProducts(dataSource: DataSource) {
       price: 39990000,
       salePrice: undefined,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/rogg14-2024/1.jpg`, key: 'products/rogg14-2024/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/rogg14-2024/2.jpg`, key: 'products/rogg14-2024/2.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/rogg14-2024/1.jpg`,
+          key: 'products/rogg14-2024/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/rogg14-2024/2.jpg`,
+          key: 'products/rogg14-2024/2.jpg',
+        },
       ],
       specs: {
-        'CPU': 'AMD Ryzen 9 8945HS',
-        'RAM': '16 GB LPDDR5X',
+        CPU: 'AMD Ryzen 9 8945HS',
+        RAM: '16 GB LPDDR5X',
         'Ổ cứng': '1 TB PCIe 4.0 SSD',
         'Màn hình': '14 inch OLED 2.8K 120Hz',
         'Card đồ họa': 'NVIDIA RTX 4070 8GB',
-        'Pin': '73Wh — ~10 giờ',
+        Pin: '73Wh — ~10 giờ',
         'Hệ điều hành': 'Windows 11 Home',
       },
       status: ProductStatus.ACTIVE,
@@ -197,14 +247,20 @@ export async function seedProducts(dataSource: DataSource) {
       price: 8990000,
       salePrice: 7490000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/1.jpg`, key: 'products/sonywh1000xm5/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/2.jpg`, key: 'products/sonywh1000xm5/2.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/1.jpg`,
+          key: 'products/sonywh1000xm5/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/2.jpg`,
+          key: 'products/sonywh1000xm5/2.jpg',
+        },
       ],
       specs: {
         'Loại kết nối': 'Bluetooth 5.2 / 3.5mm jack',
-        'Driver': '30 mm',
+        Driver: '30 mm',
         'Chống ồn': 'Có (ANC Dual Noise Sensor 8 mic)',
-        'Pin': '30 giờ (ANC bật)',
+        Pin: '30 giờ (ANC bật)',
         'Tần số đáp ứng': '4 Hz – 40.000 Hz',
       },
       status: ProductStatus.ACTIVE,
@@ -221,15 +277,24 @@ export async function seedProducts(dataSource: DataSource) {
       price: 6490000,
       salePrice: 5990000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/airpodspro2/1.jpg`, key: 'products/airpodspro2/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/airpodspro2/2.jpg`, key: 'products/airpodspro2/2.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/airpodspro2/3.jpg`, key: 'products/airpodspro2/3.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/airpodspro2/1.jpg`,
+          key: 'products/airpodspro2/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/airpodspro2/2.jpg`,
+          key: 'products/airpodspro2/2.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/airpodspro2/3.jpg`,
+          key: 'products/airpodspro2/3.jpg',
+        },
       ],
       specs: {
         'Loại kết nối': 'Bluetooth 5.3',
-        'Driver': 'Apple H2',
+        Driver: 'Apple H2',
         'Chống ồn': 'Có (Active Noise Cancellation thế hệ 2)',
-        'Pin': '6h tai nghe + 30h với case',
+        Pin: '6h tai nghe + 30h với case',
         'Tần số đáp ứng': '20 Hz – 20.000 Hz',
       },
       status: ProductStatus.ACTIVE,
@@ -248,15 +313,24 @@ export async function seedProducts(dataSource: DataSource) {
       price: 12990000,
       salePrice: 11490000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/1.jpg`, key: 'products/applewatch-s9-45/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/2.jpg`, key: 'products/applewatch-s9-45/2.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/3.jpg`, key: 'products/applewatch-s9-45/3.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/1.jpg`,
+          key: 'products/applewatch-s9-45/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/2.jpg`,
+          key: 'products/applewatch-s9-45/2.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/3.jpg`,
+          key: 'products/applewatch-s9-45/3.jpg',
+        },
       ],
       specs: {
         'Màn hình': '45 mm Always-On Retina LTPO OLED',
-        'Pin': '~18 giờ (36h chế độ tiết kiệm)',
+        Pin: '~18 giờ (36h chế độ tiết kiệm)',
         'Chống nước': 'WR50 / swim-proof',
-        'GPS': 'Có (L1 và L5 dual-frequency)',
+        GPS: 'Có (L1 và L5 dual-frequency)',
         'Cảm biến nhịp tim': 'Có (quang học thế hệ 3 + điện tâm đồ)',
       },
       status: ProductStatus.ACTIVE,
@@ -273,14 +347,20 @@ export async function seedProducts(dataSource: DataSource) {
       price: 9490000,
       salePrice: 8290000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/gw6classic47/1.jpg`, key: 'products/gw6classic47/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/gw6classic47/2.jpg`, key: 'products/gw6classic47/2.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/gw6classic47/1.jpg`,
+          key: 'products/gw6classic47/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/gw6classic47/2.jpg`,
+          key: 'products/gw6classic47/2.jpg',
+        },
       ],
       specs: {
         'Màn hình': '47 mm Super AMOLED 480×480',
-        'Pin': '~40 giờ',
+        Pin: '~40 giờ',
         'Chống nước': '5ATM + IP68',
-        'GPS': 'Có (L1 + BeiDou + GLONASS)',
+        GPS: 'Có (L1 + BeiDou + GLONASS)',
         'Cảm biến nhịp tim': 'Có (quang học + BIA đo mỡ cơ thể)',
       },
       status: ProductStatus.ACTIVE,
@@ -299,16 +379,22 @@ export async function seedProducts(dataSource: DataSource) {
       price: 23990000,
       salePrice: 22490000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/ipadpro11m4/1.jpg`, key: 'products/ipadpro11m4/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/ipadpro11m4/2.jpg`, key: 'products/ipadpro11m4/2.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/ipadpro11m4/1.jpg`,
+          key: 'products/ipadpro11m4/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/ipadpro11m4/2.jpg`,
+          key: 'products/ipadpro11m4/2.jpg',
+        },
       ],
       specs: {
         'Màn hình': '11 inch Ultra Retina XDR OLED tandem 120Hz',
-        'CPU': 'Apple M4',
-        'RAM': '8 GB',
+        CPU: 'Apple M4',
+        RAM: '8 GB',
         'Bộ nhớ': '256 GB',
-        'Pin': '~10 giờ',
-        'Camera': '12MP chính + 12MP góc siêu rộng',
+        Pin: '~10 giờ',
+        Camera: '12MP chính + 12MP góc siêu rộng',
         'Hệ điều hành': 'iPadOS 17',
       },
       status: ProductStatus.ACTIVE,
@@ -325,17 +411,26 @@ export async function seedProducts(dataSource: DataSource) {
       price: 10490000,
       salePrice: 9290000,
       images: [
-        { url: `${MEDIA_BASE_URL}/products/tabs9fe/1.jpg`, key: 'products/tabs9fe/1.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/tabs9fe/2.jpg`, key: 'products/tabs9fe/2.jpg' },
-        { url: `${MEDIA_BASE_URL}/products/tabs9fe/3.jpg`, key: 'products/tabs9fe/3.jpg' },
+        {
+          url: `${MEDIA_BASE_URL}/products/tabs9fe/1.jpg`,
+          key: 'products/tabs9fe/1.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/tabs9fe/2.jpg`,
+          key: 'products/tabs9fe/2.jpg',
+        },
+        {
+          url: `${MEDIA_BASE_URL}/products/tabs9fe/3.jpg`,
+          key: 'products/tabs9fe/3.jpg',
+        },
       ],
       specs: {
         'Màn hình': '10.9 inch TFT 90Hz',
-        'CPU': 'Exynos 1380',
-        'RAM': '6 GB',
+        CPU: 'Exynos 1380',
+        RAM: '6 GB',
         'Bộ nhớ': '128 GB',
-        'Pin': '10090 mAh — ~13 giờ',
-        'Camera': '8MP chính + 10MP selfie',
+        Pin: '10090 mAh — ~13 giờ',
+        Camera: '8MP chính + 10MP selfie',
         'Hệ điều hành': 'Android 13 / One UI 5.1',
       },
       status: ProductStatus.ACTIVE,

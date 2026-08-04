@@ -11,18 +11,38 @@ interface CartSeed {
 }
 
 export async function seedCartItems(dataSource: DataSource) {
-  const cartRepo    = dataSource.getRepository(CartItem);
-  const userRepo    = dataSource.getRepository(User);
+  const cartRepo = dataSource.getRepository(CartItem);
+  const userRepo = dataSource.getRepository(User);
   const productRepo = dataSource.getRepository(Product);
 
   const items: CartSeed[] = [
     // Nguyễn Văn An — đang xem iPad Pro 11
-    { userEmail: 'nguyen.van.an@gmail.com', productSlug: 'ipad-pro-11-m4-wifi',        variantId: 'var-ipadpro11-1', quantity: 1 },
+    {
+      userEmail: 'nguyen.van.an@gmail.com',
+      productSlug: 'ipad-pro-11-m4-wifi',
+      variantId: 'var-ipadpro11-1',
+      quantity: 1,
+    },
     // Trần Thị Bích — đang so sánh 2 điện thoại
-    { userEmail: 'tran.thi.bich@gmail.com', productSlug: 'iphone-17-pro-max',           variantId: 'var-ip17pm-2',    quantity: 1 },
-    { userEmail: 'tran.thi.bich@gmail.com', productSlug: 'xiaomi-17-ultra',             variantId: 'var-x17u-1',      quantity: 1 },
+    {
+      userEmail: 'tran.thi.bich@gmail.com',
+      productSlug: 'iphone-17-pro-max',
+      variantId: 'var-ip17pm-2',
+      quantity: 1,
+    },
+    {
+      userEmail: 'tran.thi.bich@gmail.com',
+      productSlug: 'xiaomi-17-ultra',
+      variantId: 'var-x17u-1',
+      quantity: 1,
+    },
     // Lê Minh Cường — đang xem laptop gaming
-    { userEmail: 'le.minh.cuong@gmail.com', productSlug: 'asus-rog-zephyrus-g14-2024', variantId: 'var-g14-1',       quantity: 1 },
+    {
+      userEmail: 'le.minh.cuong@gmail.com',
+      productSlug: 'asus-rog-zephyrus-g14-2024',
+      variantId: 'var-g14-1',
+      quantity: 1,
+    },
   ];
 
   for (const seed of items) {
@@ -46,7 +66,9 @@ export async function seedCartItems(dataSource: DataSource) {
       variantId: seed.variantId,
     });
     if (existing) {
-      console.log(`  [cart] — Skipped (đã tồn tại): ${seed.userEmail} → ${seed.productSlug}`);
+      console.log(
+        `  [cart] — Skipped (đã tồn tại): ${seed.userEmail} → ${seed.productSlug}`,
+      );
       continue;
     }
 
@@ -58,6 +80,8 @@ export async function seedCartItems(dataSource: DataSource) {
       quantity: seed.quantity,
     });
     await cartRepo.save(item);
-    console.log(`  [cart] ✔ Inserted: ${seed.userEmail} → ${seed.productSlug} (variant: ${seed.variantId ?? 'none'})`);
+    console.log(
+      `  [cart] ✔ Inserted: ${seed.userEmail} → ${seed.productSlug} (variant: ${seed.variantId ?? 'none'})`,
+    );
   }
 }

@@ -1,7 +1,11 @@
 import { DataSource } from 'typeorm';
 import { Order, OrderStatus } from '../../modules/order/entities/order.entity';
 import { OrderItem } from '../../modules/order/entities/order-item.entity';
-import { Payment, PaymentMethod, PaymentStatus } from '../../modules/payment/entities/payment.entity';
+import {
+  Payment,
+  PaymentMethod,
+  PaymentStatus,
+} from '../../modules/payment/entities/payment.entity';
 import { User } from '../../modules/user/entities/user.entity';
 import { Product } from '../../modules/catalog/entities/product.entity';
 
@@ -38,10 +42,10 @@ interface OrderSeed {
 }
 
 export async function seedOrders(dataSource: DataSource) {
-  const orderRepo   = dataSource.getRepository(Order);
-  const itemRepo    = dataSource.getRepository(OrderItem);
+  const orderRepo = dataSource.getRepository(Order);
+  const itemRepo = dataSource.getRepository(OrderItem);
   const paymentRepo = dataSource.getRepository(Payment);
-  const userRepo    = dataSource.getRepository(User);
+  const userRepo = dataSource.getRepository(User);
   const productRepo = dataSource.getRepository(Product);
 
   const orders: OrderSeed[] = [
@@ -49,16 +53,42 @@ export async function seedOrders(dataSource: DataSource) {
     {
       orderCode: 'ORD-20240501-0001',
       userEmail: 'nguyen.van.an@gmail.com',
-      shippingAddress: { fullName: 'Nguyễn Văn An', phone: '0912345678', address: '45 Lê Lợi', ward: 'Phường Bến Nghé', district: 'Quận 1', city: 'TP.HCM' },
+      shippingAddress: {
+        fullName: 'Nguyễn Văn An',
+        phone: '0912345678',
+        address: '45 Lê Lợi',
+        ward: 'Phường Bến Nghé',
+        district: 'Quận 1',
+        city: 'TP.HCM',
+      },
       shippingFee: 30000,
       discount: 0,
       status: OrderStatus.DELIVERED,
       note: 'Giao nhanh giúp tôi nhé',
       items: [
-        { productSlug: 'samsung-galaxy-s24-ultra', variantLabel: '256GB - Titanium Black', unitPrice: 29990000, quantity: 1 },
-        { productSlug: 'sony-wh-1000xm5',          variantLabel: 'Đen',                   unitPrice: 7490000,  quantity: 1 },
+        {
+          productSlug: 'samsung-galaxy-s24-ultra',
+          variantLabel: '256GB - Titanium Black',
+          unitPrice: 29990000,
+          quantity: 1,
+        },
+        {
+          productSlug: 'sony-wh-1000xm5',
+          variantLabel: 'Đen',
+          unitPrice: 7490000,
+          quantity: 1,
+        },
       ],
-      payment: { method: PaymentMethod.BANK_TRANSFER, status: PaymentStatus.SUCCESS, transactionId: 'VCB20240501123456', metadata: { bank: 'Vietcombank', accountName: 'NGUYEN VAN AN', transferNote: 'ORD-20240501-0001' } },
+      payment: {
+        method: PaymentMethod.BANK_TRANSFER,
+        status: PaymentStatus.SUCCESS,
+        transactionId: 'VCB20240501123456',
+        metadata: {
+          bank: 'Vietcombank',
+          accountName: 'NGUYEN VAN AN',
+          transferNote: 'ORD-20240501-0001',
+        },
+      },
       createdDaysAgo: 20,
     },
 
@@ -66,16 +96,38 @@ export async function seedOrders(dataSource: DataSource) {
     {
       orderCode: 'ORD-20240505-0002',
       userEmail: 'tran.thi.bich@gmail.com',
-      shippingAddress: { fullName: 'Trần Thị Bích', phone: '0987654321', address: '88 Nguyễn Huệ', ward: 'Phường Bến Nghé', district: 'Quận 1', city: 'TP.HCM' },
+      shippingAddress: {
+        fullName: 'Trần Thị Bích',
+        phone: '0987654321',
+        address: '88 Nguyễn Huệ',
+        ward: 'Phường Bến Nghé',
+        district: 'Quận 1',
+        city: 'TP.HCM',
+      },
       shippingFee: 0,
       discount: 500000,
       status: OrderStatus.SHIPPING,
       note: undefined, // ✅
       items: [
-        { productSlug: 'apple-airpods-pro-2',       variantLabel: undefined,               unitPrice: 5990000,  quantity: 1 }, // ✅
-        { productSlug: 'apple-watch-series-9-45mm', variantLabel: '45mm Nhôm - Midnight',  unitPrice: 11490000, quantity: 1 },
+        {
+          productSlug: 'apple-airpods-pro-2',
+          variantLabel: undefined,
+          unitPrice: 5990000,
+          quantity: 1,
+        }, // ✅
+        {
+          productSlug: 'apple-watch-series-9-45mm',
+          variantLabel: '45mm Nhôm - Midnight',
+          unitPrice: 11490000,
+          quantity: 1,
+        },
       ],
-      payment: { method: PaymentMethod.MOMO, status: PaymentStatus.SUCCESS, transactionId: 'MOMO20240505987654', metadata: { momoOrderId: 'MM20240505987654', requestId: 'req-abc123' } },
+      payment: {
+        method: PaymentMethod.MOMO,
+        status: PaymentStatus.SUCCESS,
+        transactionId: 'MOMO20240505987654',
+        metadata: { momoOrderId: 'MM20240505987654', requestId: 'req-abc123' },
+      },
       createdDaysAgo: 3,
     },
 
@@ -83,15 +135,36 @@ export async function seedOrders(dataSource: DataSource) {
     {
       orderCode: 'ORD-20240507-0003',
       userEmail: 'le.minh.cuong@gmail.com',
-      shippingAddress: { fullName: 'Lê Minh Cường', phone: '0933445566', address: '12 Trần Hưng Đạo', ward: 'Phường Phạm Ngũ Lão', district: 'Quận 1', city: 'TP.HCM' },
+      shippingAddress: {
+        fullName: 'Lê Minh Cường',
+        phone: '0933445566',
+        address: '12 Trần Hưng Đạo',
+        ward: 'Phường Phạm Ngũ Lão',
+        district: 'Quận 1',
+        city: 'TP.HCM',
+      },
       shippingFee: 0,
       discount: 3000000,
       status: OrderStatus.CONFIRMED,
       note: 'Đóng gói cẩn thận',
       items: [
-        { productSlug: 'macbook-pro-16-m3-pro', variantLabel: '18GB / 512GB - Bạc', unitPrice: 66990000, quantity: 1 },
+        {
+          productSlug: 'macbook-pro-16-m3-pro',
+          variantLabel: '18GB / 512GB - Bạc',
+          unitPrice: 66990000,
+          quantity: 1,
+        },
       ],
-      payment: { method: PaymentMethod.VNPAY, status: PaymentStatus.SUCCESS, transactionId: 'VNPAY20240507001122', metadata: { vnp_TxnRef: 'ORD-20240507-0003', vnp_BankCode: 'VCB', vnp_CardType: 'ATM' } },
+      payment: {
+        method: PaymentMethod.VNPAY,
+        status: PaymentStatus.SUCCESS,
+        transactionId: 'VNPAY20240507001122',
+        metadata: {
+          vnp_TxnRef: 'ORD-20240507-0003',
+          vnp_BankCode: 'VCB',
+          vnp_CardType: 'ATM',
+        },
+      },
       createdDaysAgo: 1,
     },
 
@@ -99,15 +172,32 @@ export async function seedOrders(dataSource: DataSource) {
     {
       orderCode: 'ORD-20240508-0004',
       userEmail: 'nguyen.van.an@gmail.com',
-      shippingAddress: { fullName: 'Nguyễn Văn An', phone: '0912345678', address: '45 Lê Lợi', ward: 'Phường Bến Nghé', district: 'Quận 1', city: 'TP.HCM' },
+      shippingAddress: {
+        fullName: 'Nguyễn Văn An',
+        phone: '0912345678',
+        address: '45 Lê Lợi',
+        ward: 'Phường Bến Nghé',
+        district: 'Quận 1',
+        city: 'TP.HCM',
+      },
       shippingFee: 30000,
       discount: 0,
       status: OrderStatus.PENDING,
       note: undefined, // ✅
       items: [
-        { productSlug: 'sony-wh-1000xm5', variantLabel: 'Đen', unitPrice: 7490000, quantity: 1 },
+        {
+          productSlug: 'sony-wh-1000xm5',
+          variantLabel: 'Đen',
+          unitPrice: 7490000,
+          quantity: 1,
+        },
       ],
-      payment: { method: PaymentMethod.COD, status: PaymentStatus.PENDING, transactionId: undefined, metadata: { note: 'Thu tiền khi giao hàng' } }, // ✅
+      payment: {
+        method: PaymentMethod.COD,
+        status: PaymentStatus.PENDING,
+        transactionId: undefined,
+        metadata: { note: 'Thu tiền khi giao hàng' },
+      }, // ✅
       createdDaysAgo: 0,
     },
 
@@ -115,15 +205,32 @@ export async function seedOrders(dataSource: DataSource) {
     {
       orderCode: 'ORD-20240420-0005',
       userEmail: 'tran.thi.bich@gmail.com',
-      shippingAddress: { fullName: 'Trần Thị Bích', phone: '0987654321', address: '88 Nguyễn Huệ', ward: 'Phường Bến Nghé', district: 'Quận 1', city: 'TP.HCM' },
+      shippingAddress: {
+        fullName: 'Trần Thị Bích',
+        phone: '0987654321',
+        address: '88 Nguyễn Huệ',
+        ward: 'Phường Bến Nghé',
+        district: 'Quận 1',
+        city: 'TP.HCM',
+      },
       shippingFee: 30000,
       discount: 0,
       status: OrderStatus.CANCELLED,
       note: 'Khách hủy vì đổi ý',
       items: [
-        { productSlug: 'ipad-pro-11-m4-wifi', variantLabel: '256GB Wi-Fi - Bạc', unitPrice: 22490000, quantity: 1 },
+        {
+          productSlug: 'ipad-pro-11-m4-wifi',
+          variantLabel: '256GB Wi-Fi - Bạc',
+          unitPrice: 22490000,
+          quantity: 1,
+        },
       ],
-      payment: { method: PaymentMethod.MOMO, status: PaymentStatus.REFUNDED, transactionId: 'MOMO20240420-REF001', metadata: { refundId: 'REF-20240422-001', reason: 'Khách hủy đơn' } },
+      payment: {
+        method: PaymentMethod.MOMO,
+        status: PaymentStatus.REFUNDED,
+        transactionId: 'MOMO20240420-REF001',
+        metadata: { refundId: 'REF-20240422-001', reason: 'Khách hủy đơn' },
+      },
       createdDaysAgo: 35,
     },
   ];
@@ -138,7 +245,9 @@ export async function seedOrders(dataSource: DataSource) {
     // Tìm user
     const user = await userRepo.findOneBy({ email: seed.userEmail });
     if (!user) {
-      console.warn(`  [orders] ⚠ User không tìm thấy: ${seed.userEmail} — bỏ qua ${seed.orderCode}`);
+      console.warn(
+        `  [orders] ⚠ User không tìm thấy: ${seed.userEmail} — bỏ qua ${seed.orderCode}`,
+      );
       continue;
     }
 
@@ -162,7 +271,7 @@ export async function seedOrders(dataSource: DataSource) {
       discount: seed.discount,
       total,
       status: seed.status,
-      note: seed.note,       // ✅ undefined — TypeORM sẽ bỏ qua hoặc lưu NULL vào DB
+      note: seed.note, // ✅ undefined — TypeORM sẽ bỏ qua hoặc lưu NULL vào DB
       createdAt,
       updatedAt: createdAt,
     });
@@ -181,7 +290,7 @@ export async function seedOrders(dataSource: DataSource) {
         productId: product.id,
         productName: product.name,
         productImage: product.images?.[0]?.url ?? undefined, // ✅ undefined thay vì null
-        variantLabel: it.variantLabel,                       // ✅ undefined thay vì null
+        variantLabel: it.variantLabel, // ✅ undefined thay vì null
         unitPrice: it.unitPrice,
         quantity: it.quantity,
         subtotal: it.unitPrice * it.quantity,
