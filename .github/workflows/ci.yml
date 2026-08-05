@@ -190,6 +190,16 @@ jobs:
   sonarqube:
     name: 📊 SonarQube - Code Quality & SAST
     runs-on: ubuntu-latest
+    # SonarCloud gói Free (private repo) CHỈ hỗ trợ 2 trường hợp:
+    #   - Push thẳng vào đúng nhánh main
+    #   - Pull Request có base (nhánh đích) là main
+    # KHÔNG hỗ trợ "branch analysis" cho nhánh khác main, kể cả khi mở PR
+    # nhắm vào 1 nhánh trung gian (vd. dev) thay vì main — vẫn bị lỗi 403.
+    # => Muốn check Quality Gate cho nhánh feature (vd. thanhde), phải mở PR
+    #    nhắm thẳng về main (không qua nhánh trung gian nào khác).
+    if: >
+      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     # Chờ backend-lint-test + frontend-lint-test chạy xong: vừa để tái sử
     # dụng coverage report của backend (đỡ chạy Jest 2 lần), vừa hợp lý về
     # thứ tự — không cần tốn thời gian phân tích Sonar nếu code còn lỗi
