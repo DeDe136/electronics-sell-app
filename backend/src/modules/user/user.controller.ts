@@ -11,8 +11,15 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  IMAGE_UPLOAD_MAX_SIZE_BYTES,
+  IMAGE_UPLOAD_ALLOWED_MIMETYPE_REGEX,
+} from '../../common/constants/upload.constants';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -116,10 +123,23 @@ export class UserController {
     description: 'Avatar đã được cập nhật thành công',
     type: UserProfileResponse,
   })
-  @ApiBadRequestResponse({ description: 'File không hợp lệ hoặc thiếu file' })
+  @ApiBadRequestResponse({
+    description:
+      'File không hợp lệ (sai định dạng, không phải JPG/PNG/WebP) hoặc vượt quá 5MB',
+  })
   updateAvatar(
     @CurrentUser() user: User,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: IMAGE_UPLOAD_MAX_SIZE_BYTES }),
+          new FileTypeValidator({
+            fileType: IMAGE_UPLOAD_ALLOWED_MIMETYPE_REGEX,
+          }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
   ) {
     return this.userService.updateAvatar(user.id, file);
   }

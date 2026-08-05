@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Image from 'next/image';
 import { notFound, useRouter } from 'next/navigation';
 import { ShoppingCart, Shield, Truck, RotateCcw, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
@@ -10,7 +10,16 @@ import { Button } from '@/components/ui/Button';
 import { useCart } from '@/lib/hooks/useCart';
 import toast from 'react-hot-toast';
 
-export default function ProductDetailPage({ params }: { params: { slug: string } }) {
+export default function ProductDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  // Next.js 15: `params` là Promise ngay cả với page.tsx là Client Component.
+  // Dùng React.use() để unwrap đồng bộ trong lúc render (Client Component
+  // không thể là async function nên không await được như Server Component).
+  const { slug } = use(params);
+
   const [product, setProduct]               = useState<any>(null);
   const [loading, setLoading]               = useState(true);
   const [activeImg, setActiveImg]           = useState(0);
@@ -20,14 +29,14 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   const router = useRouter();
 
   useEffect(() => {
-    catalogApi.getProduct(params.slug)
+    catalogApi.getProduct(slug)
       .then((data) => {
         setProduct(data);
         if (data.variants?.length) setSelectedVariant(data.variants[0]);
       })
       .catch(() => notFound())
       .finally(() => setLoading(false));
-  }, [params.slug]);
+  }, [slug]);
 
   if (loading) {
     return (

@@ -23,6 +23,7 @@ pnpm-debug.log*
 dist/
 build/
 .next/
+.swc/
 out/
 *.tsbuildinfo
 
@@ -87,3 +88,4 @@ desktop.ini
 .cache/
 tmp/
 temp/
+

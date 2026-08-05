@@ -49,9 +49,15 @@ const banners = [
   { label: '🎮 Gaming RTX 4060',  sub: 'Chiến game đỉnh cao', color: 'from-violet-600 to-violet-900', ring: 'ring-violet-500/30' },
 ];
 
-export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+
   const [{ items, meta }, categories] = await Promise.all([
-    getProducts(searchParams),
+    getProducts(params),
     getCategories(),
   ]);
 
@@ -84,14 +90,14 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
       {/* Category pills */}
       <section className="container-page py-4">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          <a href="/" className={`${pillBase} ${!searchParams.category ? pillActive : pillIdle}`}>
+          <a href="/" className={`${pillBase} ${!params.category ? pillActive : pillIdle}`}>
             Tất cả
           </a>
           {categories.map((cat: any) => (
             <a
               key={cat.id}
               href={`/?category=${cat.id}`}
-              className={`${pillBase} ${searchParams.category === cat.id ? pillActive : pillIdle}`}
+              className={`${pillBase} ${params.category === cat.id ? pillActive : pillIdle}`}
             >
               {cat.name}
             </a>
@@ -145,7 +151,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
                       key={b}
                       href={`?brand=${b}`}
                       className={`block text-sm rounded px-2 py-1.5 transition-colors
-                                  ${searchParams.brand === b
+                                  ${params.brand === b
                                     ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-50 dark:bg-blue-950/40'
                                     : 'text-gray-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700/50'}`}
                     >
@@ -171,7 +177,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
                       key={opt.value}
                       href={`?sort=${opt.value}`}
                       className={`text-xs px-3 py-1.5 rounded-lg border transition-colors
-                                  ${searchParams.sort === opt.value || (!searchParams.sort && opt.value === 'newest')
+                                  ${params.sort === opt.value || (!params.sort && opt.value === 'newest')
                                     ? sortActive : sortIdle}`}
                     >
                       {opt.label}

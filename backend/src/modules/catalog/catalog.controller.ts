@@ -13,8 +13,15 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  IMAGE_UPLOAD_MAX_SIZE_BYTES,
+  IMAGE_UPLOAD_ALLOWED_MIMETYPE_REGEX,
+} from '../../common/constants/upload.constants';
 import {
   ApiTags,
   ApiOperation,
@@ -426,7 +433,18 @@ export class CatalogController {
   @ApiForbiddenResponse({ description: 'Không có quyền admin' })
   create(
     @Body() dto: CreateProductDto,
-    @UploadedFiles() images?: Express.Multer.File[],
+    @UploadedFiles(
+      new ParseFilePipe({
+        fileIsRequired: false,
+        validators: [
+          new MaxFileSizeValidator({ maxSize: IMAGE_UPLOAD_MAX_SIZE_BYTES }),
+          new FileTypeValidator({
+            fileType: IMAGE_UPLOAD_ALLOWED_MIMETYPE_REGEX,
+          }),
+        ],
+      }),
+    )
+    images?: Express.Multer.File[],
   ) {
     return this.catalogService.create(dto, images);
   }
@@ -485,7 +503,18 @@ export class CatalogController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: Partial<CreateProductDto>,
-    @UploadedFiles() images?: Express.Multer.File[],
+    @UploadedFiles(
+      new ParseFilePipe({
+        fileIsRequired: false,
+        validators: [
+          new MaxFileSizeValidator({ maxSize: IMAGE_UPLOAD_MAX_SIZE_BYTES }),
+          new FileTypeValidator({
+            fileType: IMAGE_UPLOAD_ALLOWED_MIMETYPE_REGEX,
+          }),
+        ],
+      }),
+    )
+    images?: Express.Multer.File[],
   ) {
     return this.catalogService.update(id, dto, images);
   }
