@@ -275,7 +275,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Trivy filesystem scan
+      - name: Trivy filesystem scan (tạo SARIF report cho GitHub Security tab)
         # LƯU Ý VỀ VERSION: dùng tag có tiền tố "v" (vd: v0.36.0), KHÔNG dùng
         # tag không có "v" (vd: 0.28.0, 0.34.2...) — các tag không có "v" đã
         # bị Aquasecurity THU HỒI sau sự cố supply-chain attack (3/2026) và
@@ -290,27 +290,14 @@ jobs:
         #  - Đọc Dockerfile trong docker/ để phát hiện misconfiguration
         #    (chạy container bằng user root, thiếu HEALTHCHECK, COPY --chown...).
         #  - Đọc docker-compose.yml để phát hiện cấu hình không an toàn.
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: "fs"
-          scan-ref: "."                      # quét từ thư mục gốc repo
-          # Bỏ qua các thư mục không cần thiết để tăng tốc + giảm false-positive
-          skip-dirs: "node_modules,frontend/.next,backend/dist"
-          # Dùng file .trivyignore đã có sẵn trong security/ để loại trừ
-          # các CVE đã được review và chấp nhận rủi ro (ví dụ: chưa có bản vá).
-          trivyignores: "security/.trivyignore"
-          # Chỉ báo lỗi mức độ nghiêm trọng trở lên, tránh spam các lỗi LOW/MEDIUM
-          # không thực sự khai thác được trong bối cảnh ứng dụng nội bộ.
-          severity: "CRITICAL,HIGH"
-          # format 'sarif' để hiển thị đẹp trên GitHub Security tab (giống GitLeaks)
-          format: "sarif"
-          output: "trivy-fs-results.sarif"
-          # exit-code '1' => job FAIL nếu tìm thấy lỗ hổng CRITICAL/HIGH,
-          # chặn merge PR. Đổi thành '0' nếu chỉ muốn cảnh báo mà không chặn.
-          exit-code: "1"
-
-      - name: 🔍 DEBUG - Trivy scan (in bảng ra log để xem chính xác lỗi)
-        if: always()
+        #
+        # Step này KHÔNG chặn merge (exit-code: "0") — nhiệm vụ duy nhất của
+        # nó là sinh ra file SARIF để upload lên tab Security, việc CHẶN merge
+        # được tách riêng ra step "Trivy filesystem scan - gate" bên dưới.
+        # Lý do tách: kết hợp format=sarif + output=file + exit-code=1 trong
+        # CÙNG 1 lần chạy từng gây exit code 1 dù bảng kết quả thực tế 0 lỗi
+        # — tách ra để mỗi step chỉ làm 1
+        # nhiệm vụ, dễ debug, và log luôn có bảng người đọc được khi fail.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "fs"
@@ -318,8 +305,23 @@ jobs:
           skip-dirs: "node_modules,frontend/.next,backend/dist"
           trivyignores: "security/.trivyignore"
           severity: "CRITICAL,HIGH"
-          format: "table"        # <-- không dùng sarif, để in trực tiếp ra log
-          exit-code: "0"          # <-- không cho fail step debug này
+          format: "sarif"
+          output: "trivy-fs-results.sarif"
+          exit-code: "0"
+
+      - name: Trivy filesystem scan - gate (CHẶN merge nếu có CRITICAL/HIGH)
+        # Step riêng, chỉ để quyết định pass/fail. format=table (không phải
+        # sarif, không ghi ra file) nên khi fail, LOG SẼ IN THẲNG BẢNG CVE/
+        # SECRET RA MÀN HÌNH — không cần thêm step debug thủ công nữa.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          skip-dirs: "node_modules,frontend/.next,backend/dist"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "table"
+          exit-code: "1"
 
       - name: Upload Trivy scan results to GitHub Security tab
         # Luôn chạy bước này kể cả khi bước quét ở trên "fail" (exit-code 1),
