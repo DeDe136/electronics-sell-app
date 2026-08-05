@@ -1,0 +1,46 @@
+# .dockerignore RIÊNG cho docker/backend.Dockerfile
+#
+# BuildKit tự động ưu tiên file này (đặt cùng thư mục, cùng tên với
+# Dockerfile) thay vì .dockerignore ở gốc context, khi build đúng
+# backend.Dockerfile. Không cần khai báo gì thêm trong docker-compose.yml.
+#
+# Vì context build là gốc project (context: ..), các pattern bên dưới được
+# tính từ gốc đó — nên phải ghi rõ "backend/..." chứ không viết trống,
+# nếu không sẽ vô tình loại luôn cả node_modules/dist của FRONTEND.
+
+# --- Toàn bộ mã nguồn + tài nguyên của frontend — build backend hoàn toàn
+#     không cần tới, loại thẳng cho context nhẹ và nhanh hơn.
+frontend
+
+# --- Dependencies & build output cũ trên máy host của backend.
+backend/node_modules
+backend/dist
+
+# --- File cache incremental của TypeScript (tsconfig.json có "incremental":
+#     true). File này ghi nhớ trạng thái lần build TRƯỚC trên máy host. Nếu
+#     lỡ copy vào image mà KHÔNG copy kèm "dist" tương ứng (mà ta đang cố
+#     tình loại "dist" ở trên), "tsc"/"nest build" sẽ đọc file này, tưởng
+#     nhầm là "không có gì thay đổi, khỏi build lại" -> BỎ QUA việc emit
+#     file, dẫn đến "dist" không hề được tạo ra trong container dù lệnh
+#     build báo thành công (không lỗi). Đây chính là nguyên nhân gây lỗi
+#     "COPY --from=builder .../dist: not found" ở bước sau — không liên
+#     quan gì đến cache của Docker/BuildKit.
+backend/tsconfig.tsbuildinfo
+**/*.tsbuildinfo
+
+# --- Biến môi trường / secrets của backend.
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# --- Git, IDE, docs, script không cần thiết để build/chạy image.
+.git
+.gitignore
+.vscode
+.idea
+**/*.md
+scripts
+security
+
+# --- Chính thư mục docker/ — không cần đóng gói vào image.
+docker

@@ -1,0 +1,153 @@
+# Docker Compose — Full Stack Local
+# Build & chạy từ thư mục gốc project:
+#   docker compose -f docker/docker-compose.yml up -d --build
+#
+# (Context build là thư mục gốc `..` vì các Dockerfile COPY theo path
+#  backend/... và frontend/... để tận dụng cache layer hiệu quả hơn.)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: electronics-shop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-electronics_shop}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-electronics_shop}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - electronics-shop-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: electronics-shop-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - electronics-shop-net
+
+  # Tự tạo bucket MinIO khi khởi động (chạy 1 lần rồi thoát)
+  minio-init:
+    image: minio/mc:latest
+    container_name: electronics-shop-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin} &&
+      mc mb -p local/${MINIO_BUCKET:-electronics-shop} &&
+      mc anonymous set download local/${MINIO_BUCKET:-electronics-shop} &&
+      exit 0
+      "
+    networks:
+      - electronics-shop-net
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: electronics-shop-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      # NODE_ENV=production tắt Swagger theo mặc định trong main.ts (an
+      # toàn cho deploy thật). Nhưng docker-compose này là môi trường
+      # local/staging để ta TEST full stack, không phải deploy công khai
+      # thật sự — nên bật lại Swagger tường minh qua biến riêng.
+      # ENABLE_SWAGGER: 'true'
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-electronics_shop}
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+      # Dùng tên SERVICE "minio" làm hostname (không phải "localhost"), vì
+      # backend và minio là 2 container riêng biệt, mỗi container có network
+      # namespace/localhost của riêng nó. Docker Compose tự tạo DNS nội bộ
+      # cho phép container này gọi container khác bằng đúng tên service khai
+      # báo trong file này (vd: "minio", "postgres").
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-electronics-shop}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-electronics-shop}
+    ports:
+      - "3001:3001"
+    networks:
+      - electronics-shop-net
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        # Biến NEXT_PUBLIC_API_URL chỉ có tác dụng khi truyền qua "args" ở
+        # bước BUILD image (Next.js nhúng cứng giá trị này vào bundle
+        # JavaScript phía client ngay lúc build, KHÔNG đọc lại lúc container
+        # chạy). Vì vậy KHÔNG khai báo lại biến này ở mục "environment" bên
+        # dưới — khai báo ở đó sẽ không có tác dụng gì với giá trị mà trình
+        # duyệt thực sự dùng, dễ gây hiểu lầm là có thể override lúc runtime.
+        # Muốn đổi URL, phải build lại image với --build-arg khác, hoặc sửa
+        # giá trị default bên dưới rồi "docker compose up --build".
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    container_name: electronics-shop-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Dùng bởi code SERVER-SIDE chạy BÊN TRONG container frontend
+      # (next.config.js -> rewrites(), app/api/health-check/route.ts, app/page.tsx) —
+      # khác với NEXT_PUBLIC_API_URL ở trên (chỉ dành cho browser).
+      # 3 đoạn code đó là tiến trình Node chạy ngay trong container
+      # "frontend", nên phải gọi sang container "backend" bằng TÊN SERVICE
+      # trong docker network — "localhost" ở đây sẽ trỏ về chính container
+      # frontend, không phải backend, gây lỗi kết nối.
+      # Cố ý KHÔNG đặt tiền tố "NEXT_PUBLIC_" để biến này không bị nhúng lộ
+      # vào bundle JavaScript phía client.
+      INTERNAL_API_URL: http://backend:3001/api/v1
+    ports:
+      - "3000:3000"
+    networks:
+      - electronics-shop-net
+
+volumes:
+  pgdata:
+  miniodata:
+
+networks:
+  electronics-shop-net:
+    driver: bridge

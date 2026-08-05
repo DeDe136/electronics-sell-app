@@ -1,0 +1,352 @@
+# =============================================================================
+# CI PIPELINE — DevSecOps cho electronics-shop
+# -----------------------------------------------------------------------------
+# File này thay thế hoàn toàn cho bản "[PLACEHOLDER]" ci.yml trước đó.
+# Gồm 5 job, chạy song song để rút ngắn thời gian pipeline:
+#
+#   1) backend-lint-test  -> Lint (ESLint) + unit test (Jest) cho backend.
+#   2) frontend-lint-test -> Lint (ESLint/next lint) + unit test (Jest +
+#                             Testing Library) cho frontend.
+#                             (Tách 2 job riêng thay vì gộp 1 job "lint-and-test"
+#                             để: chạy song song nhanh hơn, log không lẫn lộn
+#                             giữa 2 workspace, và nếu chỉ backend lỗi thì
+#                             không cần chờ/đọc log phần frontend và ngược lại.)
+#   3) gitleaks           -> Quét mã nguồn để phát hiện secret bị commit nhầm
+#                             (API key, password, private key, token...)
+#   4) sonarqube          -> Phân tích chất lượng code + phát hiện lỗi/code
+#                             smell/lỗ hổng bảo mật ở mức source code (SAST).
+#                             Chờ cả backend-lint-test và frontend-lint-test
+#                             chạy xong, tái sử dụng coverage report của cả
+#                             backend lẫn frontend thay vì chạy test lại lần 2.
+#   5) trivy-fs           -> Quét toàn bộ filesystem của repo (source code +
+#                             package-lock.json/lockfile) để tìm CVE trong
+#                             dependency và các misconfiguration (Dockerfile, IaC)
+#
+# backend-lint-test, frontend-lint-test, gitleaks, trivy-fs đều độc lập,
+# chạy song song ngay từ đầu. Riêng sonarqube chờ (needs) 2 job lint/test
+# xong để vừa tiết kiệm coverage, vừa tránh phân tích Sonar khi code còn
+# lỗi cơ bản.
+# =============================================================================
+
+name: CI
+
+# ---------------------------------------------------------------------------
+# THỜI ĐIỂM KÍCH HOẠT PIPELINE
+# ---------------------------------------------------------------------------
+on:
+  push:
+    branches: [main, thanhde]          # Quét mỗi khi có code mới trên nhánh chính
+  pull_request:
+    branches: [main, thanhde]          # Quét mọi PR trước khi cho phép merge
+  schedule:
+    # Quét định kỳ 03:00 sáng (UTC) mỗi thứ 2 để bắt các CVE mới phát hiện
+    # sau này trên dependency cũ (không phải do code thay đổi mà do CSDL CVE
+    # được cập nhật) — rất quan trọng với Trivy vì lỗ hổng mới ra hàng ngày.
+    - cron: "0 3 * * 1"
+  workflow_dispatch: {}                # Cho phép bấm "Run workflow" thủ công
+
+# Hủy các lần chạy cũ hơn của cùng 1 PR/branch khi có commit mới đẩy lên,
+# tránh tốn tài nguyên CI chạy song song nhiều lần cho cùng 1 nhánh.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # JOB 1: BACKEND LINT + TEST (CHẶN MERGE NẾU FAIL)
+  # ===========================================================================
+  backend-lint-test:
+    name: ✅ Backend - Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Lint (ESLint)
+        # Không có "|| echo" / continue-on-error: nếu ESLint tìm thấy lỗi
+        # (--max-warnings=0 nghĩa là kể cả warning cũng tính là lỗi), bước
+        # này FAIL và toàn bộ job FAIL theo, chặn merge.
+        working-directory: backend
+        run: npm run lint
+
+      - name: Unit test (sinh coverage report)
+        # "passWithNoTests" đã bật trong jest config nên nếu chưa có test
+        # nào, job vẫn pass — nhưng NẾU CÓ test mà bị fail thì bước này
+        # chặn merge ngay lập tức.
+        working-directory: backend
+        run: npm run test:cov
+
+      - name: Upload coverage report (để job sonarqube tái sử dụng)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage
+          retention-days: 1
+
+  # ===========================================================================
+  # JOB 2: FRONTEND LINT + TEST (CHẶN MERGE NẾU FAIL)
+  # ===========================================================================
+  frontend-lint-test:
+    name: ✅ Frontend - Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint (next lint / ESLint)
+        # frontend/.eslintrc.json đã khai báo sẵn "next/core-web-vitals" nên
+        # "next lint" chạy thẳng, không hỏi tương tác (Strict/Base) như khi
+        # thiếu file cấu hình — tránh treo pipeline trong môi trường CI.
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit test (sinh coverage report)
+        # jest.config.js đã bật "passWithNoTests" nên nếu chưa có file
+        # *.test.tsx nào, job vẫn pass — nhưng NẾU CÓ test mà bị fail thì
+        # bước này chặn merge ngay lập tức, giống hệt cơ chế bên backend.
+        working-directory: frontend
+        run: npm run test:cov
+
+      - name: Upload coverage report (để job sonarqube tái sử dụng)
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          retention-days: 1
+
+  # ===========================================================================
+  # JOB 3: GITLEAKS — QUÉT SECRET BỊ LỘ TRONG MÃ NGUỒN / LỊCH SỬ GIT
+  # ===========================================================================
+  gitleaks:
+    name: 🔑 GitLeaks - Secret Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # "security-events: write" cần thiết để upload kết quả vào tab
+      # "Security > Code scanning alerts" của GitHub (SARIF report)
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 => lấy TOÀN BỘ lịch sử commit (không chỉ commit mới nhất).
+          # Bắt buộc phải có vì secret có thể đã được commit rồi xóa ở commit sau,
+          # nếu chỉ checkout commit hiện tại thì GitLeaks sẽ không "nhìn thấy" secret cũ.
+          fetch-depth: 0
+
+      - name: Run GitLeaks
+        # Action chính thức của GitLeaks, tự động:
+        #  - Tải binary gitleaks phù hợp
+        #  - Quét toàn bộ history theo file cấu hình .gitleaks.toml (nếu có)
+        #  - Xuất báo cáo SARIF để hiển thị trực tiếp trên GitHub
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE chỉ cần khi dùng bản Organization (không bắt buộc
+          # với repo cá nhân/mã nguồn mở), để trống nếu dùng bản miễn phí.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          # Đường dẫn tới file cấu hình rule tùy biến (allowlist các false-positive
+          # như test fixture, .env.example...). Xem file .gitleaks.toml đi kèm.
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Nếu phát hiện secret -> action tự exit code khác 0 -> job "fail",
+          # chặn PR merge (khi bật branch protection "require status checks").
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
+
+      - name: Upload GitLeaks report (khi có phát hiện)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ===========================================================================
+  # JOB 4: SONARQUBE — PHÂN TÍCH CHẤT LƯỢNG CODE (SAST + CODE SMELL + COVERAGE)
+  # ===========================================================================
+  sonarqube:
+    name: 📊 SonarQube - Code Quality & SAST
+    runs-on: ubuntu-latest
+    # SonarCloud gói Free (private repo) CHỈ hỗ trợ 2 trường hợp:
+    #   - Push thẳng vào đúng nhánh main
+    #   - Pull Request có base (nhánh đích) là main
+    # KHÔNG hỗ trợ "branch analysis" cho nhánh khác main, kể cả khi mở PR
+    # nhắm vào 1 nhánh trung gian (vd. dev) thay vì main — vẫn bị lỗi 403.
+    # => Muốn check Quality Gate cho nhánh feature (vd. thanhde), phải mở PR
+    #    nhắm thẳng về main (không qua nhánh trung gian nào khác).
+    if: >
+      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Chờ backend-lint-test + frontend-lint-test chạy xong: vừa để tái sử
+    # dụng coverage report của backend (đỡ chạy Jest 2 lần), vừa hợp lý về
+    # thứ tự — không cần tốn thời gian phân tích Sonar nếu code còn lỗi
+    # lint/test cơ bản.
+    needs: [backend-lint-test, frontend-lint-test]
+    # SonarQube cần server riêng (self-hosted hoặc SonarCloud). Job này giả định
+    # bạn đã có SONAR_HOST_URL + SONAR_TOKEN khai báo trong
+    # Settings > Secrets and variables > Actions của repo.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # SonarQube cần full history để tính "New Code" (so sánh với baseline)
+          # và thống kê blame (ai sửa dòng nào lần cuối).
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      # ---- Cài dependency để Sonar type-check TypeScript chính xác hơn ----
+      # (không chạy lại lint/test ở đây nữa — đã chạy và pass ở 2 job
+      # backend-lint-test / frontend-lint-test rồi, tải coverage report
+      # có sẵn ở 2 bước dưới)
+      - name: Backend - Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Frontend - Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Download backend coverage report từ job backend-lint-test
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage
+
+      - name: Download frontend coverage report từ job frontend-lint-test
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+
+      - name: SonarQube Scan
+        # Action chính thức của SonarSource, đọc cấu hình từ sonar-project.properties
+        # ở thư mục gốc repo (đã tạo kèm theo — xem file đó để biết chi tiết
+        # từng thông số: source, exclusions, coverage report path...)
+        uses: sonarsource/sonarqube-scan-action@v4
+        env:
+          # URL server SonarQube (self-host) hoặc https://sonarcloud.io (SonarCloud)
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          # Token xác thực, tạo tại: SonarQube UI > My Account > Security > Generate Token
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: SonarQube Quality Gate check
+        # Sau khi scan xong, SonarQube server cần vài giây để tính toán Quality Gate
+        # (PASSED/FAILED dựa trên các ngưỡng: bugs, vulnerabilities, code smells,
+        # duplication, coverage...). Action này POLL kết quả rồi fail job nếu
+        # Quality Gate KHÔNG đạt, giúp chặn merge code chất lượng kém.
+        uses: sonarsource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ===========================================================================
+  # JOB 5: TRIVY — QUÉT FILESYSTEM (SOURCE CODE + DEPENDENCY) TÌM CVE
+  # ===========================================================================
+  trivy-fs:
+    name: 🛡️ Trivy - Filesystem Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # cần để upload SARIF lên tab "Security"
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan (tạo SARIF report cho GitHub Security tab)
+        # LƯU Ý VỀ VERSION: dùng tag có tiền tố "v" (vd: v0.36.0), KHÔNG dùng
+        # tag không có "v" (vd: 0.28.0, 0.34.2...) — các tag không có "v" đã
+        # bị Aquasecurity THU HỒI sau sự cố supply-chain attack (3/2026) và
+        # không còn tồn tại/an toàn để dùng. Kiểm tra version mới nhất tại:
+        # https://github.com/aquasecurity/trivy-action/releases
+        #
+        # scan-type: 'fs' => quét TOÀN BỘ thư mục repo hiện tại thay vì quét
+        # Docker image đã build. Trivy sẽ tự động:
+        #  - Đọc package-lock.json (backend & frontend) để tìm CVE trong
+        #    dependency npm (giống "npm audit" nhưng CSDL rộng hơn: OS pkgs,
+        #    Go modules, Python...).
+        #  - Đọc Dockerfile trong docker/ để phát hiện misconfiguration
+        #    (chạy container bằng user root, thiếu HEALTHCHECK, COPY --chown...).
+        #  - Đọc docker-compose.yml để phát hiện cấu hình không an toàn.
+        #
+        # Step này KHÔNG chặn merge (exit-code: "0") — nhiệm vụ duy nhất của
+        # nó là sinh ra file SARIF để upload lên tab Security, việc CHẶN merge
+        # được tách riêng ra step "Trivy filesystem scan - gate" bên dưới.
+        # Lý do tách: kết hợp format=sarif + output=file + exit-code=1 trong
+        # CÙNG 1 lần chạy từng gây exit code 1 dù bảng kết quả thực tế 0 lỗi
+        # — tách ra để mỗi step chỉ làm 1
+        # nhiệm vụ, dễ debug, và log luôn có bảng người đọc được khi fail.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          skip-dirs: "node_modules,frontend/.next,backend/dist"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "sarif"
+          output: "trivy-fs-results.sarif"
+          exit-code: "0"
+
+      - name: Trivy filesystem scan - gate (CHẶN merge nếu có CRITICAL/HIGH)
+        # Step riêng, chỉ để quyết định pass/fail. format=table (không phải
+        # sarif, không ghi ra file) nên khi fail, LOG SẼ IN THẲNG BẢNG CVE/
+        # SECRET RA MÀN HÌNH — không cần thêm step debug thủ công nữa.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          skip-dirs: "node_modules,frontend/.next,backend/dist"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "table"
+          exit-code: "1"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        # Luôn chạy bước này kể cả khi bước quét ở trên "fail" (exit-code 1),
+        # vì ta vẫn muốn thấy report ngay cả khi pipeline bị chặn.
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-fs-results.sarif"
+
+      - name: Upload Trivy report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs-report
+          path: trivy-fs-results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
