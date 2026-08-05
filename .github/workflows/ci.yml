@@ -309,6 +309,18 @@ jobs:
           # chặn merge PR. Đổi thành '0' nếu chỉ muốn cảnh báo mà không chặn.
           exit-code: "1"
 
+      - name: 🔍 DEBUG - Trivy scan (in bảng ra log để xem chính xác lỗi)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          skip-dirs: "node_modules,frontend/.next,backend/dist"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "table"        # <-- không dùng sarif, để in trực tiếp ra log
+          exit-code: "0"          # <-- không cho fail step debug này
+
       - name: Upload Trivy scan results to GitHub Security tab
         # Luôn chạy bước này kể cả khi bước quét ở trên "fail" (exit-code 1),
         # vì ta vẫn muốn thấy report ngay cả khi pipeline bị chặn.
