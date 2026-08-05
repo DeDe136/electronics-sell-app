@@ -313,6 +313,7 @@ jobs:
         # Luôn chạy bước này kể cả khi bước quét ở trên "fail" (exit-code 1),
         # vì ta vẫn muốn thấy report ngay cả khi pipeline bị chặn.
         if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: "trivy-fs-results.sarif"
