@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
@@ -501,7 +502,11 @@ export class OrderService {
 
   private generateOrderCode(): string {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
+    // Dùng crypto.randomBytes thay vì Math.random():
+    // - Sửa cảnh báo SonarQube (S2245 - insecure PRNG)
+    // - 4 byte -> 8 ký tự hex -> 16^8 ≈ 4.3 tỷ tổ hợp/ngày, giảm mạnh rủi ro
+    //   đụng độ so với Math.random() cũ (cột orderCode có ràng buộc UNIQUE)
+    const rand = randomBytes(4).toString('hex').toUpperCase();
     return `ORD-${date}-${rand}`;
   }
 }
