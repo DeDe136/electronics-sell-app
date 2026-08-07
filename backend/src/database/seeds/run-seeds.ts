@@ -8,7 +8,7 @@
 
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
-import * as path from 'path';
+import * as path from 'node:path';
 import { DataSource } from 'typeorm';
 
 // Load .env từ thư mục backend/
