@@ -15,6 +15,7 @@
 #   HARBOR_REGISTRY     = harbor.yourdomain.com
 #   HARBOR_ROBOT_USER    = robot$electronics-shop+ci-cd
 #   HARBOR_ROBOT_TOKEN   = <token robot account>
+#   HARBOR_CA_CERT       = <nội dung file CA cert của Harbor, base64 encode>
 #   NEXT_PUBLIC_API_URL  = URL backend thật (dùng khi build frontend)
 # =============================================================================
 

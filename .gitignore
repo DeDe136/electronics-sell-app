@@ -63,7 +63,7 @@ minio-data/
 
 # ── Uploads (nếu lưu local thay S3) ───────
 uploads/
-public/uploads/
+#public/uploads/
 
 # ── Next.js specifics ─────────────────────
 .next/
