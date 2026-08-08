@@ -154,6 +154,13 @@ jobs:
       # "security-events: write" cần thiết để upload kết quả vào tab
       # "Security > Code scanning alerts" của GitHub (SARIF report)
       security-events: write
+      # "pull-requests: read" CHỈ cần khi trigger là event "pull_request":
+      # gitleaks-action gọi API GET /repos/.../pulls/{number}/commits để lấy
+      # đúng danh sách commit thuộc PR (quét diff của PR thay vì toàn bộ repo).
+      # Thiếu quyền này thì lúc "push" vẫn pass bình thường (action không gọi
+      # API đó), nhưng lúc "pull_request" sẽ fail với lỗi 403
+      # "Resource not accessible by integration".
+      pull-requests: read
 
     steps:
       - name: Checkout code
