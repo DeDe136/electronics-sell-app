@@ -51,15 +51,21 @@ jobs:
     strategy:
       # Build & quét song song backend/frontend — 1 service fail không chặn
       # service còn lại, và không phải chờ tuần tự.
+      #
+      # LƯU Ý: KHÔNG được đặt "${{ secrets.* }}" bên trong "matrix" — context
+      # "secrets" không tồn tại tại thời điểm GitHub Actions evaluate/parse
+      # matrix (khác với context "github", "needs", "vars"...). Đặt vào đây
+      # sẽ làm cả workflow bị GitHub từ chối ngay từ bước "Invalid workflow
+      # file", chưa kịp chạy job nào. Vì vậy "build-args" của frontend được
+      # tính trực tiếp ở step build bên dưới (dùng matrix.service để rẽ
+      # nhánh), không đặt sẵn trong "matrix".
       fail-fast: false
       matrix:
         include:
           - service: backend
             dockerfile: docker/backend.Dockerfile
-            build-args: ""
           - service: frontend
             dockerfile: docker/frontend.Dockerfile
-            build-args: "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}"
 
     steps:
       - name: Checkout code
@@ -87,6 +93,10 @@ jobs:
       # SHA để có thể rollback về đúng bản build trước đó, tag "latest" để môi
       # trường staging luôn pull bản mới nhất — cả 2 tag cùng trỏ vào 1 lần
       # build này, không build lại cho từng tag.
+      #
+      # build-args: chỉ backend KHÔNG cần build-arg nào (chuỗi rỗng), frontend
+      # cần NEXT_PUBLIC_API_URL. "secrets" hợp lệ ở đây vì đây là step-level
+      # "with", khác với "matrix" ở trên.
       - name: Build ${{ matrix.service }} image (chưa push)
         uses: docker/build-push-action@v6
         with:
@@ -94,7 +104,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: false
           load: true
-          build-args: ${{ matrix.build-args }}
+          build-args: ${{ matrix.service == 'frontend' && format('NEXT_PUBLIC_API_URL={0}', secrets.NEXT_PUBLIC_API_URL) || '' }}
           tags: |
             ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}
             ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:latest
