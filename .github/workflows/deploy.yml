@@ -1,9 +1,159 @@
-# [PLACEHOLDER] Deploy Pipeline
-# Trigger: push to main (after CI passes)
-# Environments: staging, production
-# Steps:
-#   1. Build & push Docker images
-#   2. Deploy to ECS / EC2 / VPS
-#   3. Run DB migrations
+# =============================================================================
+# CD PIPELINE — Build, quét Trivy, rồi mới Push Docker images lên Harbor
+# -----------------------------------------------------------------------------
+# CHỈ chạy sau khi CI (ci.yml) đã hoàn tất trên nhánh main VÀ kết quả là
+# "success" — cố ý KHÔNG khai báo thêm trigger "push" song song, vì như vậy
+# sẽ chạy 2 lần cho cùng 1 commit (1 lần ngay khi push, không đợi CI; 1 lần
+# nữa khi CI xong) và lần chạy đầu có thể push image lên Harbor dù code
+# đang fail lint/test/Trivy ở CI.
+#
+# Job này build image ĐÚNG 1 LẦN DUY NHẤT cho mỗi service rồi dùng lại cho cả
+# 2 việc: quét Trivy VÀ push lên Harbor — không build lại lần 2 như trước đây
+# (trước đây job "docker-build-check" ở ci.yml build 1 lần để quét, rồi job
+# này build lại lần 2 để push, tốn gấp đôi thời gian CI cho cùng 1 commit khi
+# push thẳng vào main). Thứ tự bắt buộc: build (không push) -> Trivy gate ->
+# chỉ khi Trivy pass mới thật sự "docker push" image đã build sẵn.
+#   1) Đăng nhập Harbor bằng robot account (không dùng tài khoản admin)
+#   2) Build 2 image (backend, frontend) từ Dockerfile trong docker/, nạp vào
+#      Docker daemon của runner (chưa push)
+#   3) Trivy quét CHÍNH image vừa build — nếu có CVE mức CRITICAL/HIGH thì
+#      dừng lại, KHÔNG push image lỗi lên Harbor
+#   4) Chỉ khi Trivy pass mới push cả 2 tag (SHA commit + "latest") lên Harbor
+#
+# Cần khai báo trước ở Settings > Secrets and variables > Actions:
+#   HARBOR_REGISTRY     = harbor.yourdomain.com
+#   HARBOR_ROBOT_USER    = robot$electronics-shop+ci-cd
+#   HARBOR_ROBOT_TOKEN   = <token robot account>
+#   HARBOR_CA_CERT       = <nội dung file CA cert của Harbor, base64 encode>
+#   NEXT_PUBLIC_API_URL  = URL backend thật (dùng khi build frontend)
+# =============================================================================
+
+name: CD - Build, Scan & Push Images
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build-scan-push:
+    name: 🐳 Build, Scan & Push to Harbor
+    runs-on: ubuntu-latest
+    # workflow_dispatch (chạy tay) luôn được phép chạy; còn khi trigger bởi
+    # workflow_run (tự động sau CI) thì BẮT BUỘC CI phải "success".
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      security-events: write   # cần để upload SARIF lên tab "Security"
+
+    strategy:
+      # Build & quét song song backend/frontend — 1 service fail không chặn
+      # service còn lại, và không phải chờ tuần tự.
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            dockerfile: docker/backend.Dockerfile
+            build-args: ""
+          - service: frontend
+            dockerfile: docker/frontend.Dockerfile
+            build-args: "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Trust Harbor self-signed CA
+        run: |
+          echo "${{ secrets.HARBOR_CA_CERT }}" | base64 -d | sudo tee /usr/local/share/ca-certificates/harbor-ca.crt
+          sudo update-ca-certificates
+          sudo mkdir -p /etc/docker/certs.d/${{ secrets.HARBOR_REGISTRY }}
+          echo "${{ secrets.HARBOR_CA_CERT }}" | base64 -d | sudo tee /etc/docker/certs.d/${{ secrets.HARBOR_REGISTRY }}/ca.crt
+
+      - name: Login vào Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      # push: false + load: true => build xong nạp thẳng vào Docker daemon của
+      # runner để Trivy quét được ở bước sau, CHƯA đẩy lên Harbor vội. Tag theo
+      # SHA để có thể rollback về đúng bản build trước đó, tag "latest" để môi
+      # trường staging luôn pull bản mới nhất — cả 2 tag cùng trỏ vào 1 lần
+      # build này, không build lại cho từng tag.
+      - name: Build ${{ matrix.service }} image (chưa push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          build-args: ${{ matrix.build-args }}
+          tags: |
+            ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}
+            ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image scan - ${{ matrix.service }} (sinh SARIF, không chặn)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "image"
+          image-ref: "${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "sarif"
+          output: "trivy-deploy-${{ matrix.service }}-results.sarif"
+          exit-code: "0"
+
+      - name: Upload Trivy image scan results to GitHub Security tab
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-deploy-${{ matrix.service }}-results.sarif"
+          category: "trivy-deploy-${{ matrix.service }}"
+
+      - name: Upload Trivy report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-deploy-${{ matrix.service }}-report
+          path: trivy-deploy-${{ matrix.service }}-results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Đây mới là bước THẬT SỰ chặn: nếu còn CVE mức CRITICAL/HIGH thì dừng
+      # job ngay tại đây — 2 bước push tag bên dưới sẽ KHÔNG được chạy tới,
+      # image lỗi không bao giờ lên tới Harbor.
+      - name: Trivy image scan - ${{ matrix.service }} - gate (CHẶN push nếu có CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "image"
+          image-ref: "${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "table"
+          exit-code: "1"
+
+      # Image đã build & pass Trivy ở trên rồi, chỉ cần "docker push" thẳng
+      # 2 tag đã có sẵn trong daemon — không build lại lần nào nữa.
+      - name: Push ${{ matrix.service }} image (SHA tag)
+        run: docker push ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}
+
+      - name: Push ${{ matrix.service }} image (latest tag)
+        run: docker push ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:latest
+
+# -----------------------------------------------------------------------------
+# [PLACEHOLDER] Các job tiếp theo, thêm dần khi hạ tầng deploy đã sẵn sàng:
+#   2. Deploy to ECS / EC2 / VPS  (SSH vào server, docker compose pull && up -d)
+#   3. Run DB migrations          (scripts/migrate.sh)
 #   4. Health check
 #   5. Notify Slack on success/failure
+# -----------------------------------------------------------------------------

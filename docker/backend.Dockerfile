@@ -55,6 +55,13 @@ RUN npm ci --omit=dev && npm cache clean --force
 FROM node:20-alpine AS runner
 WORKDIR /app
 
+# Vá OS package ngay tại thời điểm build, KHÔNG trông chờ tag "node:20-alpine"
+# trên Docker Hub đã sẵn bản vá — vì GitHub Actions runner luôn build từ máy ảo
+# mới hoàn toàn, "apk upgrade" ở đây đảm bảo mọi lần CI chạy đều lấy bản vá CVE
+# mới nhất từ kho Alpine tại đúng thời điểm build đó, không phụ thuộc vào việc
+# base image trên Docker Hub đã được rebuild lại hay chưa.
+RUN apk update && apk upgrade --no-cache
+
 # NODE_ENV=production: giúp các thư viện (Express, NestJS...) tối ưu hiệu năng,
 # tắt các log/warning chỉ dùng cho dev.
 ENV NODE_ENV=production
@@ -89,6 +96,13 @@ COPY --from=deps    --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist         ./dist
 # Copy package.json để Node có thể đọc metadata (version, main entry, ...)
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
+
+# App runtime chỉ chạy bằng "node dist/main", không hề gọi tới "npm"/"npx".
+# Xoá hẳn npm CLI (vốn được đóng gói sẵn trong base image node:20-alpine)
+# để loại bỏ luôn các CVE tới từ dependency NỘI BỘ của chính npm (tar,
+# sigstore, @sigstore/core, ip-address...) — đây không phải dependency của
+# app nên không ảnh hưởng gì tới việc chạy app.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Chuyển sang user không phải root trước khi chạy app
 USER nestjs

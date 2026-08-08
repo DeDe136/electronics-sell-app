@@ -2,7 +2,7 @@
 # CI PIPELINE — DevSecOps cho electronics-shop
 # -----------------------------------------------------------------------------
 # File này thay thế hoàn toàn cho bản "[PLACEHOLDER]" ci.yml trước đó.
-# Gồm 5 job, chạy song song để rút ngắn thời gian pipeline:
+# Gồm 6 job, chạy song song để rút ngắn thời gian pipeline:
 #
 #   1) backend-lint-test  -> Lint (ESLint) + unit test (Jest) cho backend.
 #   2) frontend-lint-test -> Lint (ESLint/next lint) + unit test (Jest +
@@ -21,11 +21,18 @@
 #   5) trivy-fs           -> Quét toàn bộ filesystem của repo (source code +
 #                             package-lock.json/lockfile) để tìm CVE trong
 #                             dependency và các misconfiguration (Dockerfile, IaC)
+#   6) docker-build-check -> Build thử 2 image (backend, frontend) từ Dockerfile,
+#                             KHÔNG push đi đâu cả — chỉ để: (a) bắt lỗi Dockerfile
+#                             hỏng ngay từ lúc PR thay vì đợi tới deploy.yml,
+#                             (b) Trivy quét CHÍNH image vừa build (khác với
+#                             trivy-fs ở job 5 — job đó chỉ quét mã nguồn/lockfile,
+#                             chưa "nhìn thấy" base image và các layer OS package
+#                             thực sự nằm trong image cuối cùng).
 #
-# backend-lint-test, frontend-lint-test, gitleaks, trivy-fs đều độc lập,
-# chạy song song ngay từ đầu. Riêng sonarqube chờ (needs) 2 job lint/test
-# xong để vừa tiết kiệm coverage, vừa tránh phân tích Sonar khi code còn
-# lỗi cơ bản.
+# backend-lint-test, frontend-lint-test, gitleaks, trivy-fs, docker-build-check
+# đều độc lập, chạy song song ngay từ đầu. Riêng sonarqube chờ (needs) 2 job
+# lint/test xong để vừa tiết kiệm coverage, vừa tránh phân tích Sonar khi code
+# còn lỗi cơ bản.
 # =============================================================================
 
 name: CI
@@ -147,6 +154,13 @@ jobs:
       # "security-events: write" cần thiết để upload kết quả vào tab
       # "Security > Code scanning alerts" của GitHub (SARIF report)
       security-events: write
+      # "pull-requests: read" CHỈ cần khi trigger là event "pull_request":
+      # gitleaks-action gọi API GET /repos/.../pulls/{number}/commits để lấy
+      # đúng danh sách commit thuộc PR (quét diff của PR thay vì toàn bộ repo).
+      # Thiếu quyền này thì lúc "push" vẫn pass bình thường (action không gọi
+      # API đó), nhưng lúc "pull_request" sẽ fail với lỗi 403
+      # "Resource not accessible by integration".
+      pull-requests: read
 
     steps:
       - name: Checkout code
@@ -348,5 +362,104 @@ jobs:
         with:
           name: trivy-fs-report
           path: trivy-fs-results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ===========================================================================
+  # JOB 6: DOCKER BUILD CHECK — BUILD THỬ IMAGE (KHÔNG PUSH) + TRIVY QUÉT IMAGE
+  # ===========================================================================
+  # Khác với deploy.yml (build & PUSH lên Harbor, chỉ chạy sau khi CI pass trên
+  # main), job này build image NGAY TỪ LÚC PR để bắt lỗi Dockerfile sớm, và
+  # KHÔNG BAO GIỜ push đi đâu — image chỉ tồn tại tạm trong Docker daemon của
+  # runner rồi mất đi khi job kết thúc.
+  docker-build-check:
+    name: 🐳 Docker Build Check + Trivy Image Scan
+    runs-on: ubuntu-latest
+    # Chỉ cần chạy để "kiểm tra sớm" lúc PR / push nhánh làm việc (thanhde) hoặc PR vào nhánh main.
+    # Khi trigger là push thẳng vào main, KHÔNG chạy job này nữa — vì deploy.yml
+    # (kích hoạt ngay sau khi CI này hoàn tất) sẽ tự build lại + quét Trivy +
+    # push lên Harbor trong đúng 1 lần build duy nhất. Nếu vẫn chạy ở đây thì
+    # image bị build 2 lần cho cùng 1 commit (lãng phí thời gian CI) mà không
+    # thêm được giá trị gì, vì deploy.yml sẽ tự chặn push khi Trivy fail.
+    if: "!(github.event_name == 'push' && github.ref == 'refs/heads/main')"
+    permissions:
+      contents: read
+      security-events: write   # cần để upload SARIF lên tab "Security"
+
+    strategy:
+      # Chạy song song 2 image thay vì tuần tự — build backend lỗi không
+      # phải chờ build frontend xong mới biết.
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            dockerfile: docker/backend.Dockerfile
+            build-args: ""
+          - service: frontend
+            dockerfile: docker/frontend.Dockerfile
+            # Chỉ cần giá trị placeholder để build qua được bước ARG, vì đây
+            # là build kiểm tra — không phải image sẽ đem deploy thật.
+            build-args: "NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }} image (không push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          # push: false + load: true => build xong nạp thẳng vào Docker daemon
+          # của runner (docker images sẽ thấy nó) để bước Trivy bên dưới quét
+          # được, nhưng không đẩy đi bất cứ registry nào.
+          push: false
+          load: true
+          build-args: ${{ matrix.build-args }}
+          tags: ci-check/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image scan - ${{ matrix.service }} (sinh SARIF, không chặn)
+        # scan-type: "image" (khác "fs" ở job trivy-fs) => quét CHÍNH image đã
+        # build: base image (node:20-alpine...), OS package thực sự có trong
+        # layer cuối, không chỉ package-lock.json như trivy-fs.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "image"
+          image-ref: "ci-check/${{ matrix.service }}:${{ github.sha }}"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "sarif"
+          output: "trivy-image-${{ matrix.service }}-results.sarif"
+          exit-code: "0"
+
+      - name: Trivy image scan - ${{ matrix.service }} - gate (CHẶN merge nếu có CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: "image"
+          image-ref: "ci-check/${{ matrix.service }}:${{ github.sha }}"
+          trivyignores: "security/.trivyignore"
+          severity: "CRITICAL,HIGH"
+          format: "table"
+          exit-code: "1"
+
+      - name: Upload Trivy image scan results to GitHub Security tab
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-image-${{ matrix.service }}-results.sarif"
+          category: "trivy-image-${{ matrix.service }}"
+
+      - name: Upload Trivy image report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-${{ matrix.service }}-report
+          path: trivy-image-${{ matrix.service }}-results.sarif
           if-no-files-found: ignore
           retention-days: 14

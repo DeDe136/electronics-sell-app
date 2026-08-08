@@ -67,6 +67,12 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
+# Vá OS package ngay tại thời điểm build, KHÔNG trông chờ tag "node:20-alpine"
+# trên Docker Hub đã sẵn bản vá — xử lý các CVE mức LOW/MEDIUM/HIGH của
+# libssl3 (xem giải thích chi tiết trong docker/backend.Dockerfile, áp dụng
+# y hệt ở đây vì cùng chung base image).
+RUN apk update && apk upgrade --no-cache
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 # Cổng Next.js server sẽ lắng nghe
@@ -82,13 +88,13 @@ RUN apk add --no-cache dumb-init
 # Tạo user riêng không phải root để chạy app (bảo mật tốt hơn)
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 
-# Đảm bảo luôn có thư mục /app/public dự phòng dù project hiện tại chưa có thư mục
-# "public" nào (next.config.js standalone output vẫn mong đợi copy public/,
-# nếu thiếu thư mục này COPY phía dưới sẽ lỗi ở một số version Docker).
-RUN mkdir -p /app/public
+# # Đảm bảo luôn có thư mục /app/public dự phòng dù project hiện tại chưa có thư mục
+# # "public" nào (next.config.js standalone output vẫn mong đợi copy public/,
+# # nếu thiếu thư mục này COPY phía dưới sẽ lỗi ở một số version Docker).
+# RUN mkdir -p /app/public
 
-# Copy các file tĩnh (ảnh, favicon, ...) nếu có
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# # Copy các file tĩnh (ảnh, favicon, ...) nếu có
+# COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Copy server đã build ở chế độ "standalone" — bao gồm server.js và
 # node_modules TỐI THIỂU cần thiết (đã được Next.js tự động trace/prune).
@@ -100,6 +106,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # "standalone" nên phải copy thêm bước này theo đúng tài liệu chính thức
 # của Next.js.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# App runtime chỉ chạy bằng "node server.js", không hề gọi tới "npm"/"npx".
+# Xoá hẳn npm CLI (đóng gói sẵn trong base image node:20-alpine) để loại bỏ
+# các CVE tới từ dependency NỘI BỘ của chính npm (tar, sigstore,
+# @sigstore/core, ip-address...) — đây không phải dependency của app nên
+# không ảnh hưởng gì tới việc chạy app. PHẢI chạy trước "USER nextjs" vì cần
+# quyền root để xoá file hệ thống — user "nextjs" không có quyền này.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Chuyển sang user không phải root trước khi chạy app
 USER nextjs
