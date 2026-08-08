@@ -368,6 +368,13 @@ jobs:
   docker-build-check:
     name: 🐳 Docker Build Check + Trivy Image Scan
     runs-on: ubuntu-latest
+    # Chỉ cần chạy để "kiểm tra sớm" lúc PR / push nhánh làm việc (thanhde) hoặc PR vào nhánh main.
+    # Khi trigger là push thẳng vào main, KHÔNG chạy job này nữa — vì deploy.yml
+    # (kích hoạt ngay sau khi CI này hoàn tất) sẽ tự build lại + quét Trivy +
+    # push lên Harbor trong đúng 1 lần build duy nhất. Nếu vẫn chạy ở đây thì
+    # image bị build 2 lần cho cùng 1 commit (lãng phí thời gian CI) mà không
+    # thêm được giá trị gì, vì deploy.yml sẽ tự chặn push khi Trivy fail.
+    if: "!(github.event_name == 'push' && github.ref == 'refs/heads/main')"
     permissions:
       contents: read
       security-events: write   # cần để upload SARIF lên tab "Security"

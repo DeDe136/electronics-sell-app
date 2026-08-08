@@ -82,13 +82,13 @@ RUN apk add --no-cache dumb-init
 # Tạo user riêng không phải root để chạy app (bảo mật tốt hơn)
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 
-# Đảm bảo luôn có thư mục /app/public dự phòng dù project hiện tại chưa có thư mục
-# "public" nào (next.config.js standalone output vẫn mong đợi copy public/,
-# nếu thiếu thư mục này COPY phía dưới sẽ lỗi ở một số version Docker).
-RUN mkdir -p /app/public
+# # Đảm bảo luôn có thư mục /app/public dự phòng dù project hiện tại chưa có thư mục
+# # "public" nào (next.config.js standalone output vẫn mong đợi copy public/,
+# # nếu thiếu thư mục này COPY phía dưới sẽ lỗi ở một số version Docker).
+# RUN mkdir -p /app/public
 
-# Copy các file tĩnh (ảnh, favicon, ...) nếu có
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# # Copy các file tĩnh (ảnh, favicon, ...) nếu có
+# COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Copy server đã build ở chế độ "standalone" — bao gồm server.js và
 # node_modules TỐI THIỂU cần thiết (đã được Next.js tự động trace/prune).
