@@ -1,0 +1,25 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: electronics-shop
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    # Traefik (K3s mặc định) tự nhận diện IngressClass, không cần thêm annotation
+    # rewrite gì đặc biệt cho case đơn giản này. Trên EKS đổi className/annotations
+    # theo AWS Load Balancer Controller (kubernetes.io/ingress.class: alb...).
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { number: {{ .Values.backend.port }} } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { number: {{ .Values.frontend.port }} } }
+{{- end }}

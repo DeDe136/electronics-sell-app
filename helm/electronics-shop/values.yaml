@@ -1,0 +1,74 @@
+## values.yaml — default cho môi trường LOCAL K3s.
+## Khi lên EKS: override bằng "values-eks.yaml" (helm upgrade -f values-eks.yaml)
+
+global:
+  namespace: electronics-shop
+
+image:
+  registry: harbor.local            # đổi thành domain/IP Harbor thật của bạn, KHÔNG có https://
+  project: electronics-shop
+  backendRepository: backend
+  frontendRepository: frontend
+  tag: latest
+  pullPolicy: IfNotPresent
+  # Tên Secret kiểu kubernetes.io/dockerconfigjson để pull image private từ Harbor.
+  # Tạo bằng: kubectl create secret docker-registry harbor-pull-secret ...
+  pullSecretName: harbor-pull-secret
+
+backend:
+  replicaCount: 1
+  port: 3001
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  env:
+    nodeEnv: production
+    jwtExpiresIn: 7d
+    frontendUrl: "http://techshop.local"
+    storageProvider: minio
+
+frontend:
+  replicaCount: 1
+  port: 3000
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 384Mi }
+  env:
+    # URL public mà TRÌNH DUYỆT gọi tới backend — phải khớp với ingress host bên dưới.
+    # LƯU Ý: giá trị này bị "đóng cứng" lúc build image (xem frontend.Dockerfile),
+    # nên nếu đổi domain phải build lại image, sửa ở đây KHÔNG có tác dụng runtime.
+    nextPublicApiUrl: "http://techshop.local/api/v1"
+
+postgres:
+  image: postgres:16-alpine
+  storage: 5Gi
+  storageClassName: local-path   # StorageClass mặc định của K3s. Trên EKS đổi thành "gp3"
+  database: electronics_shop
+  username: postgres
+  # password thật để trong Secret riêng (secrets.yaml / --set / external-secrets),
+  # KHÔNG commit giá trị thật vào values.yaml này.
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+minio:
+  image: minio/minio:latest
+  storage: 5Gi
+  storageClassName: local-path
+  bucket: electronics-shop
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 300m, memory: 256Mi }
+
+ingress:
+  enabled: true
+  className: traefik    # K3s cài sẵn Traefik làm ingress controller mặc định
+  host: techshop.local
+  # Trên EKS: className: alb (dùng AWS Load Balancer Controller) + annotations riêng
+
+secrets:
+  # Giá trị mặc định CHỈ để test local — bắt buộc đổi trước khi lên EKS/production.
+  jwtSecret: "change-me-in-production"
+  postgresPassword: "postgres"
+  minioAccessKey: "minioadmin"
+  minioSecretKey: "minioadmin"

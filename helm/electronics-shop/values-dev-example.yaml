@@ -1,0 +1,36 @@
+# values-dev-example.yaml
+#
+# Đây là file MẪU, được commit lên Git để bất kỳ ai clone repo cũng biết cần
+# khai báo những gì cho môi trường local/dev của họ.
+#
+# CÁCH DÙNG:
+#   1. Copy file này thành "values-dev.yaml" (cùng thư mục helm/electronics-shop/):
+#        cp values-dev-example.yaml values-dev.yaml
+#   2. Sửa các giá trị bên dưới cho đúng với Harbor / máy K3s của BẠN.
+#   3. Deploy bằng:
+#        helm install electronics-shop . \
+#          --namespace electronics-shop --create-namespace \
+#          -f values-dev.yaml
+#
+# LƯU Ý: "values-dev.yaml" (không có "-example") đã được thêm vào .gitignore —
+# KHÔNG commit file đó lên Git vì nó chứa IP/thông tin riêng của từng máy.
+
+image:
+  # Địa chỉ Harbor của bạn — IP nếu dùng self-signed cert, hoặc domain nếu có SSL.
+  # KHÔNG thêm "https://" hay dấu "/" ở cuối.
+  registry: "<IP-hoac-domain-harbor-cua-ban>"
+
+# Nếu bạn dùng robot account có tên/token khác mặc định, hoặc muốn đổi Secret
+# name pull image, có thể override thêm tại đây, ví dụ:
+# image:
+#   pullSecretName: "harbor-pull-secret"
+
+# Domain test local trỏ qua /etc/hosts (xem hướng dẫn phần Ingress)
+# ingress:
+#   host: "techshop.local"
+
+# Các giá trị bí mật (JWT, DB password, MinIO key) mặc định trong values.yaml
+# CHỈ để test — nếu muốn đổi riêng cho máy bạn, override thêm ở đây, ví dụ:
+# secrets:
+#   jwtSecret: "doi-thanh-chuoi-ngau-nhien-cua-ban"
+#   postgresPassword: "doi-mat-khau-khac"

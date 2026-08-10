@@ -1,0 +1,6 @@
+apiVersion: v2
+name: electronics-shop
+description: Helm chart cho TechShop (NestJS backend + Next.js frontend + Postgres + MinIO)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
