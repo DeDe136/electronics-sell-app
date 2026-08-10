@@ -73,6 +73,10 @@ ingress:
   className: traefik    # K3s cài sẵn Traefik làm ingress controller mặc định
   host: techshop.local
   # Trên EKS: className: alb (dùng AWS Load Balancer Controller) + annotations riêng
+  minio:
+    enabled: true
+    consoleHost: minio.techshop.local   # giao diện web MinIO, để test upload tay
+    apiHost: s3.techshop.local          # S3 API, nơi presigned URL trỏ tới
 
 secrets:
   # Giá trị mặc định CHỈ để test local — bắt buộc đổi trước khi lên EKS/production.
