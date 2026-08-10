@@ -12,8 +12,16 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
   # Tên Secret kiểu kubernetes.io/dockerconfigjson để pull image private từ Harbor.
-  # Tạo bằng: kubectl create secret docker-registry harbor-pull-secret ...
   pullSecretName: harbor-pull-secret
+
+  # Nếu create=true, chart tự tạo Secret "pullSecretName" ở trên (không cần
+  # "kubectl create secret docker-registry" bằng tay nữa).
+  # username/password để trống ở đây (file commit lên Git) — điền giá trị thật
+  # trong values-dev.yaml (file KHÔNG commit).
+  harborAuth:
+    create: true
+    username: ""
+    password: ""
 
 backend:
   replicaCount: 1

@@ -20,6 +20,12 @@ image:
   # KHÔNG thêm "https://" hay dấu "/" ở cuối.
   registry: "<IP-hoac-domain-harbor-cua-ban>"
 
+  # Thông tin robot account Harbor — dùng để Helm tự tạo Secret pull image,
+  # KHÔNG cần chạy "kubectl create secret docker-registry" bằng tay nữa.
+  harborAuth:
+    username: "<robot-account-name>"   # đổi đúng tên robot account của bạn
+    password: "<robot-account-token>"
+
 # Nếu bạn dùng robot account có tên/token khác mặc định, hoặc muốn đổi Secret
 # name pull image, có thể override thêm tại đây, ví dụ:
 # image:
@@ -34,3 +40,5 @@ image:
 # secrets:
 #   jwtSecret: "doi-thanh-chuoi-ngau-nhien-cua-ban"
 #   postgresPassword: "doi-mat-khau-khac"
+#   minioAccessKey: "doi-access-key-cua-ban"
+#   minioSecretKey: "doi-secret-key-cua-ban"
