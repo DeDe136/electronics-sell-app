@@ -64,8 +64,12 @@ spec:
   # Tăng backoffLimit + activeDeadlineSeconds làm "lưới an toàn" thứ 2, phòng khi
   # MinIO khởi động chậm bất thường (máy yếu, lần đầu tạo PVC...). Vòng lặp chờ
   # bên dưới mới là cơ chế chính xử lý race-condition.
-  backoffLimit: 6
-  activeDeadlineSeconds: 180 # Chờ 
+  # 600s (10 phút) — đủ rộng để chịu được lần cài đầu tiên: kéo image MinIO +
+  # image mc, cấp phát PVC, MinIO khởi động lần đầu. Các lần "helm upgrade" sau
+  # (image đã cache, MinIO đã chạy sẵn) thường xong trong vài giây, deadline
+  # rộng này không ảnh hưởng gì tới tốc độ thực tế.
+  backoffLimit: 3
+  activeDeadlineSeconds: 180 # Chờ tối đa 3 phút, nếu MinIO chưa sẵn sàng thì Job fail
   template:
     spec:
       restartPolicy: OnFailure
@@ -82,7 +86,7 @@ spec:
                 sleep 3
               done
               echo "MinIO đã sẵn sàng, tạo bucket (bỏ qua nếu đã tồn tại)..."
-              mc mb -p --ignore-existing local/{{ .Values.minio.bucket }} &&
+              mc mb --ignore-existing local/{{ .Values.minio.bucket }} &&
               mc anonymous set download local/{{ .Values.minio.bucket }}
           env:
             - name: MINIO_ACCESS_KEY
