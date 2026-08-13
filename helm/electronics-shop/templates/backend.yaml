@@ -4,6 +4,8 @@ metadata:
   name: backend
   namespace: {{ .Values.global.namespace }}
   labels: { app: backend }
+  annotations:
+    rollout-demo: "{{ now | date "20060102150405" }}"
 spec:
   replicas: {{ .Values.backend.replicaCount }}
   selector:
