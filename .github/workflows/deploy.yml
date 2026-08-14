@@ -38,38 +38,94 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Xác định service nào THẬT SỰ có thay đổi trong commit vừa push, để job build
+  # bên dưới chỉ build/push đúng service đó — tránh build cả 2 cho mọi commit.
+  # workflow_run KHÔNG hỗ trợ path-filter ngay ở "on:" (khác với trigger "push"
+  # thường), nên phải tự so sánh diff bằng dorny/paths-filter, dùng đúng
+  # head_sha/head_branch của lần chạy CI vừa hoàn tất.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: 🔍 Xác định service thay đổi
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Phát hiện thay đổi theo từng service
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          base: ${{ github.event.workflow_run.head_branch || 'main' }}
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'docker/backend.Dockerfile'
+            frontend:
+              - 'frontend/**'
+              - 'docker/frontend.Dockerfile'
+
+      # workflow_dispatch (chạy tay, kiểm tra thủ công) luôn build CẢ 2, không
+      # phụ thuộc diff — dùng khi cần force rebuild toàn bộ (vd: đổi base image).
+      - name: Gộp thành ma trận build động
+        id: set-matrix
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'matrix=[{"service":"backend","dockerfile":"docker/backend.Dockerfile"},{"service":"frontend","dockerfile":"docker/frontend.Dockerfile"}]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SERVICES="[]"
+          if [ "${{ steps.filter.outputs.backend }}" = "true" ]; then
+            SERVICES=$(echo "$SERVICES" | jq -c '. + [{"service":"backend","dockerfile":"docker/backend.Dockerfile"}]')
+          fi
+          if [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+            SERVICES=$(echo "$SERVICES" | jq -c '. + [{"service":"frontend","dockerfile":"docker/frontend.Dockerfile"}]')
+          fi
+          echo "matrix=$SERVICES" >> "$GITHUB_OUTPUT"
+          echo "Sẽ build: $SERVICES"
+
   build-scan-push:
     name: 🐳 Build, Scan & Push to Harbor
+    needs: changes
+    # Không có service nào thay đổi (vd: commit chỉ sửa README, helm values...)
+    # -> bỏ qua hẳn job này, không build gì cả.
+    if: needs.changes.outputs.matrix != '[]'
     runs-on: ubuntu-latest
-    # workflow_dispatch (chạy tay) luôn được phép chạy; còn khi trigger bởi
-    # workflow_run (tự động sau CI) thì BẮT BUỘC CI phải "success".
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Bỏ qua hẳn job này nếu job "changes" không tìm thấy service nào thay đổi
+    # (vd: commit chỉ sửa README, helm values...) hoặc chính job "changes" bị
+    # skip. workflow_dispatch (chạy tay) luôn có matrix đủ 2 service.
+    if: needs.changes.result == 'success' && needs.changes.outputs.matrix != '[]'
     permissions:
       contents: read
       security-events: write   # cần để upload SARIF lên tab "Security"
 
     strategy:
-      # Build & quét song song backend/frontend — 1 service fail không chặn
-      # service còn lại, và không phải chờ tuần tự.
+      # Build & quét song song các service có thay đổi — 1 service fail không
+      # chặn service còn lại, và không phải chờ tuần tự. Danh sách service lấy
+      # từ job "changes" ở trên (dynamic matrix), không còn cố định 2 service
+      # như trước — commit chỉ sửa 1 service thì chỉ build đúng service đó.
       #
       # LƯU Ý: KHÔNG được đặt "${{ secrets.* }}" bên trong "matrix" — context
       # "secrets" không tồn tại tại thời điểm GitHub Actions evaluate/parse
-      # matrix (khác với context "github", "needs", "vars"...). Đặt vào đây
-      # sẽ làm cả workflow bị GitHub từ chối ngay từ bước "Invalid workflow
-      # file", chưa kịp chạy job nào. Vì vậy "build-args" của frontend được
-      # tính trực tiếp ở step build bên dưới (dùng matrix.service để rẽ
-      # nhánh), không đặt sẵn trong "matrix".
+      # matrix (khác với context "github", "needs", "vars"...). Vì vậy
+      # "build-args" của frontend được tính trực tiếp ở step build bên dưới
+      # (dùng matrix.service để rẽ nhánh), không đặt sẵn trong "matrix".
       fail-fast: false
       matrix:
-        include:
-          - service: backend
-            dockerfile: docker/backend.Dockerfile
-          - service: frontend
-            dockerfile: docker/frontend.Dockerfile
+        include: ${{ fromJson(needs.changes.outputs.matrix) }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -106,7 +162,7 @@ jobs:
           load: true
           build-args: ${{ matrix.service == 'frontend' && format('NEXT_PUBLIC_API_URL={0}', secrets.NEXT_PUBLIC_API_URL) || '' }}
           tags: |
-            ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}
+            ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.event.workflow_run.head_sha || github.sha }}
             ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -115,7 +171,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "image"
-          image-ref: "${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}"
+          image-ref: "${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.event.workflow_run.head_sha || github.sha }}"
           trivyignores: "security/.trivyignore"
           severity: "CRITICAL,HIGH"
           format: "sarif"
@@ -146,7 +202,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "image"
-          image-ref: "${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}"
+          image-ref: "${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.event.workflow_run.head_sha || github.sha }}"
           trivyignores: "security/.trivyignore"
           severity: "CRITICAL,HIGH"
           format: "table"
@@ -155,15 +211,61 @@ jobs:
       # Image đã build & pass Trivy ở trên rồi, chỉ cần "docker push" thẳng
       # 2 tag đã có sẵn trong daemon — không build lại lần nào nữa.
       - name: Push ${{ matrix.service }} image (SHA tag)
-        run: docker push ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.sha }}
+        run: docker push ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Push ${{ matrix.service }} image (latest tag)
         run: docker push ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:latest
 
-# -----------------------------------------------------------------------------
-# [PLACEHOLDER] Các job tiếp theo, thêm dần khi hạ tầng deploy đã sẵn sàng:
-#   2. Deploy to ECS / EC2 / VPS  (SSH vào server, docker compose pull && up -d)
-#   3. Run DB migrations          (scripts/migrate.sh)
-#   4. Health check
-#   5. Notify Slack on success/failure
-# -----------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Cập nhật ĐÚNG tag của (các) service vừa build xong trong
+  # helm/electronics-shop/values.yaml — backendTag/frontendTag TÁCH RIÊNG,
+  # chỉ sửa dòng của service nào thật sự nằm trong ma trận build ở trên. Service
+  # không đổi thì giữ nguyên tag cũ trong values.yaml (image cũ vẫn còn trên
+  # Harbor, không có gì bị "gãy"). Commit ngược lại vào repo, Argo CD (đã cấu
+  # hình Auto-Sync + webhook) tự thấy commit mới, tự "helm upgrade".
+  #
+  # Cần thêm quyền ghi cho GITHUB_TOKEN mặc định: Settings > Actions > General
+  # > Workflow permissions > chọn "Read and write permissions". Nếu nhánh
+  # "main" đang bật Branch Protection chặn push trực tiếp, cần thêm ngoại lệ
+  # cho actor "github-actions[bot]", hoặc đổi job này sang tạo Pull Request
+  # thay vì push thẳng.
+  # ---------------------------------------------------------------------------
+  update-manifest:
+    name: 📝 Cập nhật image tag trong Helm values
+    needs: [changes, build-scan-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Cập nhật đúng tag của (các) service vừa build
+        env:
+          NEW_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+          MATRIX: ${{ needs.changes.outputs.matrix }}
+        run: |
+          VALUES_FILE=helm/electronics-shop/values.yaml
+          if echo "$MATRIX" | jq -e 'map(.service) | index("backend")' > /dev/null; then
+            sed -i "s/^\(\s*backendTag:\).*/\1 \"${NEW_TAG}\"/" "$VALUES_FILE"
+            echo "Đã cập nhật backendTag -> ${NEW_TAG}"
+          fi
+          if echo "$MATRIX" | jq -e 'map(.service) | index("frontend")' > /dev/null; then
+            sed -i "s/^\(\s*frontendTag:\).*/\1 \"${NEW_TAG}\"/" "$VALUES_FILE"
+            echo "Đã cập nhật frontendTag -> ${NEW_TAG}"
+          fi
+          grep -E "backendTag|frontendTag" "$VALUES_FILE"
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/electronics-shop/values.yaml
+          # "[skip ci]" báo GitHub bỏ qua việc trigger lại ci.yml (trigger kiểu
+          # "push") cho chính commit này — tránh vòng lặp: commit này lại kích
+          # CI -> lại kích deploy.yml -> lại tạo thêm 1 commit nữa vô tận.
+          git commit -m "deploy: update image tag to ${{ github.event.workflow_run.head_sha || github.sha }} [skip ci]"
+          git push origin main

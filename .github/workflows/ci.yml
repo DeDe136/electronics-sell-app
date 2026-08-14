@@ -60,6 +60,48 @@ concurrency:
 
 jobs:
   # ===========================================================================
+  # JOB 0: XÁC ĐỊNH SERVICE THAY ĐỔI (dùng cho job 6 bên dưới)
+  # ===========================================================================
+  # KHÔNG dùng job này để gate backend-lint-test/frontend-lint-test — 2 job đó
+  # cố ý LUÔN chạy đủ cả 2 dù chỉ 1 service đổi, vì lint/test khá nhanh và một
+  # số thay đổi dùng chung (vd: type dùng chung, cấu hình gốc) có thể ảnh
+  # hưởng cả 2 phía mà "git diff path" không bắt được hết. Chỉ áp dụng lọc
+  # theo path cho việc BUILD IMAGE (tốn thời gian hơn hẳn lint/test).
+  changes:
+    name: 🔍 Xác định service thay đổi
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Phát hiện thay đổi theo từng service
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'docker/backend.Dockerfile'
+            frontend:
+              - 'frontend/**'
+              - 'docker/frontend.Dockerfile'
+
+      - name: Gộp thành ma trận build động
+        id: set-matrix
+        run: |
+          SERVICES="[]"
+          if [ "${{ steps.filter.outputs.backend }}" = "true" ]; then
+            SERVICES=$(echo "$SERVICES" | jq -c '. + [{"service":"backend","dockerfile":"docker/backend.Dockerfile","build-args":""}]')
+          fi
+          if [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+            SERVICES=$(echo "$SERVICES" | jq -c '. + [{"service":"frontend","dockerfile":"docker/frontend.Dockerfile","build-args":"NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1"}]')
+          fi
+          echo "matrix=$SERVICES" >> "$GITHUB_OUTPUT"
+          echo "Sẽ build: $SERVICES"
+
+  # ===========================================================================
   # JOB 1: BACKEND LINT + TEST (CHẶN MERGE NẾU FAIL)
   # ===========================================================================
   backend-lint-test:
@@ -374,6 +416,7 @@ jobs:
   # runner rồi mất đi khi job kết thúc.
   docker-build-check:
     name: 🐳 Docker Build Check + Trivy Image Scan
+    needs: changes
     runs-on: ubuntu-latest
     # Chỉ cần chạy để "kiểm tra sớm" lúc PR / push nhánh làm việc (thanhde) hoặc PR vào nhánh main.
     # Khi trigger là push thẳng vào main, KHÔNG chạy job này nữa — vì deploy.yml
@@ -381,25 +424,23 @@ jobs:
     # push lên Harbor trong đúng 1 lần build duy nhất. Nếu vẫn chạy ở đây thì
     # image bị build 2 lần cho cùng 1 commit (lãng phí thời gian CI) mà không
     # thêm được giá trị gì, vì deploy.yml sẽ tự chặn push khi Trivy fail.
-    if: "!(github.event_name == 'push' && github.ref == 'refs/heads/main')"
+    #
+    # Đồng thời bỏ qua hẳn job nếu không service nào thay đổi (vd: commit chỉ
+    # sửa README, docs, helm values...) — không có gì để build/quét.
+    if: >
+      !(github.event_name == 'push' && github.ref == 'refs/heads/main') &&
+      needs.changes.outputs.matrix != '[]'
     permissions:
       contents: read
       security-events: write   # cần để upload SARIF lên tab "Security"
 
     strategy:
-      # Chạy song song 2 image thay vì tuần tự — build backend lỗi không
-      # phải chờ build frontend xong mới biết.
+      # Chạy song song các service THẬT SỰ có thay đổi — build backend lỗi
+      # không phải chờ build frontend xong mới biết. Danh sách service lấy từ
+      # job "changes" ở trên (dynamic matrix), không còn cố định 2 service.
       fail-fast: false
       matrix:
-        include:
-          - service: backend
-            dockerfile: docker/backend.Dockerfile
-            build-args: ""
-          - service: frontend
-            dockerfile: docker/frontend.Dockerfile
-            # Chỉ cần giá trị placeholder để build qua được bước ARG, vì đây
-            # là build kiểm tra — không phải image sẽ đem deploy thật.
-            build-args: "NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1"
+        include: ${{ fromJson(needs.changes.outputs.matrix) }}
 
     steps:
       - name: Checkout code
