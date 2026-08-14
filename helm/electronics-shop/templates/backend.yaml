@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: {{ .Values.global.namespace }}
+  labels: { app: backend }
+  annotations:
+    rollout-demo: "{{ now | date "20060102150405" }}"
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecretName }}
+      containers:
+        - name: backend
+          image: {{ include "electronics-shop.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: {{ .Values.backend.port }} }]
+          envFrom:
+            - configMapRef: { name: electronics-shop-config }
+          env:
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: JWT_SECRET } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: DB_PASSWORD } }
+            - name: MINIO_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: MINIO_ACCESS_KEY } }
+            - name: MINIO_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: MINIO_SECRET_KEY } }
+          readinessProbe:
+            httpGet: { path: /api/v1/health, port: {{ .Values.backend.port }} }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/v1/health, port: {{ .Values.backend.port }} }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources: {{ toYaml .Values.backend.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector: { app: backend }
+  ports: [{ port: {{ .Values.backend.port }}, targetPort: {{ .Values.backend.port }} }]

@@ -1,0 +1,26 @@
+# Loại trừ khi chạy "helm package" — không liên quan tới "helm install/upgrade"
+# (2 lệnh đó luôn đọc trực tiếp từ thư mục, không quan tâm .helmignore).
+
+# File chứa thông tin riêng từng máy (registry IP, secret local...) — KHÔNG
+# được lọt vào gói chart chia sẻ.
+values-dev.yaml
+
+# File cấu hình/dev cục bộ
+values-dev.yaml
+values-*.local.yaml
+.env
+.env.*
+
+# Rác thường gặp
+.git/
+.gitignore
+node_modules/
+.vscode/
+.idea/
+*.swp
+*.bak
+*.tmp
+*.log
+.DS_Store
+tmp/
+temp/

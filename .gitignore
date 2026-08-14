@@ -82,6 +82,9 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
+# ── Helm values overrides ─────────────────
+helm/electronics-shop/values-dev.yaml
+
 # ── Misc ──────────────────────────────────
 *.zip
 *.tar.gz
