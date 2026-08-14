@@ -94,14 +94,11 @@ jobs:
   build-scan-push:
     name: 🐳 Build, Scan & Push to Harbor
     needs: changes
-    # Không có service nào thay đổi (vd: commit chỉ sửa README, helm values...)
-    # -> bỏ qua hẳn job này, không build gì cả.
-    if: needs.changes.outputs.matrix != '[]'
-    runs-on: ubuntu-latest
     # Bỏ qua hẳn job này nếu job "changes" không tìm thấy service nào thay đổi
     # (vd: commit chỉ sửa README, helm values...) hoặc chính job "changes" bị
     # skip. workflow_dispatch (chạy tay) luôn có matrix đủ 2 service.
     if: needs.changes.result == 'success' && needs.changes.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write   # cần để upload SARIF lên tab "Security"
