@@ -39,57 +39,47 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Xác định service nào THẬT SỰ có thay đổi trong commit vừa push, để job build
-  # bên dưới chỉ build/push đúng service đó — tránh build cả 2 cho mọi commit.
-  # workflow_run KHÔNG hỗ trợ path-filter ngay ở "on:" (khác với trigger "push"
-  # thường), nên phải tự so sánh diff bằng dorny/paths-filter, dùng đúng
-  # head_sha/head_branch của lần chạy CI vừa hoàn tất.
+  # Lấy lại ĐÚNG ma trận đã tính sẵn ở job "changes" của ci.yml (artifact
+  # "build-matrix"), KHÔNG tự tính lại bằng dorny/paths-filter ở đây.
+  #
+  # Lý do: ở ngữ cảnh workflow_run, sau khi PR được merge vào "main", nhánh
+  # "main" đã di chuyển tới ĐÚNG commit vừa merge — nên "base: main" và
+  # "ref: <head_sha>" trỏ về CÙNG 1 điểm, git diff giữa 2 cái luôn ra RỖNG dù
+  # thực chất có thay đổi, khiến matrix sai thành "[]" (không phát hiện được
+  # gì cả, dù ci.yml đã phát hiện đúng ngay từ diff của PR). Đây là lỗi thật
+  # đã gặp: push thẳng/PR còn mở thì phát hiện đúng, nhưng merge xong vào main
+  # thì deploy.yml lại không thấy lệch. Tải lại kết quả ci.yml đã tính đúng
+  # (tại đúng thời điểm push/PR còn có before/after chính xác) là cách sửa
+  # dứt điểm, tránh 2 nơi tự tính ra 2 kết quả khác nhau cho cùng 1 commit.
   # ---------------------------------------------------------------------------
   changes:
-    name: 🔍 Xác định service thay đổi
+    name: 🔍 Fetch Build Matrix from CI
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix: ${{ steps.read-matrix.outputs.matrix }}
+    permissions:
+      actions: read   # cần để tải artifact từ 1 lần chạy workflow khác (ci.yml)
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # workflow_dispatch (chạy tay) không có artifact nào để tải — luôn build
+      # cả 2, không phụ thuộc diff, dùng khi cần force rebuild toàn bộ (vd: đổi base image).
+      - name: Download build-matrix.json from the completed CI run
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          name: build-matrix
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Phát hiện thay đổi theo từng service
-        id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          base: ${{ github.event.workflow_run.head_branch || 'main' }}
-          filters: |
-            backend:
-              - 'backend/**'
-              - 'docker/backend.Dockerfile'
-            frontend:
-              - 'frontend/**'
-              - 'docker/frontend.Dockerfile'
-
-      # workflow_dispatch (chạy tay, kiểm tra thủ công) luôn build CẢ 2, không
-      # phụ thuộc diff — dùng khi cần force rebuild toàn bộ (vd: đổi base image).
-      - name: Gộp thành ma trận build động
-        id: set-matrix
+      - name: Read matrix
+        id: read-matrix
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo 'matrix=[{"service":"backend","dockerfile":"docker/backend.Dockerfile"},{"service":"frontend","dockerfile":"docker/frontend.Dockerfile"}]' >> "$GITHUB_OUTPUT"
-            exit 0
+          else
+            echo "matrix=$(cat build-matrix.json)" >> "$GITHUB_OUTPUT"
           fi
-          SERVICES="[]"
-          if [ "${{ steps.filter.outputs.backend }}" = "true" ]; then
-            SERVICES=$(echo "$SERVICES" | jq -c '. + [{"service":"backend","dockerfile":"docker/backend.Dockerfile"}]')
-          fi
-          if [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
-            SERVICES=$(echo "$SERVICES" | jq -c '. + [{"service":"frontend","dockerfile":"docker/frontend.Dockerfile"}]')
-          fi
-          echo "matrix=$SERVICES" >> "$GITHUB_OUTPUT"
-          echo "Sẽ build: $SERVICES"
+          cat "$GITHUB_OUTPUT"
 
   build-scan-push:
     name: 🐳 Build, Scan & Push to Harbor
@@ -134,7 +124,7 @@ jobs:
           sudo mkdir -p /etc/docker/certs.d/${{ secrets.HARBOR_REGISTRY }}
           echo "${{ secrets.HARBOR_CA_CERT }}" | base64 -d | sudo tee /etc/docker/certs.d/${{ secrets.HARBOR_REGISTRY }}/ca.crt
 
-      - name: Login vào Harbor
+      - name: Login to Harbor
         uses: docker/login-action@v3
         with:
           registry: ${{ secrets.HARBOR_REGISTRY }}
@@ -150,7 +140,7 @@ jobs:
       # build-args: chỉ backend KHÔNG cần build-arg nào (chuỗi rỗng), frontend
       # cần NEXT_PUBLIC_API_URL. "secrets" hợp lệ ở đây vì đây là step-level
       # "with", khác với "matrix" ở trên.
-      - name: Build ${{ matrix.service }} image (chưa push)
+      - name: Build ${{ matrix.service }} image (not pushed yet)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -164,7 +154,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trivy image scan - ${{ matrix.service }} (sinh SARIF, không chặn)
+      - name: Trivy image scan - ${{ matrix.service }} (generate SARIF, non-blocking)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "image"
@@ -195,7 +185,7 @@ jobs:
       # Đây mới là bước THẬT SỰ chặn: nếu còn CVE mức CRITICAL/HIGH thì dừng
       # job ngay tại đây — 2 bước push tag bên dưới sẽ KHÔNG được chạy tới,
       # image lỗi không bao giờ lên tới Harbor.
-      - name: Trivy image scan - ${{ matrix.service }} - gate (CHẶN push nếu có CRITICAL/HIGH)
+      - name: Trivy image scan - ${{ matrix.service }} - gate (block push on CRITICAL/HIGH)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "image"
@@ -228,7 +218,7 @@ jobs:
   # thay vì push thẳng.
   # ---------------------------------------------------------------------------
   update-manifest:
-    name: 📝 Cập nhật image tag trong Helm values
+    name: 📝 Update Image Tag in Helm Values
     needs: [changes, build-scan-push]
     runs-on: ubuntu-latest
     permissions:
@@ -240,7 +230,7 @@ jobs:
         with:
           ref: main
 
-      - name: Cập nhật đúng tag của (các) service vừa build
+      - name: Update the tag of the built service(s)
         env:
           NEW_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
           MATRIX: ${{ needs.changes.outputs.matrix }}
@@ -264,5 +254,6 @@ jobs:
           # "[skip ci]" báo GitHub bỏ qua việc trigger lại ci.yml (trigger kiểu
           # "push") cho chính commit này — tránh vòng lặp: commit này lại kích
           # CI -> lại kích deploy.yml -> lại tạo thêm 1 commit nữa vô tận.
-          git commit -m "deploy: update image tag to ${{ github.event.workflow_run.head_sha || github.sha }} [skip ci]"
+          SERVICES=$(echo "$MATRIX" | jq -r 'map(.service) | join(", ")')
+          git commit -m "deploy: update image tag ($SERVICES) to ${{ github.event.workflow_run.head_sha || github.sha }} [skip ci]"
           git push origin main

@@ -68,18 +68,21 @@ jobs:
   # hưởng cả 2 phía mà "git diff path" không bắt được hết. Chỉ áp dụng lọc
   # theo path cho việc BUILD IMAGE (tốn thời gian hơn hẳn lint/test).
   changes:
-    name: 🔍 Xác định service thay đổi
+    name: 🔍 Detect Changed Services
     runs-on: ubuntu-latest
+    # dorny/paths-filter gọi GitHub API để lấy danh sách file thay đổi khi
+    # trigger là "pull_request" — cần quyền đọc PR, nếu không sẽ bị lỗi
+    # "Resource not accessible by integration".
     permissions:
       contents: read
-      pull-requests: read 
+      pull-requests: read
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Phát hiện thay đổi theo từng service
+      - name: Detect changes per service
         id: filter
         uses: dorny/paths-filter@v3
         with:
@@ -91,7 +94,7 @@ jobs:
               - 'frontend/**'
               - 'docker/frontend.Dockerfile'
 
-      - name: Gộp thành ma trận build động
+      - name: Build dynamic matrix
         id: set-matrix
         run: |
           SERVICES="[]"
@@ -103,6 +106,21 @@ jobs:
           fi
           echo "matrix=$SERVICES" >> "$GITHUB_OUTPUT"
           echo "Sẽ build: $SERVICES"
+          echo "$SERVICES" > build-matrix.json
+
+      # deploy.yml (trigger bởi workflow_run) sẽ TẢI LẠI đúng file này thay vì
+      # tự tính lại — vì ở ngữ cảnh nhận được trigger từ event  workflow_run,
+      # "base" và "ref" dễ trỏ về CÙNG 1 điểm sau khi merge (nhánh đích "main" đã di
+      # chuyển tới đúng commit vừa push), khiến diff luôn ra rỗng dù thực chất
+      # có thay đổi. Tính 1 lần duy nhất ở đây (nơi push/pull_request cung cấp
+      # before/after chính xác) là nguồn sự thật duy nhất, tránh 2 nơi tính ra
+      # 2 kết quả khác nhau.
+      - name: Upload build matrix (để deploy.yml tái sử dụng)
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-matrix
+          path: build-matrix.json
+          retention-days: 1
 
   # ===========================================================================
   # JOB 1: BACKEND LINT + TEST (CHẶN MERGE NẾU FAIL)
@@ -132,14 +150,14 @@ jobs:
         working-directory: backend
         run: npm run lint
 
-      - name: Unit test (sinh coverage report)
+      - name: Unit test (generate coverage report)
         # "passWithNoTests" đã bật trong jest config nên nếu chưa có test
         # nào, job vẫn pass — nhưng NẾU CÓ test mà bị fail thì bước này
         # chặn merge ngay lập tức.
         working-directory: backend
         run: npm run test:cov
 
-      - name: Upload coverage report (để job sonarqube tái sử dụng)
+      - name: Upload coverage report (for sonarqube job to reuse)
         uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
@@ -174,14 +192,14 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      - name: Unit test (sinh coverage report)
+      - name: Unit test (generate coverage report)
         # jest.config.js đã bật "passWithNoTests" nên nếu chưa có file
         # *.test.tsx nào, job vẫn pass — nhưng NẾU CÓ test mà bị fail thì
         # bước này chặn merge ngay lập tức, giống hệt cơ chế bên backend.
         working-directory: frontend
         run: npm run test:cov
 
-      - name: Upload coverage report (để job sonarqube tái sử dụng)
+      - name: Upload coverage report (for sonarqube job to reuse)
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
@@ -234,7 +252,7 @@ jobs:
           # chặn PR merge (khi bật branch protection "require status checks").
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
 
-      - name: Upload GitLeaks report (khi có phát hiện)
+      - name: Upload GitLeaks report (when findings exist)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -296,13 +314,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Download backend coverage report từ job backend-lint-test
+      - name: Download backend coverage report from backend-lint-test job
         uses: actions/download-artifact@v4
         with:
           name: backend-coverage
           path: backend/coverage
 
-      - name: Download frontend coverage report từ job frontend-lint-test
+      - name: Download frontend coverage report from frontend-lint-test job
         uses: actions/download-artifact@v4
         with:
           name: frontend-coverage
@@ -344,7 +362,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Trivy filesystem scan (tạo SARIF report cho GitHub Security tab)
+      - name: Trivy filesystem scan (generate SARIF report for GitHub Security tab)
         # LƯU Ý VỀ VERSION: dùng tag có tiền tố "v" (vd: v0.36.0), KHÔNG dùng
         # tag không có "v" (vd: 0.28.0, 0.34.2...) — các tag không có "v" đã
         # bị Aquasecurity THU HỒI sau sự cố supply-chain attack (3/2026) và
@@ -378,7 +396,7 @@ jobs:
           output: "trivy-fs-results.sarif"
           exit-code: "0"
 
-      - name: Trivy filesystem scan - gate (CHẶN merge nếu có CRITICAL/HIGH)
+      - name: Trivy filesystem scan - gate (block merge on CRITICAL/HIGH)
         # Step riêng, chỉ để quyết định pass/fail. format=table (không phải
         # sarif, không ghi ra file) nên khi fail, LOG SẼ IN THẲNG BẢNG CVE/
         # SECRET RA MÀN HÌNH — không cần thêm step debug thủ công nữa.
@@ -452,7 +470,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build ${{ matrix.service }} image (không push)
+      - name: Build ${{ matrix.service }} image (no push)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -467,7 +485,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trivy image scan - ${{ matrix.service }} (sinh SARIF, không chặn)
+      - name: Trivy image scan - ${{ matrix.service }} (generate SARIF, non-blocking)
         # scan-type: "image" (khác "fs" ở job trivy-fs) => quét CHÍNH image đã
         # build: base image (node:20-alpine...), OS package thực sự có trong
         # layer cuối, không chỉ package-lock.json như trivy-fs.
@@ -481,7 +499,7 @@ jobs:
           output: "trivy-image-${{ matrix.service }}-results.sarif"
           exit-code: "0"
 
-      - name: Trivy image scan - ${{ matrix.service }} - gate (CHẶN merge nếu có CRITICAL/HIGH)
+      - name: Trivy image scan - ${{ matrix.service }} - gate (block merge on CRITICAL/HIGH)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "image"
