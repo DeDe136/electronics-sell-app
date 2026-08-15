@@ -92,3 +92,7 @@ helm/electronics-shop/values-dev.yaml
 tmp/
 temp/
 
+# ── ArgoCD values and secrets ──────────────────────────
+argo/argocd-application.yaml
+argo/argocd-repo-secret.yaml
+
