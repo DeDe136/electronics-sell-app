@@ -38,7 +38,7 @@ export async function Footer() {
             </p>
             <div className="flex flex-col gap-2 mt-4 text-sm">
               <span className="flex items-center gap-2"><MapPin className="w-4 h-4 shrink-0" />123 Nguyễn Huệ, Q1, TP.HCM</span>
-              <span className="flex items-center gap-2"><Phone className="w-4 h-4 shrink-0" />1800 1234</span>
+              <span className="flex items-center gap-2"><Phone className="w-4 h-4 shrink-0" />1800 1234 9999</span>
               <span className="flex items-center gap-2"><Mail className="w-4 h-4 shrink-0" />support@techshop.vn</span>
             </div>
           </div>

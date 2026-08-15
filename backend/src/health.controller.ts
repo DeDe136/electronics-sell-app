@@ -7,6 +7,6 @@ export class HealthController {
   @Get()
   @ApiOperation({ summary: 'Kiểm tra backend đang chạy' })
   check() {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+    return { status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' };
   }
 }
