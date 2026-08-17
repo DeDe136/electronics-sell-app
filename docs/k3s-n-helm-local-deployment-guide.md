@@ -1,4 +1,4 @@
-# Runbook: Dựng K3s local & deploy TechShop bằng Helm
+# Hướng dẫn: Dựng K3s local & deploy TechShop bằng Helm
 
 Tài liệu này ghi lại đầy đủ các bước đã thực hiện thành công trên môi trường:
 **Windows + WSL2 (Ubuntu) + K3s**, image kéo từ **Harbor riêng** (IP + self-signed

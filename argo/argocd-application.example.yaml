@@ -1,0 +1,83 @@
+# argocd-application.example.yaml
+#
+# File MẪU (example) — commit lên Git bình thường, KHÔNG chứa credential thật.
+# Trước khi dùng, copy thành "argocd-application.yaml" (đã thêm vào
+# .gitignore) rồi điền giá trị thật vào bản copy đó — không sửa trực tiếp
+# file example này, giữ nguyên placeholder để người khác dùng lại sau.
+#
+# Bản khai báo (declarative) tương đương với việc bấm "+ New App" trên UI Argo
+# CD — dùng khi muốn tạo Application bằng "kubectl apply" thay vì click tay,
+# hoặc muốn lưu lại cấu hình này trong Git để tái tạo dễ dàng trên máy khác.
+#
+# CÁCH DÙNG:
+#   1. cp argocd-application.example.yaml argocd-application.yaml
+#   2. Sửa các giá trị <...> trong "argocd-application.yaml" (bản copy) cho
+#      đúng với Harbor/repo của bạn.
+#   3. kubectl apply -f argo/argocd-application.yaml -n argocd
+#
+# LƯU Ý VỀ FILE BẢN COPY (argocd-application.yaml):
+#   - Đừng điền thẳng harborAuth.username/password thật vào "valuesObject"
+#     bên dưới rồi commit — phần đó tương đương với việc dán values-dev.yaml
+#     vào ô "VALUES" trên UI, chứa credential thật. File bản copy đã nằm
+#     trong .gitignore, coi như phiên bản YAML của values-dev.yaml.
+#   - Trước khi apply, repo Git PHẢI đã được đăng ký với Argo CD (Settings >
+#     Repositories, xem hướng dẫn kèm theo trong file markdown) — Application
+#     không tự mang theo credential đọc repo private.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: electronics-shop
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/<username>/<repo-name>.git
+    targetRevision: main
+    path: helm/electronics-shop
+    helm:
+      # Tương đương nội dung values-dev.yaml — Argo CD merge đè lên
+      # values.yaml mặc định của chart, giống hệt "-f values-dev.yaml" khi
+      # chạy "helm upgrade" bằng tay.
+      valuesObject:
+        image:
+          registry: "<IP-hoac-domain-harbor-cua-ban>"
+          harborAuth:
+            username: "<robot-account-username>"
+            password: "<robot-account-token>"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: electronics-shop
+
+  syncPolicy:
+    # Để "syncPolicy: {}" (rỗng) nếu muốn Sync bằng tay lần đầu để kiểm tra
+    # trước — đúng cách đã làm trong hướng dẫn ban đầu. Bỏ comment khối
+    # "automated" bên dưới khi đã xác nhận app chạy ổn, muốn chuyển hẳn sang
+    # tự động (tương đương bật "Automated" + "Self Heal" + "Prune" trên UI).
+    #
+    # automated:
+    #   selfHeal: true   # tự sửa lại nếu cluster bị chỉnh tay lệch khỏi Git
+    #   prune: true       # tự xoá resource nếu bị xoá khỏi Git
+    syncOptions:
+      - CreateNamespace=true
+
+  # Vì backend/frontend dùng HPA (HorizontalPodAutoscaler) để tự scale số
+  # Pod, KHÔNG khai "replicas" cố định trong chart nữa khi
+  # autoscaling.<service>.enabled=true (xem templates/backend.yaml,
+  # templates/frontend.yaml) — nhưng vẫn thêm "ignoreDifferences" ở đây làm
+  # lớp phòng vệ thứ 2: dù có lỡ để sót field "replicas" ở đâu đó, Argo CD
+  # Self Heal cũng sẽ KHÔNG coi số Pod hiện tại (do HPA điều chỉnh) là "lệch
+  # khỏi Git" để tự động kéo về — đây là khuyến nghị chính thức của Argo CD
+  # khi dùng chung với HPA.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: backend
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: Deployment
+      name: frontend
+      jsonPointers:
+        - /spec/replicas

@@ -5,7 +5,9 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels: { app: frontend }
 spec:
+  {{- if not .Values.autoscaling.frontend.enabled }}
   replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
   selector:
     matchLabels: { app: frontend }
   template:

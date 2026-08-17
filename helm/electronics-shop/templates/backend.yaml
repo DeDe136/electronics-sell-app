@@ -4,10 +4,15 @@ metadata:
   name: backend
   namespace: {{ .Values.global.namespace }}
   labels: { app: backend }
-  annotations:
-    rollout-demo: "{{ now | date "20060102150405" }}"
 spec:
+  # Khi HPA quản lý (autoscaling.backend.enabled=true), CỐ Ý bỏ hẳn field
+  # "replicas" khỏi manifest — để Kubernetes/Argo CD không có giá trị nào để
+  # "áp đặt lại", HPA toàn quyền quyết định số Pod. Nếu vẫn khai replicas cố
+  # định ở đây, Argo CD Self Heal sẽ liên tục kéo số Pod về đúng
+  # "replicaCount" trong Git, đánh nhau với HPA mỗi vài giây.
+  {{- if not .Values.autoscaling.backend.enabled }}
   replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
   selector:
     matchLabels: { app: backend }
   template:

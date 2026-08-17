@@ -1,0 +1,22 @@
+# argocd-server-values.yaml
+#
+# Values override cho CHÍNH chart "argo-cd" (argo/argo-cd) — khác với chart
+# "electronics-shop" của app. Dùng để bật Ingress cho UI Argo CD, thay vì
+# phải "kubectl port-forward" mỗi lần muốn vào UI.
+#
+# CÁCH DÙNG:
+#   helm upgrade argocd argo/argo-cd -n argocd -f argo/argocd-server-values.yaml
+
+configs:
+  params:
+    # Bắt buộc: Ingress HTTP thường không tự xử lý được gRPC/TLS mà Argo CD
+    # server mặc định yêu cầu — "insecure: true" chuyển server sang phục vụ
+    # HTTP thuần, Ingress proxy thẳng vào được, không cần annotation đặc biệt
+    # cho gRPC/backend-protocol HTTPS.
+    server.insecure: true
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: traefik   # K3s cài sẵn Traefik. Trên EKS đổi thành "alb"
+    hostname: argocd.techshop.local

@@ -29,7 +29,7 @@ image:
     password: ""
 
 backend:
-  replicaCount: 5
+  replicaCount: 1
   port: 3001
   resources:
     requests: { cpu: 100m, memory: 192Mi }
@@ -41,7 +41,7 @@ backend:
     storageProvider: minio
 
 frontend:
-  replicaCount: 5
+  replicaCount: 1
   port: 3000
   resources:
     requests: { cpu: 100m, memory: 128Mi }
@@ -89,3 +89,26 @@ secrets:
   postgresPassword: "postgres"
   minioAccessKey: "minioadmin"
   minioSecretKey: "minioadmin"
+
+# HorizontalPodAutoscaler — tự tăng/giảm replica theo % CPU đang dùng so với
+# "resources.requests.cpu" đã khai ở trên (vd: request 100m, targetCPU 70% ->
+# HPA cố giữ mức dùng thực tế quanh 70m/Pod, vượt lên thì thêm Pod, tụt xuống
+# lâu thì bớt Pod). Cần "metrics-server" chạy trong cluster — K3s có sẵn mặc
+# định, kiểm tra bằng: kubectl get deployment metrics-server -n kube-system
+autoscaling:
+  backend:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    # Scale thêm khi memory trung bình/Pod vượt 80% so với
+    # "resources.requests.memory" (192Mi -> ngưỡng ~154Mi). HPA lấy điều kiện
+    # NGHIÊM NGẶT HƠN trong 2 metric (CPU hoặc memory, cái nào yêu cầu nhiều
+    # Pod hơn thì áp dụng) — chỉ cần 1 trong 2 vượt ngưỡng là đã scale up.
+    targetMemoryUtilizationPercentage: 80
+  frontend:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80

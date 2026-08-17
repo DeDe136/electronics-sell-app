@@ -247,6 +247,8 @@ jobs:
           grep -E "backendTag|frontendTag" "$VALUES_FILE"
 
       - name: Commit & push
+        env:
+          MATRIX: ${{ needs.changes.outputs.matrix }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
