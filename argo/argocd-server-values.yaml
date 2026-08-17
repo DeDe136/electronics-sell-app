@@ -4,10 +4,8 @@
 # "electronics-shop" của app. Dùng để bật Ingress cho UI Argo CD, thay vì
 # phải "kubectl port-forward" mỗi lần muốn vào UI.
 #
-# Không chứa credential gì nhạy cảm — COMMIT lên Git bình thường.
-#
 # CÁCH DÙNG:
-#   helm upgrade argocd argo/argo-cd -n argocd -f argocd-server-values.yaml
+#   helm upgrade argocd argo/argo-cd -n argocd -f argo/argocd-server-values.yaml
 
 configs:
   params:

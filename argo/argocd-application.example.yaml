@@ -13,7 +13,7 @@
 #   1. cp argocd-application.example.yaml argocd-application.yaml
 #   2. Sửa các giá trị <...> trong "argocd-application.yaml" (bản copy) cho
 #      đúng với Harbor/repo của bạn.
-#   3. kubectl apply -f argocd-application.yaml -n argocd
+#   3. kubectl apply -f argo/argocd-application.yaml -n argocd
 #
 # LƯU Ý VỀ FILE BẢN COPY (argocd-application.yaml):
 #   - Đừng điền thẳng harborAuth.username/password thật vào "valuesObject"

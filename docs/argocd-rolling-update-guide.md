@@ -13,12 +13,13 @@ bước bên dưới) hoặc **qua `kubectl apply`** (dùng `argocd-application.
 ```
 electronics-sell-app-thanhde/
 ├── argo/
-│   ├── argocd-application.example.yaml    # mẫu, COMMIT lên Git
-│   ├── argocd-repo-secret.example.yaml    # mẫu, COMMIT lên Git
+│   ├── argocd-application.example.yaml    # mẫu
+│   ├── argocd-repo-secret.example.yaml    # mẫu
+│   ├── argocd-server-values.yaml          # values cho chính chart argo-cd (Ingress...)
 │   ├── argocd-application.yaml            # bản copy điền giá trị thật, GITIGNORE
 │   └── argocd-repo-secret.yaml            # bản copy điền giá trị thật, GITIGNORE
 ├── docs/
-│   ├── k3s-deployment-runbook.md
+│   ├── k3s-n-helm-local-deployment-guide.md
 │   └── argocd-rolling-update-guide.md
 ├── helm/
 │   └── electronics-shop/
@@ -44,19 +45,51 @@ helm install argocd argo/argo-cd -n argocd --create-namespace
 kubectl get pods -n argocd -w
 ```
 
-## 2. Lấy mật khẩu admin & đăng nhập UI
+## 2. Truy cập UI
 
+Lấy mật khẩu admin:
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d; echo
 ```
 
+Chọn 1 trong 2 cách để vào UI — có thể dùng cả 2 song song, không xung đột:
+
+### Cách A — Port-forward (nhanh, không cần đổi gì trong cluster)
+
 ```bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
 
-Mở `https://localhost:8080`, bỏ qua cảnh báo cert tự ký, đăng nhập bằng
-`admin` + mật khẩu vừa lấy.
+Mở `https://localhost:8080`, bỏ qua cảnh báo cert tự ký.
+
+### Cách B — Ingress (không cần giữ terminal chạy port-forward mỗi lần)
+
+Cần chuyển Argo CD server sang HTTP trước (Ingress HTTP thường không tự xử
+lý được gRPC/TLS mà Argo CD server mặc định yêu cầu):
+
+```bash
+helm upgrade argocd argo/argo-cd -n argocd -f argo/argocd-server-values.yaml
+```
+
+File `argocd-server-values.yaml` (đi kèm) đã bật sẵn `server.insecure: true`
++ `server.ingress.enabled: true`, host mặc định `argocd.techshop.local` —
+sửa lại host nếu muốn dùng domain khác.
+
+Trỏ domain (lấy IP Traefik đang expose, giống cách đã làm với
+`techshop.local` trong `k3s-n-helm-local-deployment-guide.md`):
+```bash
+kubectl get svc -n kube-system traefik   # xem cột EXTERNAL-IP
+```
+Thêm vào `hosts` (cả WSL2 lẫn Windows):
+```
+<EXTERNAL-IP-traefik>  argocd.techshop.local
+```
+
+Từ giờ vào thẳng `http://argocd.techshop.local`, không cần giữ terminal
+`port-forward` nữa.
+
+Đăng nhập cả 2 cách đều dùng `admin` + mật khẩu lấy ở trên.
 
 ## 3. Kết nối repo GitHub private
 
@@ -102,7 +135,7 @@ Chọn 1 trong 2 cách:
 | Application Name | `electronics-shop` |
 | Project | `default` |
 | Sync Policy | `Manual` (chuyển `Automated` sau khi xác nhận ổn) |
-| Repository URL | `https://github.com/<username>/<repo>.git` |
+| Repository URL | `https://github.com/<username>/<repo-name>.git` |
 | Revision | `main` |
 | Path | `helm/electronics-shop` |
 | Cluster URL | `https://kubernetes.default.svc` |
@@ -113,6 +146,30 @@ Mục **HELM > VALUES**: dán nội dung `values-dev.yaml` (registry IP +
 "truyền" nó cho Argo CD.
 
 Bấm **Create**.
+
+**Thêm `ignoreDifferences` cho backend/frontend (bắt buộc nếu dùng HPA — xem
+mục 11)** — form **+ New App** không có ô riêng cho phần này, cần thêm sau
+khi tạo:
+- Vào Application `electronics-shop` → mục **DETAILS** ở góc trên bên trái → chuyển
+  sang tab **MANIFEST** (chế độ xem dạng YAML thô của chính Application)
+  và chọn Edit → tìm/tạo field `ignoreDifferences`, thêm đúng nội dung:
+  ```yaml
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: backend
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: Deployment
+      name: frontend
+      jsonPointers:
+        - /spec/replicas
+  ```
+- Bấm **Save**.
+
+(Nếu tạo Application qua Cách B — `kubectl apply` — phần này đã có sẵn trong
+`argocd-application.example.yaml`, không cần thêm tay.)
 
 ### Cách B — Qua `kubectl apply`
 
@@ -161,6 +218,10 @@ Vì Argo CD chỉ chạy `port-forward` cục bộ (không có địa chỉ publ
 tunnel tạm để GitHub gọi được webhook tới.
 
 **8.1. Chuyển Argo CD server sang HTTP (bỏ TLS self-signed)**
+
+> Nếu đã thực hiện mục 2 - Cách B (bật Ingress), bước này **đã xong sẵn** —
+> `argocd-server-values.yaml` đã bật `server.insecure: true` rồi, bỏ qua
+> thẳng hai lệnh bên dưới.
 
 ```bash
 helm upgrade argocd argo/argo-cd -n argocd --reuse-values \
@@ -227,22 +288,13 @@ Rolling update xảy ra khi **Pod template đổi** (image, env, annotation...),
 không phải khi chỉ tăng `replicaCount` (đó là scale, không phải update). Demo
 theo 2 bước tách biệt:
 
-### 9.1. Tăng replica trước
+### 9.1. Test HPA tự scale up/down (thay cho việc tăng `replicaCount` tay)
 
-`values.yaml` (chart):
-```yaml
-backend:
-  replicaCount: 7
-frontend:
-  replicaCount: 7
-```
-```bash
-git add helm/electronics-shop/values.yaml
-git commit -m "scale backend/frontend to 3 replicas"
-git push
-```
-Argo CD tự Sync (hoặc bấm Sync tay) → `kubectl get pods -n electronics-shop -w`
-→ xác nhận 3 Pod mỗi service, đây là **scale**, chưa phải rolling update.
+> Vì đã bật HPA (mục 10), **không cần tự tăng `replicaCount`** trong
+> `values.yaml` nữa để có nhiều Pod — HPA tự quyết định số Pod dựa theo tải
+> thật. Xem chi tiết cách test ở mục 10.2. Sau khi HPA đã tự scale lên ≥2
+> Pod, tiếp tục mục 9.2 bên dưới để demo đúng rolling update trên nhiều Pod
+> đó.
 
 ### 9.2. Trigger rolling update bằng code + image thật
 
@@ -268,7 +320,8 @@ kubectl rollout status deployment/backend -n electronics-shop
 kubectl get pods -n electronics-shop -l app=backend -w
 ```
 
-Kỳ vọng thấy tiến trình dạng:
+Kỳ vọng thấy tiến trình dạng (với số lượng replica thực tế tuỳ thuộc vào HPA đang giữ ở
+mức nào tại thời điểm đó, không cố định số replica như deployment):
 ```
 Waiting for deployment "backend" rollout to finish: 1 out of 3 new replicas have been updated...
 Waiting for deployment "backend" rollout to finish: 2 out of 3 new replicas have been updated...
@@ -284,7 +337,70 @@ for i in {1..10}; do curl -s http://techshop.local/api/v1/health; echo; sleep 1;
 
 ---
 
-## 10. Các lỗi đã gặp khi làm phần Argo CD (tham khảo)
+## 10. HPA — tự động scale theo CPU/Memory
+
+Khác với mục 9 (rolling update — thay Pod bằng bản mới), HPA
+(HorizontalPodAutoscaler) giải quyết bài toán khác: **tự tăng/giảm SỐ LƯỢNG
+Pod** theo tải thực tế, không cần bạn tự sửa `replicaCount` trong Git mỗi lần
+traffic đổi.
+
+### 10.1. Cấu hình
+
+Đã có sẵn trong `helm/electronics-shop/templates/hpa.yaml` +
+`values.yaml` (khối `autoscaling`), scale theo **cả CPU lẫn Memory** — HPA
+lấy điều kiện nghiêm ngặt hơn trong 2 metric, chỉ cần 1 trong 2 vượt ngưỡng
+(mặc định CPU 70%, Memory 80% so với `resources.requests` đã khai) là đã
+scale up.
+
+**⚠️ Cần `metrics-server`** để HPA đọc được % CPU/Memory — K3s có sẵn mặc
+định, kiểm tra:
+```bash
+kubectl get deployment metrics-server -n kube-system
+```
+
+**⚠️ Xung đột với Argo CD Self Heal:** nếu để `spec.replicas` cố định trong
+`Deployment`, Self Heal sẽ liên tục kéo số Pod về đúng Git, đánh nhau với
+HPA. Đã xử lý 2 lớp:
+1. `templates/backend.yaml`/`frontend.yaml` **bỏ hẳn field `replicas`** khi
+   `autoscaling.<service>.enabled=true` — không có gì để Self Heal "áp đặt
+   lại".
+2. `ignoreDifferences` trong `argocd-application.example.yaml` (mục 5) — lớp
+   phòng vệ thứ 2, phòng khi lỡ vẫn còn field `replicas` ở đâu đó.
+
+Argo CD tự Sync khi đã push lên GitHub → kiểm tra:
+```bash
+kubectl get hpa -n electronics-shop
+```
+
+### 10.2. Test scale up
+
+Tạo tải giả liên tục gọi vào backend:
+```bash
+kubectl run load-test --rm -it --restart=Never -n electronics-shop --image=busybox -- \
+  /bin/sh -c "while true; do wget -q -O- http://backend:3001/api/v1/health; done"
+```
+
+Terminal khác, theo dõi:
+```bash
+kubectl get hpa -n electronics-shop -w
+```
+
+Kỳ vọng: cột `TARGETS` (dạng `85%/70%, 45%/80%` — CPU/Memory hiện tại so với
+ngưỡng) tăng vượt ngưỡng, `REPLICAS` tự tăng dần (do `scaleUp.stabilizationWindowSeconds: 0`,
+phản ứng gần như ngay lập tức).
+
+### 10.3. Test scale down
+
+Dừng lệnh `load-test` (Ctrl+C, Pod tự xoá nhờ `--rm`). Traffic về 0 →
+`TARGETS` giảm dần. Do `scaleDown.stabilizationWindowSeconds: 60`, HPA **cố
+tình đợi tối thiểu 60 giây** traffic thấp liên tục mới thật sự giảm Pod
+(tránh "flapping" — scale xuống rồi lại phải scale lên ngay vì traffic dao
+động ngắn hạn). Tiếp tục theo dõi `kubectl get hpa -n electronics-shop -w`,
+sau ~1 phút sẽ thấy `REPLICAS` giảm dần về lại `minReplicas`.
+
+---
+
+## 11. Các lỗi đã gặp khi làm phần Argo CD (tham khảo)
 
 | Lỗi | Nguyên nhân | Cách sửa |
 |---|---|---|
@@ -293,3 +409,5 @@ for i in {1..10}; do curl -s http://techshop.local/api/v1/health; echo; sleep 1;
 | Webhook `Payload URL` không gọi được | Argo CD chỉ chạy `port-forward` cục bộ, không có địa chỉ public | Dùng `ngrok` tạo tunnel tạm |
 | Chỉ tăng `replicaCount` mà tưởng là "rolling update" | Tăng replica chỉ là scale — không đổi Pod template, không kích hoạt rolling update | Cần đổi thứ gì đó trong Pod template (image, env...) mới kích hoạt |
 | Pod mới không thật sự pull image mới dù đã "update" | Dùng annotation giả để trigger rolling update, tag ảnh không đổi, `pullPolicy: IfNotPresent` dùng cache | Dùng tag thật theo commit SHA (đã tự động qua CI/CD) để vừa trigger rolling update vừa pull đúng code mới |
+| HPA tự scale lên rồi bị Argo CD kéo ngược lại ngay sau đó | Self Heal thấy `spec.replicas` "lệch" so với Git (Git khai cố định), tự sửa lại | Bỏ field `replicas` khỏi Deployment khi HPA quản lý + thêm `ignoreDifferences` (mục 10.1) |
+| `kubectl get hpa` báo `<unknown>` ở cột `TARGETS` | `metrics-server` chưa chạy hoặc chưa kịp thu thập dữ liệu (mới khởi động) | Kiểm tra `kubectl get deployment metrics-server -n kube-system`, đợi thêm 1-2 phút |
