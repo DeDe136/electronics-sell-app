@@ -61,3 +61,23 @@ spec:
     #   prune: true       # tự xoá resource nếu bị xoá khỏi Git
     syncOptions:
       - CreateNamespace=true
+
+  # Vì backend/frontend dùng HPA (HorizontalPodAutoscaler) để tự scale số
+  # Pod, KHÔNG khai "replicas" cố định trong chart nữa khi
+  # autoscaling.<service>.enabled=true (xem templates/backend.yaml,
+  # templates/frontend.yaml) — nhưng vẫn thêm "ignoreDifferences" ở đây làm
+  # lớp phòng vệ thứ 2: dù có lỡ để sót field "replicas" ở đâu đó, Argo CD
+  # Self Heal cũng sẽ KHÔNG coi số Pod hiện tại (do HPA điều chỉnh) là "lệch
+  # khỏi Git" để tự động kéo về — đây là khuyến nghị chính thức của Argo CD
+  # khi dùng chung với HPA.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: backend
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: Deployment
+      name: frontend
+      jsonPointers:
+        - /spec/replicas
