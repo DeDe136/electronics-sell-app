@@ -213,67 +213,90 @@ Application → **Sync Policy** → bật:
 — rồi `kubectl apply` lại.)
 
 ## 8. Webhook — Sync tức thời thay vì đợi poll
+ 
+Cách mở tunnel **khác nhau tuỳ bạn đang dùng Cách A hay Cách B ở mục 2** —
+đọc và thực hiện đúng trường hợp của bạn, đừng làm cả 2.
+ 
+### 8.1a. Nếu đang dùng Cách A (port-forward)
+ 
+Argo CD mặc định tự phục vụ HTTPS bằng 1 chứng chỉ **tự ký** (self-signed).
+`ngrok` (bước 8.2) hoạt động như 1 "mặt tiền" — nó tự có chứng chỉ TLS hợp
+lệ riêng ở phía Internet, rồi chuyển tiếp traffic vào cổng cục bộ của bạn.
+Nếu để `ngrok` trỏ vào cổng **HTTPS** nội bộ (chứng chỉ tự ký), nó phải
+được cấu hình thêm để "bỏ qua xác thực" TLS ở chặng nội bộ đó — rắc rối
+không cần thiết cho môi trường demo/test. Trỏ `ngrok` thẳng vào cổng
+**HTTP** đơn giản hơn hẳn: `ngrok` tự lo phần HTTPS ở "mặt tiền" hướng ra
+GitHub, chặng nội bộ (từ `ngrok` vào ArgoCD trong máy bạn) chỉ cần HTTP thuần, không
+chứng chỉ nào phải xử lý cả. Đây là giải pháp phù hợp cho demo local —
+trên EKS, Argo CD có chứng chỉ TLS hợp lệ thật (qua ALB/ACM), không cần
+đổi sang HTTP như cách này.
 
-Vì Argo CD chỉ chạy `port-forward` cục bộ (không có địa chỉ public), cần
-tunnel tạm để GitHub gọi được webhook tới.
-
-**8.1. Chuyển Argo CD server sang HTTP (bỏ TLS self-signed)**
-
-> Nếu đã thực hiện mục 2 - Cách B (bật Ingress), bước này **đã xong sẵn** —
-> `argocd-server-values.yaml` đã bật `server.insecure: true` rồi, bỏ qua
-> thẳng hai lệnh bên dưới.
-
+ 
 ```bash
 helm upgrade argocd argo/argo-cd -n argocd --reuse-values \
   --set configs.params."server\.insecure"=true
-
+ 
+# Crtl + C để dừng port-forward HTTPS (8080:443) cũ nếu đang chạy, thay bằng HTTP:
 kubectl port-forward svc/argocd-server -n argocd 8080:80
 ```
-
-> **Vì sao phải đổi sang port 80 (HTTP) thay vì giữ nguyên HTTPS mặc định?**
-> Argo CD mặc định tự phục vụ HTTPS bằng 1 chứng chỉ **tự ký** (self-signed).
-> `ngrok` (bước 8.2) hoạt động như 1 "mặt tiền" — nó tự có chứng chỉ TLS hợp
-> lệ riêng ở phía Internet, rồi chuyển tiếp traffic vào cổng cục bộ của bạn.
-> Nếu để `ngrok` trỏ vào cổng **HTTPS** nội bộ (chứng chỉ tự ký), nó phải
-> được cấu hình thêm để "bỏ qua xác thực" TLS ở chặng nội bộ đó — rắc rối
-> không cần thiết cho môi trường demo/test. Trỏ `ngrok` thẳng vào cổng
-> **HTTP** đơn giản hơn hẳn: `ngrok` tự lo phần HTTPS ở "mặt tiền" hướng ra
-> GitHub, chặng nội bộ (từ `ngrok` vào máy bạn) chỉ cần HTTP thuần, không
-> chứng chỉ nào phải xử lý cả. Đây là giải pháp phù hợp cho demo local —
-> trên EKS, Argo CD có chứng chỉ TLS hợp lệ thật (qua ALB/ACM), không cần
-> đổi sang HTTP như thế này.
-
-**8.2. Cài đặt `ngrok` + đăng ký tài khoản lấy authtoken**
-
+ 
+Từ giờ vào UI bằng `http://localhost:8080` (không còn `https://`), và
+`ngrok` ở mục 8.2 sẽ trỏ vào `8080`.
+ 
+### 8.1b. Nếu đang dùng Cách B (Ingress) — KHÔNG cần `port-forward`
+ 
+Đây là điểm dễ nhầm: `argocd-server-values.yaml` đã bật sẵn
+`server.insecure: true`, và Traefik (Ingress) đã ánh xạ port 80 trong kernel xuyên qua
+iptables/IPVS ngay trong network namespace của WSL2 — đúng cơ chế đã kiểm
+chứng lúc debug `techshop.local` trước đây (`curl 127.0.0.1:80` từ **trong**
+WSL2 luôn chạm được tới Traefik, dù không có tiến trình nào "bind" cổng đó
+theo cách `ss` nhìn thấy được). Nói cách khác: **port 80 đã được "ánh xạ sẵn"** ngay
+trong WSL2 thông qua Traefik, thêm 1 lớp `port-forward` nữa là dư thừa, dẫn đến ta
+không cần chạy gì thêm ở bước này — sang thẳng mục 8.2, `ngrok` sẽ trỏ thẳng
+vào port 80 có sẵn.
+ 
+### 8.2. Cài đặt `ngrok` + đăng ký tài khoản lấy authtoken
+ 
 Đăng ký tài khoản (miễn phí đủ dùng cho demo): vào `https://dashboard.ngrok.com/signup`,
 tạo tài khoản bằng email hoặc đăng nhập qua GitHub/Google — xác nhận email
 nếu được yêu cầu.
-
+ 
 Sau khi đăng nhập, vào `https://dashboard.ngrok.com/get-started/your-authtoken`
 — trang này hiện sẵn đúng authtoken của bạn, copy lại.
-
+ 
 Cài `ngrok` trong WSL2:
 ```bash
 curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
 echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
 sudo apt update && sudo apt install ngrok
 ```
-
+ 
 Đăng ký authtoken vừa copy vào `ngrok` CLI (chỉ cần làm 1 lần, lưu lại trong
 `~/.config/ngrok/ngrok.yml`):
 ```bash
 ngrok config add-authtoken <token-vừa-copy-từ-dashboard>
 ```
-
-**8.3. Tạo tunnel & khai báo webhook**
-
+ 
+### 8.3. Tạo tunnel & khai báo webhook
+ 
+**Nếu dùng Cách A (port-forward):**
 ```bash
 ngrok http 8080
 ```
-
-Terminal hiện dòng `Forwarding` dạng `https://abcd-1234.ngrok-free.app ->
-http://localhost:8080` — giữ nguyên terminal này chạy, tắt đi là tunnel mất.
-
+ 
+**Nếu dùng Cách B (Ingress):** trỏ thẳng vào port 80 sẵn có, kèm cờ
+`--host-header` — vì không đi qua `port-forward` 1-1 vào thẳng Service nữa,
+`ngrok` cần tự thêm đúng header `Host: argocd.techshop.local` vào mỗi request
+để Traefik biết định tuyến tới đúng Ingress (Traefik định tuyến theo tên
+miền, không phải theo cổng):
+```bash
+ngrok http --host-header=argocd.techshop.local 80
+```
+ 
+Cả 2 trường hợp, terminal hiện dòng `Forwarding` dạng
+`https://abcd-1234.ngrok-free.app -> http://localhost:<port>` — giữ nguyên
+terminal này chạy, tắt đi là tunnel mất.
+ 
 Khai báo trên GitHub repo → **Settings** → **Webhooks** → **Add webhook**:
 - Payload URL: `https://abcd-1234.ngrok-free.app/api/webhook`
 - Content type: `application/json`
