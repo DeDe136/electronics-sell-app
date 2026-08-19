@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: backend
   namespace: {{ .Values.global.namespace }}
@@ -15,6 +15,19 @@ spec:
   {{- end }}
   selector:
     matchLabels: { app: backend }
+  strategy:
+    canary:
+      stableService: backend
+      canaryService: backend-canary
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: backend-traefik
+      steps:
+        - setWeight: 20
+        - pause: {}          # dừng vô thời hạn, chờ ta tự "promote" bằng tay
+        - setWeight: 50
+        - pause: { duration: 30s }
+        - setWeight: 100
   template:
     metadata:
       labels: { app: backend }
@@ -47,10 +60,61 @@ spec:
             periodSeconds: 20
           resources: {{ toYaml .Values.backend.resources | nindent 12 }}
 ---
+# ================================================================
+# TẠI SAO 2 SERVICE BÊN DƯỚI ĐỀU KHAI "selector: { app: backend }" GIỐNG
+# HỆT NHAU MÀ VẪN ROUTE ĐÚNG VÀO 2 NHÓM POD KHÁC NHAU (stable vs canary)?
+#
+# Vì đây chỉ là phần "selector" ta khai trong Git — KHÔNG PHẢI selector
+# thật đang chạy trên cluster. Argo Rollouts controller tự động PATCH
+# thêm 1 label nữa vào spec.selector thật của từng Service lúc runtime:
+# label "rollouts-pod-template-hash: <hash-của-ReplicaSet>", với giá trị
+# hash KHÁC NHAU cho Service "backend" và Service "backend-canary":
+#
+#   Service "backend"        (stable) → selector thật:
+#     { app: backend, rollouts-pod-template-hash: <hash-bản-cũ-ổn-định> }
+#
+#   Service "backend-canary" (canary) → selector thật:
+#     { app: backend, rollouts-pod-template-hash: <hash-bản-mới-đang-canary> }
+#
+# Mỗi khi Rollout tạo ReplicaSet mới (mỗi lần đổi image/Pod template),
+# nó cũng tự gắn ĐÚNG label "rollouts-pod-template-hash" đó lên toàn bộ
+# Pod thuộc ReplicaSet đó. Kết quả: dù cả 2 Service cùng "app: backend",
+# điều kiện hash thêm vào khiến mỗi Service CHỈ khớp đúng 1 ReplicaSet
+# (1 phiên bản) — không có chuyện gom lẫn Pod cũ với Pod mới.
+#
+# Muốn tự mắt thấy phần hash này (không nằm trong Git, chỉ xuất hiện sau
+# khi Rollout đã chạy trên cluster), chạy:
+#   kubectl get service backend backend-canary -n electronics-shop \
+#     -o jsonpath='{.items[*].spec.selector}'
+#
+# Chính vì phần hash này bị controller sửa "ngoài luồng Git", cần khai
+# "ignoreDifferences" cho "/spec/selector" của cả 2 Service trong
+# argocd-application.yaml — nếu không, Argo CD Self Heal sẽ liên tục xoá
+# phần hash đó, kéo selector về lại đúng mỗi "app: backend" như trong
+# Git, khiến cả 2 Service lại gom chung Pod như lo ngại ban đầu.
+# ================================================================
+
+# Service "stable" — GIỮ NGUYÊN TÊN "backend" như chart gốc để không phải
+# sửa INTERNAL_API_URL bên frontend. Traffic gọi nội bộ (frontend gọi
+# backend qua tên Service nội bộ K8s) luôn đi vào bản ổn định, không dính
+# canary — đúng thực hành chuẩn, canary chỉ áp dụng cho traffic người
+# dùng thật đi qua Ingress/IngressRoute.
 apiVersion: v1
 kind: Service
 metadata:
   name: backend
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector: { app: backend }
+  ports: [{ port: {{ .Values.backend.port }}, targetPort: {{ .Values.backend.port }} }]
+---
+# Service "canary" — MỚI so với chart gốc, chỉ được TraefikService (xem
+# templates/backend-traffic.yaml) và Argo Rollouts controller sử dụng để
+# route 1 phần traffic Ingress vào bản đang canary.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-canary
   namespace: {{ .Values.global.namespace }}
 spec:
   selector: { app: backend }

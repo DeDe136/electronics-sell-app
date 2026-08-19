@@ -81,3 +81,54 @@ spec:
       name: frontend
       jsonPointers:
         - /spec/replicas
+
+    # ============================================================
+    # BACKEND — 3 KHỐI BÊN DƯỚI CHỈ DÙNG KHI Application này trỏ "path"
+    # sang chart "helm/electronics-shop-rollout" (backend chạy bằng Argo
+    # Rollouts thay vì Deployment thường).
+    #
+    # ĐANG DÙNG CHART GỐC "helm/electronics-shop" (KHÔNG dùng Argo
+    # Rollouts cho backend)?
+    #   => COMMENT LẠI CẢ 3 KHỐI bên dưới (Rollout lẫn 2 Service). Backend
+    #      lúc đó vẫn là Deployment "backend" bình thường, không tồn tại
+    #      Rollout hay Service "backend-canary" nào để mà ignore — giữ
+    #      nguyên các khối này sẽ khiến Argo CD cảnh báo path không khớp
+    #      resource nào trên cluster (vô hại nhưng thừa, nên comment cho
+    #      sạch).
+    # ============================================================
+
+    # -- Khối Rollout: CHỈ GIỮ nếu backend đang dùng Argo Rollouts VÀ vẫn
+    # bật HPA (autoscaling.backend.enabled=true) — lúc đó HPA tự sửa
+    # "/spec/replicas" của Rollout y hệt cách nó từng sửa của Deployment
+    # trước đây, cần ignore để khỏi đánh nhau với Self Heal.
+    # Nếu dùng Argo Rollouts NHƯNG KHÔNG dùng HPA cho backend
+    # (autoscaling.backend.enabled=false, "replicas" khai cố định thẳng
+    # trong chart) => COMMENT LẠI khối này — lúc đó "replicas" trong Git
+    # phải là nguồn sự thật duy nhất, cần để Self Heal tự do kéo về đúng
+    # Git như bình thường, không ignore.
+    - group: argoproj.io
+      kind: Rollout
+      name: backend
+      jsonPointers:
+        - /spec/replicas
+
+    # -- 2 khối Service bên dưới: LUÔN GIỮ khi dùng Argo Rollouts cho
+    # backend (không phụ thuộc có bật HPA hay không). Lý do: Argo Rollouts
+    # controller luôn tự tiêm thêm label "rollouts-pod-template-hash" vào
+    # "spec.selector" của CẢ 2 Service "backend" (stable) và
+    # "backend-canary" lúc runtime, để mỗi Service chỉ khớp đúng 1 nhóm Pod
+    # dù cả 2 cùng khai "app: backend" trong Git (xem comment giải thích
+    # chi tiết trong templates/backend.yaml của chart rollout). Nếu không
+    # ignore, Self Heal sẽ liên tục xoá phần hash đó, kéo selector về lại
+    # đúng mỗi những gì khai trong Git — khiến cả 2 Service gom chung Pod
+    # cũ lẫn Pod mới, traffic canary bị lẫn lộn.
+    - group: ""
+      kind: Service
+      name: backend
+      jsonPointers:
+        - /spec/selector
+    - group: ""
+      kind: Service
+      name: backend-canary
+      jsonPointers:
+        - /spec/selector
