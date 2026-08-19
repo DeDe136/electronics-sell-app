@@ -1,0 +1,57 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: electronics-shop
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    # Traefik (K3s mặc định) tự nhận diện IngressClass, không cần thêm annotation
+    # rewrite gì đặc biệt cho case đơn giản này. Trên EKS đổi className/annotations
+    # theo AWS Load Balancer Controller (kubernetes.io/ingress.class: alb...).
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { number: {{ .Values.backend.port }} } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { number: {{ .Values.frontend.port }} } }
+{{- end }}
+---
+{{- if .Values.ingress.minio.enabled }}
+# Ingress riêng cho MinIO — tách host riêng (không dùng path) vì MinIO console
+# là 1 ứng dụng web độc lập, đi chung path với app chính dễ xung đột routing.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: electronics-shop-minio
+  namespace: {{ .Values.global.namespace }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    # Giao diện web MinIO Console — nơi bạn đăng nhập, xem/tạo bucket, tự tay
+    # upload/xoá file để test thủ công.
+    - host: {{ .Values.ingress.minio.consoleHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: minio, port: { number: 9001 } }
+    # S3 API — nơi app (hoặc trình duyệt qua presigned URL) thật sự gọi để
+    # upload/tải file. Cần expose riêng vì backend trả presigned URL trỏ tới
+    # đúng host này cho client gọi trực tiếp.
+    - host: {{ .Values.ingress.minio.apiHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: minio, port: { number: 9000 } }
+{{- end }}
