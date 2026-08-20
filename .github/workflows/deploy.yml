@@ -205,7 +205,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Cập nhật ĐÚNG tag của (các) service vừa build xong trong
-  # helm/electronics-shop/values.yaml — backendTag/frontendTag TÁCH RIÊNG,
+  # file values.yaml của chart đang được ArgoCD trỏ tới (đường dẫn lấy từ
+  # Repository Variable "HELM_VALUES_FILE", xem chi tiết ở step bên dưới) —
+  # backendTag/frontendTag TÁCH RIÊNG,
   # chỉ sửa dòng của service nào thật sự nằm trong ma trận build ở trên. Service
   # không đổi thì giữ nguyên tag cũ trong values.yaml (image cũ vẫn còn trên
   # Harbor, không có gì bị "gãy"). Commit ngược lại vào repo, Argo CD (đã cấu
@@ -234,8 +236,17 @@ jobs:
         env:
           NEW_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
           MATRIX: ${{ needs.changes.outputs.matrix }}
+          # Đường dẫn tới file values.yaml của chart ĐANG được ArgoCD Application
+          # trỏ tới (xem "path" trong argo/argocd-application.yaml) — lấy từ
+          # Repository Variable "HELM_VALUES_FILE" (Settings > Secrets and
+          # variables > Actions > tab "Variables") thay vì hardcode cứng trong
+          # file workflow này. Đổi chart (vd: electronics-shop <->
+          # electronics-shop-rollout) sau này CHỈ CẦN sửa giá trị Variable đó
+          # trên GitHub UI, không phải sửa + commit lại file .yml này. Có giá
+          # trị mặc định "helm/electronics-shop-rollout/values.yaml" phòng khi
+          # Variable chưa được set (vd: fork repo mới, hoặc quên cấu hình).
+          VALUES_FILE: ${{ vars.HELM_VALUES_FILE || 'helm/electronics-shop-rollout/values.yaml' }}
         run: |
-          VALUES_FILE=helm/electronics-shop/values.yaml
           if echo "$MATRIX" | jq -e 'map(.service) | index("backend")' > /dev/null; then
             sed -i "s/^\(\s*backendTag:\).*/\1 \"${NEW_TAG}\"/" "$VALUES_FILE"
             echo "Đã cập nhật backendTag -> ${NEW_TAG}"
@@ -249,10 +260,11 @@ jobs:
       - name: Commit & push
         env:
           MATRIX: ${{ needs.changes.outputs.matrix }}
+          VALUES_FILE: ${{ vars.HELM_VALUES_FILE || 'helm/electronics-shop-rollout/values.yaml' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add helm/electronics-shop/values.yaml
+          git add "$VALUES_FILE"
           # "[skip ci]" báo GitHub bỏ qua việc trigger lại ci.yml (trigger kiểu
           # "push") cho chính commit này — tránh vòng lặp: commit này lại kích
           # CI -> lại kích deploy.yml -> lại tạo thêm 1 commit nữa vô tận.
