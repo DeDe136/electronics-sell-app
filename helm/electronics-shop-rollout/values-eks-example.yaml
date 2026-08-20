@@ -1,0 +1,18 @@
+# Ví dụ file override khi lên EKS — dùng:
+#   helm upgrade --install electronics-shop ./electronics-shop \
+#     -f electronics-shop/values-eks-example.yaml
+# Sửa lại các giá trị placeholder trước khi dùng thật.
+
+postgres:
+  storageClassName: gp3       # StorageClass mặc định trên EKS (EBS CSI driver)
+
+minio:
+  storageClassName: gp3
+
+ingress:
+  className: alb
+  host: techshop.example.com
+
+# Khuyến nghị: thay Secret thuần bằng External Secrets Operator trỏ tới AWS
+# Secrets Manager, hoặc dùng Vault Agent Injector như trong sơ đồ CI/CD gốc
+# (HashiCorp Vault -> "Get Secret"), thay vì override secrets.* trực tiếp ở đây.
