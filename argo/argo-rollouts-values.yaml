@@ -1,0 +1,42 @@
+# argo-rollouts-values.yaml
+#
+# Values override cho chart "argo-rollouts" (argo/argo-rollouts) — cùng chart
+# bạn đã cài ở Bước 1 (helm install argo-rollouts argo/argo-rollouts -n
+# argo-rollouts --create-namespace). File này KHÔNG cài lại từ đầu, chỉ bổ
+# sung Dashboard chạy thường trực trong cluster + Ingress, thay vì phải gõ
+# "kubectl argo rollouts dashboard" (chạy tạm, tắt terminal là mất) mỗi lần
+# muốn xem UI.
+#
+# CÁCH DÙNG:
+#   helm upgrade argo-rollouts argo/argo-rollouts -n argo-rollouts \
+#     -f argo/argo-rollouts-values.yaml
+
+dashboard:
+  enabled: true
+
+  # MẶC ĐỊNH Dashboard chỉ xem được Rollout trong đúng namespace nó được
+  # deploy vào ("argo-rollouts") — KHÔNG tự thấy Rollout ở namespace khác
+  # như "electronics-shop", dù ClusterRole của nó (mặc định
+  # createClusterRole: true) đã đủ quyền đọc TOÀN CLUSTER. Đây là lý do
+  # bạn thấy Dashboard "quan sát trong NS argo-rollouts" dù backend đang
+  # chạy ở "electronics-shop" — chỉ là thiếu 1 flag khai rõ namespace cần
+  # xem, quyền hạn thì đã đủ sẵn.
+  #
+  # Cách 1 (dùng ở đây) — CHỐT CỨNG Dashboard luôn xem "electronics-shop":
+  # extraArgs:
+  #   - --namespace=electronics-shop
+  #
+  # Cách 2 (thay thế, nếu ta có nhiều namespace/app mà có ít nhất 1 object
+  # Rollout và muốn xem đổi qua lại) — bật "full cluster mode" bằng cấu hình
+  # bên dưới, Dashboard cho chọn namespace ngay trên UI thay vì chốt cứng 1 cái:
+  extraArgs:
+    - --namespace=""
+
+  ingress:
+    enabled: true
+    ingressClassName: traefik   # K3s cài sẵn Traefik. Trên EKS đổi thành "alb"
+    hosts:
+      - rollouts.techshop.local
+    paths:
+      - /
+    pathType: Prefix

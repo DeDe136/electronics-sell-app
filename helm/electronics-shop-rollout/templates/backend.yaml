@@ -24,7 +24,13 @@ spec:
           weightedTraefikServiceName: backend-traefik
       steps:
         - setWeight: 20
-        - pause: {}          # dừng vô thời hạn, chờ ta tự "promote" bằng tay
+        # Dừng vô thời hạn, chờ ta tự "promote" bằng tay:
+        # + Cách 1: Dùng lệnh kubectl argo rollouts promote backend -n electronics-shop
+        # + Cách 2: Dùng Argo CD UI nhấn vào 3 chấm bên Rollout backend, rồi chọn
+        #   "Skip-current-step" (tương đương promote). Lúc đó Rollout sẽ bỏ qua step
+        #   pause này, tiếp tục chạy step setWeight: 50.
+        # + Cách 3: Dùng Argo Rollouts UI (Dashboard) nhấn nút "Promote" trên Rollout backend.
+        - pause: {}
         - setWeight: 50
         - pause: { duration: 30s }
         - setWeight: 100

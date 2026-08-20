@@ -340,7 +340,7 @@ tag khác, không phải tag `latest` bị cache).
 
 ```bash
 kubectl rollout status deployment/backend -n electronics-shop
-kubectl get pods -n electronics-shop -l app=frontend   -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[0].ready,CREATED:.metadata.creationTimestamp'   --watch
+kubectl get pods -n electronics-shop -l app=backend   -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,READY:.status.containerStatuses[0].ready,CREATED:.metadata.creationTimestamp'   --watch
 ```
 
 Kỳ vọng thấy tiến trình dạng (với số lượng replica thực tế tuỳ thuộc vào HPA đang giữ ở
