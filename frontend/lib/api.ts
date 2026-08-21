@@ -28,7 +28,19 @@ const API_URL =
 
 export const api = axios.create({
   baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    // CHỈ áp dụng lúc chạy SERVER-SIDE (typeof window === 'undefined'): vì
+    // giờ INTERNAL_API_URL trỏ thẳng vào Service nội bộ của Traefik (xem
+    // giải thích trong templates/frontend.yaml), request cần "giả" header
+    // Host đúng domain public để khớp điều kiện "Host(...)" trong
+    // IngressRoute — nếu không Traefik sẽ trả 404 vì không route được.
+    // Trình duyệt (browser) không cần dòng này: nó gọi thẳng domain thật
+    // (NEXT_PUBLIC_API_URL), Host header vốn đã đúng sẵn.
+    ...(typeof window === 'undefined' && process.env.INTERNAL_API_HOST_HEADER
+      ? { Host: process.env.INTERNAL_API_HOST_HEADER }
+      : {}),
+  },
 });
 
 // ── Ping server-side health check → log hiện trong terminal Next.js ──
