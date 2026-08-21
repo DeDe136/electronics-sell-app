@@ -23,7 +23,7 @@ spec:
         traefik:
           weightedTraefikServiceName: backend-traefik
       steps:
-        - setWeight: 20
+        - setWeight: 38
         # Dừng vô thời hạn, chờ ta tự "promote" bằng tay:
         # + Cách 1: Dùng lệnh kubectl argo rollouts promote backend -n electronics-shop
         # + Cách 2: Dùng Argo CD UI nhấn vào 3 chấm bên Rollout backend, rồi chọn
@@ -34,6 +34,7 @@ spec:
         - setWeight: 50
         - pause: { duration: 30s }
         - setWeight: 100
+        - pause: { duration: 30s }
   template:
     metadata:
       labels: { app: backend }
