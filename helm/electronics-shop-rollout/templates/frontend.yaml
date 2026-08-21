@@ -22,9 +22,25 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: [{ containerPort: {{ .Values.frontend.port }} }]
           env:
-            # gọi sang backend qua tên Service nội bộ K8s, không phải qua Ingress
+            # (ĐỔI so với chart gốc) Gọi vào chính TRAEFIK thay vì gọi thẳng
+            # Service "backend" — để traffic SSR đi qua đúng IngressRoute ->
+            # TraefikService, được chia weight stable/canary y hệt traffic
+            # browser thật, thay vì luôn cố định vào bản stable.
+            # "traefik.kube-system" = Service nội bộ của Traefik trong K3s
+            # (xác nhận đúng tên/namespace bằng lệnh:
+            #   kubectl get svc -n kube-system | grep -i traefik
+            # trước khi dùng — nếu khác, sửa lại giá trị bên dưới).
             - name: INTERNAL_API_URL
-              value: "http://backend:{{ .Values.backend.port }}/api/v1"
+              value: "http://traefik.kube-system/api/v1"
+            # IngressRoute route theo điều kiện Host(...) — khi gọi thẳng vào
+            # Service nội bộ của Traefik (không qua DNS public), header Host
+            # mặc định sẽ là "traefik.kube-system" (suy ra từ URL trên),
+            # KHÔNG khớp rule "Host(`{{ .Values.ingress.host }}`)" trong
+            # IngressRoute, khiến Traefik trả 404. Biến này được code trong
+            # frontend/lib/api.ts đọc để tự ghi đè header "Host" đúng domain,
+            # giúp request "giả vờ" như đến từ đúng domain public.
+            - name: INTERNAL_API_HOST_HEADER
+              value: {{ .Values.ingress.host | quote }}
           readinessProbe:
             httpGet: { path: /, port: {{ .Values.frontend.port }} }
             initialDelaySeconds: 10

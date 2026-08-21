@@ -325,8 +325,24 @@ export class CatalogController {
       },
     },
   })
-  findAll(@Query() query: ProductQueryDto) {
-    return this.catalogService.findAll(query);
+  // "_debugVersion" CHỈ dùng để test/quan sát canary rollout, KHÔNG phải
+  // field nghiệp vụ thật — lý do cần thêm:
+  //   1. Sửa "description" trong @ApiOkResponse ở trên KHÔNG đủ, vì đó chỉ
+  //      là metadata cho Swagger/OpenAPI (tài liệu), hoàn toàn tách biệt
+  //      với response JSON thật trả về cho client — sửa xong response thật
+  //      không đổi 1 ký tự nào, nên phía frontend không thể nào phân biệt
+  //      được đang gọi trúng Pod bản cũ hay bản mới.
+  //   2. Field "version" ở endpoint /api/v1/health (dùng lúc demo canary
+  //      bằng curl trước đó) không tiện dùng ở đây, vì code frontend thật
+  //      (app/page.tsx) không hề gọi endpoint health lúc render trang chủ —
+  //      nó gọi catalogApi.getProducts(), nên cần đánh dấu version ngay
+  //      trên chính response của API này thì mới quan sát được qua log SSR.
+  // Nhớ đổi giá trị (vd "1.2.0" -> "1.3.0") mỗi lần build 1 bản mới muốn
+  // test canary, và NHỚ XOÁ field này trước khi dùng cho môi trường thật để
+  // giữ code sạch, tránh lộ thông tin nội bộ.
+  async findAll(@Query() query: ProductQueryDto) {
+    const result = await this.catalogService.findAll(query);
+    return { ...result, _debugVersion: '1.1.0' };
   }
 
   @Get('products/:slug')

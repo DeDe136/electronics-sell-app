@@ -14,7 +14,7 @@ interface SearchParams {
 
 async function getProducts(params: SearchParams) {
   try {
-    return await catalogApi.getProducts({
+    const result = await catalogApi.getProducts({
       categoryId: params.category,
       search: params.search,
       brand: params.brand,
@@ -24,6 +24,20 @@ async function getProducts(params: SearchParams) {
       minPrice: params.minPrice,
       maxPrice: params.maxPrice,
     });
+    // Log ngay TẠI ĐÂY (bên trong getProducts), không phải trong HomePage
+    // bên dưới — vì HomePage destructure kết quả thành "{ items, meta }"
+    // ngay lúc nhận về (xem "Promise.all" trong HomePage), field
+    // "_debugVersion" sẽ bị "rớt" mất trong lúc destructure (JS chỉ giữ lại
+    // đúng những field được đặt tên, không lỗi gì nhưng không còn truy cập
+    // được nữa) — log ở HomePage sẽ không có gì để in ra.
+    // Đây là console.log chạy TRONG Server Component (hàm async, không có
+    // "use client", không nằm trong useEffect) nên in ra stdout của
+    // container frontend, xem được qua:
+    //   kubectl logs -f -l app=frontend -n electronics-shop --prefix
+    // KHÔNG xuất hiện trong Console của trình duyệt — khác với console.log
+    // trong Client Component.
+    console.log('[SSR] backend trả về từ bản:', result._debugVersion);
+    return result;
   } catch {
     return { items: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } };
   }

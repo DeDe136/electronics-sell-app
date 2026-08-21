@@ -1,0 +1,25 @@
+# =============================================================================
+# .GITATTRIBUTES — Chuẩn hóa line ending về LF cho toàn bộ repo
+# -----------------------------------------------------------------------------
+# Vấn đề: trên Windows, Git/editor mặc định hay lưu file với CRLF (\r\n),
+# trong khi Prettier (dùng trong ESLint qua eslint-plugin-prettier) mặc định
+# yêu cầu LF (\n) — gây ra hàng loạt lỗi "Delete ␍" khi chạy `npm run lint`,
+# dù code không hề sai logic gì.
+#
+# "* text=auto eol=lf" nghĩa là: với MỌI file được Git nhận diện là text,
+# luôn lưu trong repo (và checkout ra) với LF — bất kể máy dev đang dùng
+# Windows/macOS/Linux. Điều này đảm bảo mọi người trong team (và cả CI chạy
+# trên Linux runner) luôn thấy cùng 1 line ending, không còn phụ thuộc vào
+# cấu hình "core.autocrlf" của từng máy cá nhân.
+# =============================================================================
+* text=auto eol=lf
+
+# Một số file nhị phân cần khai báo rõ để Git không cố convert line ending
+# (vốn sẽ làm hỏng file nếu Git hiểu nhầm là text).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
