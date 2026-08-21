@@ -26,7 +26,9 @@ describe('CatalogController', () => {
       deleteVariant: jest.fn(),
     };
 
-    controller = new CatalogController(catalogService as unknown as CatalogService);
+    controller = new CatalogController(
+      catalogService as unknown as CatalogService,
+    );
   });
 
   afterEach(() => {
@@ -159,7 +161,9 @@ describe('CatalogController', () => {
   describe('create', () => {
     it('chuyển tiếp dto và images sang service.create', () => {
       const dto = { name: 'iPhone 16' } as any;
-      const images = [{ originalname: 'a.png' }] as unknown as Express.Multer.File[];
+      const images = [
+        { originalname: 'a.png' },
+      ] as unknown as Express.Multer.File[];
       catalogService.create.mockReturnValue({ id: 'p1' });
 
       controller.create(dto, images);
