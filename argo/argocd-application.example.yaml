@@ -115,7 +115,7 @@ spec:
     # -- 2 khối Service bên dưới: LUÔN GIỮ khi dùng Argo Rollouts cho
     # backend (không phụ thuộc có bật HPA hay không). Lý do: Argo Rollouts
     # controller luôn tự tiêm thêm label "rollouts-pod-template-hash" vào
-    # "spec.selector" của CẢ 2 Service "backend" (stable) và
+    # "spec.selector" của CẢ 2 Service "backend-stable" (stable) và
     # "backend-canary" lúc runtime, để mỗi Service chỉ khớp đúng 1 nhóm Pod
     # dù cả 2 cùng khai "app: backend" trong Git (xem comment giải thích
     # chi tiết trong templates/backend.yaml của chart rollout). Nếu không
@@ -124,7 +124,7 @@ spec:
     # cũ lẫn Pod mới, traffic canary bị lẫn lộn.
     - group: ""
       kind: Service
-      name: backend
+      name: backend-stable
       jsonPointers:
         - /spec/selector
     - group: ""

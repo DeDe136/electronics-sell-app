@@ -17,13 +17,33 @@ spec:
     matchLabels: { app: backend }
   strategy:
     canary:
-      stableService: backend
+      stableService: backend-stable
       canaryService: backend-canary
+      # MẶC ĐỊNH (không khai dòng bên dưới = false): ReplicaSet stable luôn giữ
+      # FULL scale (100% số Pod ban đầu) suốt quá trình canary, dù weight
+      # đang chia bao nhiêu % traffic — tốn tài nguyên hơn (có lúc chạy dư
+      # gần gấp đôi Pod), đổi lại nếu "abort" giữa chừng, toàn bộ traffic
+      # quay ngay lập tức về stable (Pod đã có sẵn, không cần chờ scale).
+      #
+      # true: ReplicaSet stable được SCALE XUỐNG theo đúng tỉ lệ (100% -
+      # weight_canary) thay vì giữ nguyên 100% Pod ban đầu — tiết kiệm tài
+      # nguyên đáng kể lúc đang canary, đánh đổi: lúc "abort", cần vài giây
+      # để scale NGƯỢC stable lên lại đủ Pod trước khi traffic chuyển hẳn
+      # về (không còn tức thì 100% như lúc tắt).
+      #
+      # Công thức tính số Pod (làm tròn LÊN — xem hàm trafficWeightToReplicas
+      # trong utils/replicaset/canary.go của argo-rollouts):
+      #   pod_canary = ceil(weight_canary% x tổng_replicas / 100)
+      #   pod_stable = ceil((100 - weight_canary%) x tổng_replicas / 100)
+      # Ví dụ đúng với 5 replicas, setWeight: 33 ->
+      #   pod_canary = ceil(0.33 x 5) = ceil(1.65) = 2
+      #   pod_stable = ceil(0.67 x 5) = ceil(3.35) = 4  (giảm 1 Pod so với 5)
+      dynamicStableScale: true
       trafficRouting:
         traefik:
           weightedTraefikServiceName: backend-traefik
       steps:
-        - setWeight: 38
+        - setWeight: 33
         # Dừng vô thời hạn, chờ ta tự "promote" bằng tay:
         # + Cách 1: Dùng lệnh kubectl argo rollouts promote backend -n electronics-shop
         # + Cách 2: Dùng Argo CD UI nhấn vào 3 chấm bên Rollout backend, rồi chọn
@@ -88,6 +108,12 @@ spec:
 #      backend-canary  -> { ..., rollouts-pod-template-hash: Y }  (bản MỚI)
 #    Lúc này 2 Service mới thật sự trỏ vào 2 ReplicaSet khác nhau — nhờ
 #    vậy TraefikService mới chia % traffic đúng giữa 2 phiên bản.
+#    VÌ ĐÃ BẬT "dynamicStableScale: true" (xem giải thích ngay phía trên,
+#    phần "strategy.canary") — SỐ LƯỢNG Pod của ReplicaSet X (stable)
+#    cũng bị SCALE GIẢM dần theo đúng tỉ lệ (100% - weight_canary), KHÔNG
+#    còn giữ nguyên 100% Pod ban đầu trong suốt quá trình như hành vi mặc
+#    định nữa — xem đúng ví dụ số ở comment "dynamicStableScale" phía trên
+#    (5 Pod, setWeight: 33 -> stable X chỉ còn 4 Pod, canary Y có 2 Pod).
 #
 # 3) VỪA PROMOTE XONG (bước setWeight cuối chạy xong, không còn pause):
 #    Controller gắn nhãn ReplicaSet Y (vừa là canary) thành "stable" mới,
@@ -143,15 +169,22 @@ spec:
 # thay vì trỏ đúng theo từng giai đoạn như mô tả ở trên.
 # ================================================================
 
-# Service "stable" — GIỮ NGUYÊN TÊN "backend" như chart gốc để không phải
-# sửa INTERNAL_API_URL bên frontend. Traffic gọi nội bộ (frontend gọi
-# backend qua tên Service nội bộ K8s) luôn đi vào bản ổn định, không dính
-# canary — đúng thực hành chuẩn, canary chỉ áp dụng cho traffic người
-# dùng thật đi qua Ingress/IngressRoute.
+# Service "stable" — đổi tên thành "backend-stable" (KHÁC bản đầu từng
+# đặt là "backend" để giữ tương thích ngược với INTERNAL_API_URL cũ của
+# frontend). Từ lúc frontend đổi sang gọi hairpin qua Traefik (xem
+# templates/frontend.yaml + frontend/lib/api.ts) thay vì gọi thẳng tên
+# Service này, lý do giữ tên "backend" không còn nữa — đổi sang
+# "backend-stable" cho nhất quán với "backend-canary" bên dưới.
+#
+# Không có nguồn traffic nào (kể cả nội bộ) gọi trực tiếp vào tên Service
+# này nữa — cả traffic browser (qua Ingress) lẫn traffic SSR (hairpin qua
+# Traefik) đều đi qua TraefikService "backend-traefik" trước, Service này
+# chỉ còn đóng vai trò là 1 trong 2 "chân" (stable) mà TraefikService
+# dùng để chia trọng số.
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: backend-stable
   namespace: {{ .Values.global.namespace }}
 spec:
   selector: { app: backend }

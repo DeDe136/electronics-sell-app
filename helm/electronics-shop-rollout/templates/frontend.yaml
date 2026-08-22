@@ -42,7 +42,13 @@ spec:
             - name: INTERNAL_API_HOST_HEADER
               value: {{ .Values.ingress.host | quote }}
           readinessProbe:
-            httpGet: { path: /, port: {{ .Values.frontend.port }} }
+            # Đổi từ "/" sang "/api/ping" — "/" là trang chủ thật (Server
+            # Component), mỗi lần probe gọi vào sẽ kích hoạt render lại
+            # toàn trang, kéo theo gọi getProducts() -> gọi thật sang
+            # backend mỗi periodSeconds giây, dù không có người dùng thật
+            # nào truy cập. "/api/ping" là route tĩnh, không render page,
+            # không gọi backend (xem frontend/app/api/ping/route.ts).
+            httpGet: { path: /api/ping, port: {{ .Values.frontend.port }} }
             initialDelaySeconds: 10
             periodSeconds: 10
           resources: {{ toYaml .Values.frontend.resources | nindent 12 }}
@@ -55,3 +61,4 @@ metadata:
 spec:
   selector: { app: frontend }
   ports: [{ port: {{ .Values.frontend.port }}, targetPort: {{ .Values.frontend.port }} }]
+  
