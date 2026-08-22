@@ -342,7 +342,7 @@ export class CatalogController {
   // giữ code sạch, tránh lộ thông tin nội bộ.
   async findAll(@Query() query: ProductQueryDto) {
     const result = await this.catalogService.findAll(query);
-    return { ...result, _debugVersion: '1.1.0' };
+    return { ...result, _debugVersion: '1.1.1' };
   }
 
   @Get('products/:slug')
