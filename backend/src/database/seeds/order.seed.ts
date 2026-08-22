@@ -174,7 +174,7 @@ export async function seedOrders(dataSource: DataSource) {
       userEmail: 'nguyen.van.an@gmail.com',
       shippingAddress: {
         fullName: 'Nguyễn Văn An',
-        phone: '0912345678',
+        phone: '0912345679',
         address: '45 Lê Lợi',
         ward: 'Phường Bến Nghé',
         district: 'Quận 1',

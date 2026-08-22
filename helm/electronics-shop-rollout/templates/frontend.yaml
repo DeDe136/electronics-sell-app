@@ -1,15 +1,43 @@
-apiVersion: apps/v1
-kind: Deployment
+# Frontend chuyển từ "kind: Deployment" (chart gốc) sang "kind: Rollout"
+# (Argo Rollouts) + strategy "canary" — Y HỆT pattern đã dùng cho backend
+# (xem templates/backend.yaml, phần comment ở đó giải thích rất chi tiết
+# về dynamicStableScale, cơ chế rollouts-pod-template-hash, cách promote
+# bằng tay... — không lặp lại toàn bộ ở đây, chỉ note phần KHÁC với
+# backend).
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: frontend
   namespace: {{ .Values.global.namespace }}
   labels: { app: frontend }
 spec:
+  # Giống backend: khi HPA quản lý (autoscaling.frontend.enabled=true), bỏ
+  # hẳn field "replicas" để tránh Argo CD Self Heal đánh nhau với HPA.
   {{- if not .Values.autoscaling.frontend.enabled }}
   replicas: {{ .Values.frontend.replicaCount }}
   {{- end }}
   selector:
     matchLabels: { app: frontend }
+  strategy:
+    canary:
+      stableService: frontend-stable
+      canaryService: frontend-canary
+      # Giống backend — xem giải thích công thức + ví dụ số trong
+      # templates/backend.yaml.
+      dynamicStableScale: true
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: frontend-traefik
+      # Steps giống hệt backend để 2 service lên bản mới đồng bộ nhịp độ
+      # (dễ theo dõi/deploy cùng lúc). Có thể tách nhịp riêng cho frontend
+      # nếu sau này muốn canary frontend độc lập với backend.
+      steps:
+        - setWeight: 33
+        - pause: {}
+        - setWeight: 50
+        - pause: { duration: 30s }
+        - setWeight: 100
+        - pause: { duration: 30s }
   template:
     metadata:
       labels: { app: frontend }
@@ -53,10 +81,29 @@ spec:
             periodSeconds: 10
           resources: {{ toYaml .Values.frontend.resources | nindent 12 }}
 ---
+# 2 Service "stable"/"canary" — cùng pattern với backend-stable/backend-canary
+# trong templates/backend.yaml (đọc comment ở đó để hiểu vì sao 2 Service
+# khai selector giống hệt nhau "app: frontend" mà vẫn trỏ đúng nhóm Pod
+# khác nhau ở từng giai đoạn canary, nhờ Argo Rollouts controller tự PATCH
+# thêm label "rollouts-pod-template-hash").
+#
+# Từ giờ KHÔNG còn Service tên "frontend" trần trụi nữa — mọi nguồn traffic
+# (cả browser qua Ingress lẫn nội bộ) đều phải đi qua TraefikService
+# "frontend-traefik" (xem templates/frontend-traffic.yaml) để được chia
+# weight đúng, giống hệt cách backend đang làm với "backend-traefik".
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend
+  name: frontend-stable
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector: { app: frontend }
+  ports: [{ port: {{ .Values.frontend.port }}, targetPort: {{ .Values.frontend.port }} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-canary
   namespace: {{ .Values.global.namespace }}
 spec:
   selector: { app: frontend }
