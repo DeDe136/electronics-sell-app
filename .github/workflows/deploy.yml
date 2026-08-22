@@ -243,9 +243,9 @@ jobs:
           # file workflow này. Đổi chart (vd: electronics-shop <->
           # electronics-shop-rollout) sau này CHỈ CẦN sửa giá trị Variable đó
           # trên GitHub UI, không phải sửa + commit lại file .yml này. Có giá
-          # trị mặc định "helm/electronics-shop-rollout/values.yaml" phòng khi
+          # trị mặc định "helm/electronics-shop/values.yaml" phòng khi
           # Variable chưa được set (vd: fork repo mới, hoặc quên cấu hình).
-          VALUES_FILE: ${{ vars.HELM_VALUES_FILE || 'helm/electronics-shop-rollout/values.yaml' }}
+          VALUES_FILE: ${{ vars.HELM_VALUES_FILE || 'helm/electronics-shop/values.yaml' }}
         run: |
           if echo "$MATRIX" | jq -e 'map(.service) | index("backend")' > /dev/null; then
             sed -i "s/^\(\s*backendTag:\).*/\1 \"${NEW_TAG}\"/" "$VALUES_FILE"

@@ -97,7 +97,7 @@ secrets:
 # định, kiểm tra bằng: kubectl get deployment metrics-server -n kube-system
 autoscaling:
   backend:
-    enabled: false
+    enabled: true
     minReplicas: 1
     maxReplicas: 8
     targetCPUUtilizationPercentage: 70
@@ -107,7 +107,7 @@ autoscaling:
     # Pod hơn thì áp dụng) — chỉ cần 1 trong 2 vượt ngưỡng là đã scale up.
     targetMemoryUtilizationPercentage: 80
   frontend:
-    enabled: false
+    enabled: true
     minReplicas: 1
     maxReplicas: 8
     targetCPUUtilizationPercentage: 70
