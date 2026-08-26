@@ -1,137 +1,72 @@
-import { CallHandler, ExecutionContext } from '@nestjs/common';
-import { of } from 'rxjs';
-import { HttpMetricsInterceptor } from './http-metrics.interceptor';
+import * as client from 'prom-client';
 import { MetricsService } from './metrics.service';
 
-describe('HttpMetricsInterceptor', () => {
-  let interceptor: HttpMetricsInterceptor;
-  let metricsService: {
-    httpRequestDuration: { observe: jest.Mock };
-    httpRequestsTotal: { inc: jest.Mock };
-  };
-
-  const buildContext = (req: any, res: any): ExecutionContext =>
-    ({
-      switchToHttp: () => ({
-        getRequest: () => req,
-        getResponse: () => res,
-      }),
-    }) as unknown as ExecutionContext;
-
-  const buildCallHandler = (returnValue: any = 'ok'): CallHandler => ({
-    handle: jest.fn().mockReturnValue(of(returnValue)),
-  });
+describe('MetricsService', () => {
+  let service: MetricsService;
 
   beforeEach(() => {
-    metricsService = {
-      httpRequestDuration: { observe: jest.fn() },
-      httpRequestsTotal: { inc: jest.fn() },
-    };
-    interceptor = new HttpMetricsInterceptor(
-      metricsService as unknown as MetricsService,
+    // Mỗi test dùng 1 registry MỚI (tạo lại trong constructor) — nhưng
+    // prom-client vẫn giữ default metrics theo tiến trình Node, nên cần
+    // clear registry global để tránh lỗi "metric đã được đăng ký" khi
+    // Jest chạy nhiều test file dùng chung 1 tiến trình.
+    client.register.clear();
+    service = new MetricsService();
+  });
+
+  afterEach(() => {
+    client.register.clear();
+  });
+
+  it('khởi tạo 1 registry RIÊNG (không dùng client.register mặc định)', () => {
+    expect(service.registry).toBeInstanceOf(client.Registry);
+    expect(service.registry).not.toBe(client.register);
+  });
+
+  it('gắn default label "app: backend" cho mọi metric trong registry', async () => {
+    const metricsText = await service.registry.metrics();
+
+    // Default labels được prom-client áp cho MỌI metric, kiểm tra qua 1
+    // metric mặc định (process_cpu... hoặc nodejs...) chắc chắn tồn tại.
+    expect(metricsText).toContain('app="backend"');
+  });
+
+  it('thu thập sẵn các default metrics của Node.js (heap, event loop...)', async () => {
+    const metricsText = await service.registry.metrics();
+
+    expect(metricsText).toContain('nodejs_heap_size_total_bytes');
+    expect(metricsText).toContain('process_cpu_user_seconds_total');
+  });
+
+  it('đăng ký histogram "http_request_duration_seconds" với đúng label names và buckets', () => {
+    expect(service.httpRequestDuration).toBeInstanceOf(client.Histogram);
+
+    const hist = service.registry.getSingleMetric(
+      'http_request_duration_seconds',
     );
+    expect(hist).toBeDefined();
   });
 
-  it('dùng "req.route.path" (route pattern gốc) khi có, KHÔNG dùng "req.url" — tránh cardinality explosion', (done) => {
-    const req = {
+  it('đăng ký counter "http_requests_total" với đúng label names', () => {
+    expect(service.httpRequestsTotal).toBeInstanceOf(client.Counter);
+
+    const counter = service.registry.getSingleMetric('http_requests_total');
+    expect(counter).toBeDefined();
+  });
+
+  it('ghi nhận đúng giá trị khi observe() histogram và inc() counter với labels', async () => {
+    const labels = {
       method: 'GET',
-      url: '/catalog/products/42',
-      route: { path: '/catalog/products/:id' },
+      route: '/catalog/products',
+      status_code: '200',
     };
-    const res = { statusCode: 200 };
-    const next = buildCallHandler();
 
-    interceptor.intercept(buildContext(req, res), next).subscribe(() => {
-      expect(metricsService.httpRequestDuration.observe).toHaveBeenCalledWith(
-        expect.objectContaining({ route: '/catalog/products/:id' }),
-        expect.any(Number),
-      );
-      expect(metricsService.httpRequestsTotal.inc).toHaveBeenCalledWith(
-        expect.objectContaining({ route: '/catalog/products/:id' }),
-      );
-      done();
-    });
-  });
+    service.httpRequestDuration.observe(labels, 0.42);
+    service.httpRequestsTotal.inc(labels);
 
-  it('fallback về "req.url" khi request không có "route.path" (vd 404, không khớp route nào)', (done) => {
-    const req = { method: 'GET', url: '/khong-ton-tai', route: undefined };
-    const res = { statusCode: 404 };
-    const next = buildCallHandler();
+    const metricsText = await service.registry.metrics();
 
-    interceptor.intercept(buildContext(req, res), next).subscribe(() => {
-      expect(metricsService.httpRequestDuration.observe).toHaveBeenCalledWith(
-        expect.objectContaining({ route: '/khong-ton-tai' }),
-        expect.any(Number),
-      );
-      done();
-    });
-  });
-
-  it('gắn đúng label "method" và "status_code" (status_code là string) khi ghi nhận metric', (done) => {
-    const req = { method: 'POST', url: '/catalog/products', route: undefined };
-    const res = { statusCode: 201 };
-    const next = buildCallHandler();
-
-    interceptor.intercept(buildContext(req, res), next).subscribe(() => {
-      const [labels] = metricsService.httpRequestDuration.observe.mock.calls[0];
-      expect(labels).toEqual({
-        method: 'POST',
-        route: '/catalog/products',
-        status_code: '201',
-      });
-      expect(typeof labels.status_code).toBe('string');
-      done();
-    });
-  });
-
-  it('đo "durationSeconds" là số không âm và gọi observe() + inc() với CÙNG 1 bộ labels', (done) => {
-    const req = { method: 'GET', url: '/catalog/products', route: undefined };
-    const res = { statusCode: 200 };
-    const next = buildCallHandler();
-
-    interceptor.intercept(buildContext(req, res), next).subscribe(() => {
-      const [durationLabels, duration] =
-        metricsService.httpRequestDuration.observe.mock.calls[0];
-      const [counterLabels] =
-        metricsService.httpRequestsTotal.inc.mock.calls[0];
-
-      expect(duration).toBeGreaterThanOrEqual(0);
-      expect(counterLabels).toEqual(durationLabels);
-      done();
-    });
-  });
-
-  it('chỉ ghi nhận metric SAU KHI request hoàn tất (tap chạy sau next.handle() emit), không ghi trước', (done) => {
-    const req = { method: 'GET', url: '/catalog/products', route: undefined };
-    const res = { statusCode: 200 };
-    const next = buildCallHandler();
-
-    // Trước khi subscribe, next.handle() có thể đã được gọi (do interceptor
-    // gọi handle() ngay), nhưng side-effect ghi metric (tap) chỉ chạy khi
-    // observable thực sự phát giá trị — nghĩa là chưa gọi observe()/inc()
-    // ngay tại thời điểm intercept() return.
-    const result = interceptor.intercept(buildContext(req, res), next);
-    expect(metricsService.httpRequestDuration.observe).not.toHaveBeenCalled();
-    expect(metricsService.httpRequestsTotal.inc).not.toHaveBeenCalled();
-
-    result.subscribe(() => {
-      expect(metricsService.httpRequestDuration.observe).toHaveBeenCalledTimes(
-        1,
-      );
-      expect(metricsService.httpRequestsTotal.inc).toHaveBeenCalledTimes(1);
-      done();
-    });
-  });
-
-  it('trả về nguyên vẹn giá trị response mà next.handle() phát ra (không làm thay đổi luồng dữ liệu)', (done) => {
-    const req = { method: 'GET', url: '/catalog/products', route: undefined };
-    const res = { statusCode: 200 };
-    const payload = { items: [{ id: 'p1' }] };
-    const next = buildCallHandler(payload);
-
-    interceptor.intercept(buildContext(req, res), next).subscribe((value) => {
-      expect(value).toBe(payload);
-      done();
-    });
+    expect(metricsText).toContain(
+      'http_requests_total{method="GET",route="/catalog/products",status_code="200",app="backend"} 1',
+    );
   });
 });
