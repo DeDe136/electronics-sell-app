@@ -97,7 +97,7 @@ secrets:
 # định, kiểm tra bằng: kubectl get deployment metrics-server -n kube-system
 autoscaling:
   backend:
-    enabled: false
+    enabled: true
     minReplicas: 1
     maxReplicas: 8
     targetCPUUtilizationPercentage: 70
@@ -107,8 +107,22 @@ autoscaling:
     # Pod hơn thì áp dụng) — chỉ cần 1 trong 2 vượt ngưỡng là đã scale up.
     targetMemoryUtilizationPercentage: 80
   frontend:
-    enabled: false
+    enabled: true
     minReplicas: 1
     maxReplicas: 8
     targetCPUUtilizationPercentage: 70
     targetMemoryUtilizationPercentage: 80
+
+# PodMonitor cho Prometheus Operator (CRD "monitoring.coreos.com/v1") — chỉ
+# bật khi cluster ĐÃ cài kube-prometheus-stack (CRD PodMonitor tồn tại),
+# nếu không "helm upgrade" sẽ báo lỗi "no matches for kind PodMonitor".
+monitoring:
+  backend:
+    enabled: true
+    # PHẢI khớp đúng label "release" mà kube-prometheus-stack đang dùng để
+    # lọc PodMonitor (mặc định Operator chỉ đọc PodMonitor có label
+    # "release: <tên-Helm-release-lúc-cài>" — ở đây ta đã cài bằng lệnh
+    # "helm install kube-prometheus-stack ..." nên giá trị là chính tên đó).
+    # Kiểm tra lại giá trị đúng bằng:
+    #   helm list -n monitoring
+    prometheusReleaseLabel: kube-prometheus-stack

@@ -65,7 +65,7 @@ spec:
         - name: backend
           image: {{ include "electronics-shop.backendImage" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports: [{ containerPort: {{ .Values.backend.port }} }]
+          ports: [{ name: http, containerPort: {{ .Values.backend.port }} }]
           envFrom:
             - configMapRef: { name: electronics-shop-config }
           env:

@@ -111,6 +111,13 @@ spec:
       name: backend
       jsonPointers:
         - /spec/replicas
+    
+    # frontend Rollout, tương tự như mô tả bên trên của backend Rollout
+    - group: argoproj.io
+      kind: Rollout
+      name: frontend
+      jsonPointers:
+        - /spec/replicas
 
     # -- 2 khối Service bên dưới: LUÔN GIỮ khi dùng Argo Rollouts cho
     # backend (không phụ thuộc có bật HPA hay không). Lý do: Argo Rollouts
@@ -130,5 +137,17 @@ spec:
     - group: ""
       kind: Service
       name: backend-canary
+      jsonPointers:
+        - /spec/selector
+
+    # frontend Service, tương tự như mô tả bên trên của backend Service
+    - group: ""
+      kind: Service
+      name: frontend-stable
+      jsonPointers:
+        - /spec/selector
+    - group: ""
+      kind: Service
+      name: frontend-canary
       jsonPointers:
         - /spec/selector

@@ -1,0 +1,67 @@
+## monitoring/kube-prometheus-stack-values.yaml
+## values riêng cho môi trường LOCAL K3s.
+
+# --- Tắt 4 component K3s không expose theo kiểu chart kube-prometheus-stack kỳ vọng ---
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+# kubelet: K3s vẫn expose được, để enabled: true (mặc định) là đủ
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path   # StorageClass mặc định K3s, giống Postgres/MinIO
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 1Gi }
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - prometheus.techshop.local
+    paths: ["/"]
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - alertmanager.techshop.local
+    paths: ["/"]
+
+grafana:
+  adminPassword: "changeme-strong-password"   # điền giá trị thật trong file values thật (GITIGNORE)
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.techshop.local
+    path: /
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }

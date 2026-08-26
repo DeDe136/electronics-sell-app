@@ -9,7 +9,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Global prefix
-  app.setGlobalPrefix('api/v1');
+  //
+  // Loại riêng "metrics" ra khỏi prefix "api/v1" — Prometheus mặc định
+  // scrape đúng path "/metrics" (convention chuẩn của toàn bộ ecosystem:
+  // node-exporter, kube-state-metrics, hầu hết client library đều theo
+  // path này), để nếu sau lỡ đổi API prefix (vd "api/v2"), không cần sửa
+  // lại ServiceMonitor/scrape config đang trỏ cứng vào "/metrics".
+  app.setGlobalPrefix('api/v1', { exclude: ['metrics'] });
 
   // CORS — cho phép frontend dev
   app.enableCors({
