@@ -13,6 +13,7 @@ import { OrderModule } from './modules/order/order.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { StorageModule } from './modules/storage/storage.module';
     }),
 
     // Feature modules
+    MetricsModule,
     StorageModule,
     AuthModule,
     UserModule,
