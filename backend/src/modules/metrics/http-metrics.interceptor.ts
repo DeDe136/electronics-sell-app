@@ -27,8 +27,7 @@ export class HttpMetricsInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        const durationSeconds =
-          Number(process.hrtime.bigint() - start) / 1e9;
+        const durationSeconds = Number(process.hrtime.bigint() - start) / 1e9;
         const labels = {
           method: req.method,
           route,
