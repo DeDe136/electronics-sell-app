@@ -55,6 +55,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 FROM node:20-alpine AS runner
 WORKDIR /app
 
+# Cache-bust: buộc BuildKit chạy lại "apk upgrade" mỗi lần build,
+# không dùng lại layer cache cũ (vốn có thể chứa bản vá lỗi thời).
+ARG CACHEBUST=1
 # Vá OS package ngay tại thời điểm build, KHÔNG trông chờ tag "node:20-alpine"
 # trên Docker Hub đã sẵn bản vá — vì GitHub Actions runner luôn build từ máy ảo
 # mới hoàn toàn, "apk upgrade" ở đây đảm bảo mọi lần CI chạy đều lấy bản vá CVE
