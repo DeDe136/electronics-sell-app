@@ -126,3 +126,10 @@ monitoring:
     # Kiểm tra lại giá trị đúng bằng:
     #   helm list -n monitoring
     prometheusReleaseLabel: kube-prometheus-stack
+  frontend:
+    enabled: true
+    prometheusReleaseLabel: kube-prometheus-stack
+    # Frontend expose metrics ở "/api/metrics" (quy ước file-based routing
+    # của Next.js App Router), KHÁC path "/metrics" bên backend (NestJS
+    # loại riêng "/metrics" khỏi global prefix "api/v1" — xem main.ts).
+    metricsPath: /api/metrics
