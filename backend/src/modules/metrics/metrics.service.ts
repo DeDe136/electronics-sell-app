@@ -16,7 +16,7 @@ export class MetricsService {
 
     // Metric mặc định của Node.js: heap memory, event loop lag, GC,
     // số file descriptor đang mở... — không cần tự viết, prom-client
-    // tự thu thập định kỳ (5s/lần mặc định).
+    // tự thu thập định kỳ (10s/lần mặc định).
     client.collectDefaultMetrics({ register: this.registry });
 
     this.httpRequestDuration = new client.Histogram({

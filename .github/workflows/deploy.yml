@@ -147,7 +147,9 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: false
           load: true
-          build-args: ${{ matrix.service == 'frontend' && format('NEXT_PUBLIC_API_URL={0}', secrets.NEXT_PUBLIC_API_URL) || '' }}
+          build-args: |
+            CACHEBUST=${{ github.run_id }}
+            ${{ matrix.service == 'frontend' && format('NEXT_PUBLIC_API_URL={0}', secrets.NEXT_PUBLIC_API_URL) || '' }}
           tags: |
             ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:${{ github.event.workflow_run.head_sha || github.sha }}
             ${{ secrets.HARBOR_REGISTRY }}/electronics-shop/${{ matrix.service }}:latest
