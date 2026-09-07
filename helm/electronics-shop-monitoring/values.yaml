@@ -13,8 +13,8 @@ image:
   # image của service nào thật sự có code thay đổi (xem deploy.yml). Nếu
   # dùng chung 1 tag, lần chỉ đổi backend sẽ khiến frontend bị trỏ sang 1
   # tag chưa từng được push lên Harbor -> ImagePullBackOff.
-  backendTag: "157cfdcc888d33eea0ed36f7373580b28fff080f"
-  frontendTag: "e2d6c7de1c4d1983003c1f572ad0e6c81f42ace1"
+  backendTag: "1beb337ca957b0c902614bb3a960516b1d631884"
+  frontendTag: "63a9b855013ffce1413a35c2fa42e424a9f21fa6"
   pullPolicy: IfNotPresent
   # Tên Secret kiểu kubernetes.io/dockerconfigjson để pull image private từ Harbor.
   pullSecretName: harbor-pull-secret
@@ -112,3 +112,24 @@ autoscaling:
     maxReplicas: 8
     targetCPUUtilizationPercentage: 70
     targetMemoryUtilizationPercentage: 80
+
+# PodMonitor cho Prometheus Operator (CRD "monitoring.coreos.com/v1") — chỉ
+# bật khi cluster ĐÃ cài kube-prometheus-stack (CRD PodMonitor tồn tại),
+# nếu không "helm upgrade" sẽ báo lỗi "no matches for kind PodMonitor".
+monitoring:
+  backend:
+    enabled: true
+    # PHẢI khớp đúng label "release" mà kube-prometheus-stack đang dùng để
+    # lọc PodMonitor (mặc định Operator chỉ đọc PodMonitor có label
+    # "release: <tên-Helm-release-lúc-cài>" — ở đây ta đã cài bằng lệnh
+    # "helm install kube-prometheus-stack ..." nên giá trị là chính tên đó).
+    # Kiểm tra lại giá trị đúng bằng:
+    #   helm list -n monitoring
+    prometheusReleaseLabel: kube-prometheus-stack
+  frontend:
+    enabled: true
+    prometheusReleaseLabel: kube-prometheus-stack
+    # Frontend expose metrics ở "/api/metrics" (quy ước file-based routing
+    # của Next.js App Router), KHÁC path "/metrics" bên backend (NestJS
+    # loại riêng "/metrics" khỏi global prefix "api/v1" — xem main.ts).
+    metricsPath: /api/metrics

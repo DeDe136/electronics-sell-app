@@ -85,6 +85,7 @@ desktop.ini
 # ── Helm values overrides ─────────────────
 helm/electronics-shop/values-dev.yaml
 helm/electronics-shop-rollout/values-dev.yaml
+helm/electronics-shop-monitoring/values-dev.yaml
 
 # ── Misc ──────────────────────────────────
 *.zip

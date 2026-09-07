@@ -1,0 +1,6 @@
+apiVersion: v2
+name: electronics-shop-monitoring
+description: TechShop (Rollout canary) + Prometheus PodMonitor + Grafana dashboard-as-code
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -15,7 +15,6 @@
       }
     ]
   },
-  "description": "",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -110,7 +109,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_requests_total{namespace=\"electronics-shop\"}[5m])) by (route, method)",
+          "expr": "sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"backend\"}[5m])) by (route, method)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -207,7 +206,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * (sum(rate(http_requests_total{namespace=\"electronics-shop\", status_code=~\"5..\"}[5m])) or vector(0))\r\n    / sum(rate(http_requests_total{namespace=\"electronics-shop\"}[5m]))",
+          "expr": "100 * (sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"backend\", status_code=~\"5..\"}[5m])) or vector(0))\r\n    / sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"backend\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -304,7 +303,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\"}[5m])) by (le, route)\r\n)",
+          "expr": "histogram_quantile(0.95,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\", app=\"backend\"}[5m])) by (le, route)\r\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -379,7 +378,7 @@
         "x": 12,
         "y": 8
       },
-      "id": 6,
+      "id": 4,
       "options": {
         "legend": {
           "calcs": [],
@@ -401,7 +400,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.5,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\"}[5m])) by (le, route)\r\n)",
+          "expr": "histogram_quantile(0.5,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\", app=\"backend\"}[5m])) by (le, route)\r\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -466,8 +465,7 @@
                 "value": 80
               }
             ]
-          },
-          "unit": "s"
+          }
         }
       },
       "gridPos": {
@@ -476,7 +474,7 @@
         "x": 0,
         "y": 16
       },
-      "id": 4,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [],
@@ -498,7 +496,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_seconds{namespace=\"electronics-shop\"}",
+          "expr": "nodejs_eventloop_lag_seconds{namespace=\"electronics-shop\", app=\"backend\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -573,7 +571,7 @@
         "x": 12,
         "y": 16
       },
-      "id": 5,
+      "id": 6,
       "options": {
         "legend": {
           "calcs": [],
@@ -595,7 +593,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * nodejs_heap_size_used_bytes{namespace=\"electronics-shop\"} \r\n    / nodejs_heap_size_total_bytes{namespace=\"electronics-shop\"}",
+          "expr": "100 * nodejs_heap_size_used_bytes{namespace=\"electronics-shop\", app=\"backend\"}\r\n    / nodejs_heap_size_total_bytes{namespace=\"electronics-shop\", app=\"backend\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -627,7 +625,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Backend - Electronics Shop",
-  "uid": "ad4j9cz",
-  "version": 1
+  "title": "Backend - Electronics Sell App",
+  "uid": "adxpl8m",
+  "version": 2
 }
