@@ -48,7 +48,7 @@ spec:
         - name: frontend
           image: {{ include "electronics-shop.frontendImage" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports: [{ containerPort: {{ .Values.frontend.port }} }]
+          ports: [{ name: http, containerPort: {{ .Values.frontend.port }} }]
           env:
             # (ĐỔI so với chart gốc) Gọi vào chính TRAEFIK thay vì gọi thẳng
             # Service "backend" — để traffic SSR đi qua đúng IngressRoute ->

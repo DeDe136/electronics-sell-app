@@ -1,14 +1,16 @@
-// frontend/app/internal/health-check/route.ts
-export async function GET() {
-  // Route handler này chạy SERVER-SIDE, bên trong container frontend
-  // (không phải trong trình duyệt) — nên KHÔNG dùng NEXT_PUBLIC_API_URL
-  // (biến đó trỏ tới địa chỉ mà BROWSER nhìn thấy, ví dụ "localhost:3001",
-  // mà "localhost" bên trong container frontend lại trỏ về chính nó, không
-  // phải container backend => sẽ luôn báo lỗi kết nối).
-  // Dùng INTERNAL_API_URL (server-only, set trong docker-compose = tên
-  // service "http://backend:3001/api/v1") thay vào đó. Fallback về
-  // NEXT_PUBLIC_API_URL để vẫn chạy được khi dev trực tiếp trên máy (không
-  // qua Docker), lúc đó cả hai đều là localhost thật.
+// frontend/app/api/health-check/route.ts
+import { withMetrics } from '@/lib/with-metrics';
+
+// Route handler này chạy SERVER-SIDE, bên trong container frontend
+// (không phải trong trình duyệt) — nên KHÔNG dùng NEXT_PUBLIC_API_URL
+// (biến đó trỏ tới địa chỉ mà BROWSER nhìn thấy, ví dụ "localhost:3001",
+// mà "localhost" bên trong container frontend lại trỏ về chính nó, không
+// phải container backend => sẽ luôn báo lỗi kết nối).
+// Dùng INTERNAL_API_URL (server-only, set trong docker-compose = tên
+// service "http://backend:3001/api/v1") thay vào đó. Fallback về
+// NEXT_PUBLIC_API_URL để vẫn chạy được khi dev trực tiếp trên máy (không
+// qua Docker), lúc đó cả hai đều là localhost thật.
+export const GET = withMetrics('/api/health-check', async () => {
   const API_URL =
     process.env.INTERNAL_API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -34,4 +36,4 @@ export async function GET() {
     console.error(`❌ [API] Không kết nối được backend — ${API_URL} (${reason})`);
     return Response.json({ connected: false, reason });
   }
-}
+});

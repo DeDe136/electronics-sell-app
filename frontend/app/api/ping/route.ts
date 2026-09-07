@@ -18,6 +18,8 @@
 // nào, không gọi backend — chỉ trả về 1 JSON tĩnh, cực nhẹ, đúng bản chất
 // của 1 liveness/readiness check (chỉ hỏi "server có đang chạy không",
 // không phải "toàn bộ hệ thống có hoạt động đúng không").
-export async function GET() {
+import { withMetrics } from '@/lib/with-metrics';
+
+export const GET = withMetrics('/api/ping', async () => {
   return Response.json({ status: 'ok' });
-}
+});
