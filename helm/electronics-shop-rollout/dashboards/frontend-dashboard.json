@@ -15,6 +15,7 @@
       }
     ]
   },
+  "description": "",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -109,7 +110,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"backend\"}[5m])) by (route, method)",
+          "expr": "sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"frontend\"}[5m])) by (route, method)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -206,7 +207,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * (sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"backend\", status_code=~\"5..\"}[5m])) or vector(0))\r\n    / sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"backend\"}[5m]))",
+          "expr": "100 * (sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"frontend\", status_code=~\"5..\"}[5m])) or vector(0))\r\n    / sum(rate(http_requests_total{namespace=\"electronics-shop\", app=\"frontend\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -303,7 +304,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\", app=\"backend\"}[5m])) by (le, route)\r\n)",
+          "expr": "histogram_quantile(0.95,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\", app=\"frontend\"}[5m])) by (le, route)\r\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -400,7 +401,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.5,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\", app=\"backend\"}[5m])) by (le, route)\r\n)",
+          "expr": "histogram_quantile(0.5,\r\n  sum(rate(http_request_duration_seconds_bucket{namespace=\"electronics-shop\", app=\"frontend\"}[5m])) by (le, route)\r\n)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -465,7 +466,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "s"
         }
       },
       "gridPos": {
@@ -496,7 +498,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_seconds{namespace=\"electronics-shop\", app=\"backend\"}",
+          "expr": "nodejs_eventloop_lag_seconds{namespace=\"electronics-shop\", app=\"frontend\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -593,7 +595,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * nodejs_heap_size_used_bytes{namespace=\"electronics-shop\", app=\"backend\"}\r\n    / nodejs_heap_size_total_bytes{namespace=\"electronics-shop\", app=\"backend\"}",
+          "expr": "100 * nodejs_heap_size_used_bytes{namespace=\"electronics-shop\", app=\"frontend\"}\r\n    / nodejs_heap_size_total_bytes{namespace=\"electronics-shop\", app=\"frontend\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -625,7 +627,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Backend - Electronics Sell App",
-  "uid": "adxpl8m",
-  "version": 2
+  "title": "Frontend - Electronics Sell App",
+  "uid": "advzspl",
+  "version": 1
 }
