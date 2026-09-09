@@ -2,6 +2,12 @@
 # PrometheusRule — CRD của Prometheus Operator, cùng cơ chế "dịch" như
 # PodMonitor/AlertmanagerConfig đã dùng: Operator watch resource này, tự
 # sinh file rule thật cho Prometheus, không cần reload tay.
+#
+# BẪY CẦN NHỚ: Helm xử lý TOÀN BỘ nội dung file bằng Go template TRƯỚC KHI
+# biết đây là YAML — không phân biệt được comment. Cú pháp
+# "$labels.xxx"/"$value" (của Prometheus, điền lúc alert firing) PHẢI
+# escape bằng {{ "{{" }} / {{ "}}" }} ở mọi nơi, kể cả trong comment —
+# viết trần sẽ khiến "helm template" báo lỗi ngay.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -18,8 +24,8 @@ spec:
       rules:
         - alert: HighErrorRate5xx
           expr: |
-            100 * sum by (app) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}", status_code=~"5.."}[5m]))
-                / sum by (app) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}"}[5m]))
+            100 * sum by (app) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}", route!~"{{ .Values.monitoring.alerts.nonBusinessRoutesRegex }}", status_code=~"5.."}[5m]))
+                / sum by (app) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}", route!~"{{ .Values.monitoring.alerts.nonBusinessRoutesRegex }}"}[5m]))
               > {{ .Values.monitoring.alerts.errorRateThresholdPercent }}
           # Phải VI PHẠM LIÊN TỤC trong khoảng thời gian này mới chuyển
           # sang "firing" (và mới được Prometheus đẩy sang Alertmanager) —
@@ -28,17 +34,146 @@ spec:
           labels:
             severity: warning
           annotations:
-            # Cú pháp dấu ngoặc nhọn kép chứa "$labels.app" bên dưới là của
-            # PROMETHEUS (điền lúc alert firing), không phải của Helm —
-            # nhưng Helm xử lý TOÀN BỘ nội dung file bằng Go template
-            # TRƯỚC KHI biết đây là YAML, nên không phân biệt được dòng
-            # nào là comment. Viết thẳng cú pháp đó (dù trong comment)
-            # khiến Helm cố parse như lệnh của chính nó — phải escape
-            # bằng cách bọc trong chuỗi, xem cách làm ở "summary" bên dưới.
             summary: >-
               {{ "{{" }} $labels.app {{ "}}" }} có tỷ lệ lỗi 5xx cao
               ({{ "{{" }} $value | printf "%.1f" {{ "}}" }}%) trong 5 phút qua.
             description: >-
               Namespace {{ .Values.global.namespace }} — kiểm tra logs
               backend/frontend và dashboard Grafana ngay.
+
+        - alert: HighLatencyP95
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{namespace="{{ .Values.global.namespace }}", route!~"{{ .Values.monitoring.alerts.nonBusinessRoutesRegex }}"}[5m])) by (le, app)
+            ) > {{ .Values.monitoring.alerts.latencyP95ThresholdSeconds }}
+          for: {{ .Values.monitoring.alerts.latencyP95For }}
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ "{{" }} $labels.app {{ "}}" }} có p95 latency
+              ({{ "{{" }} $value | printf "%.2f" {{ "}}" }}s) vượt ngưỡng
+              {{ .Values.monitoring.alerts.latencyP95ThresholdSeconds }}s.
+            description: >-
+              10% request chậm nhất đang mất hơn ngưỡng cho phép — kiểm
+              tra panel Latency p95/p50 trong Grafana để biết là toàn hệ
+              thống chậm hay chỉ 1 nhóm nhỏ request bị ảnh hưởng.
+
+        # p95 cao riêng lẻ chỉ nói "có đuôi chậm" (1 nhóm nhỏ request), có
+        # thể chấp nhận được. p50 cao nghĩa là ngay cả request bình thường
+        # cũng chậm — nghiêm trọng hơn, severity cao hơn.
+        - alert: HighLatencyP50
+          expr: |
+            histogram_quantile(0.50,
+              sum(rate(http_request_duration_seconds_bucket{namespace="{{ .Values.global.namespace }}", route!~"{{ .Values.monitoring.alerts.nonBusinessRoutesRegex }}"}[5m])) by (le, app)
+            ) > {{ .Values.monitoring.alerts.latencyP50ThresholdSeconds }}
+          for: {{ .Values.monitoring.alerts.latencyP50For }}
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              {{ "{{" }} $labels.app {{ "}}" }} có p50 latency
+              ({{ "{{" }} $value | printf "%.2f" {{ "}}" }}s) vượt ngưỡng
+              {{ .Values.monitoring.alerts.latencyP50ThresholdSeconds }}s.
+            description: >-
+              Request trung vị (không phải outlier) đang chậm — khả năng
+              cao là vấn đề hệ thống (DB chậm, thiếu tài nguyên).
+
+        # KHÔNG loại "nonBusinessRoutesRegex" như các alert trên — NGƯỢC
+        # LẠI, chính vì Prometheus tự scrape "/metrics" mỗi 15s và k8s tự
+        # gọi probe định kỳ mà rate() bình thường sẽ KHÔNG BAO GIỜ về 0,
+        # dù không có traffic người dùng thật nào. Nên nếu rate() thật sự
+        # về 0, đó là dấu hiệu ngay cả "nhịp tim" hạ tầng đó cũng đã
+        # ngừng — Pod có thể vẫn "Running" nhưng treo/deadlock, không
+        # phản hồi được bất kỳ request nào, kể cả probe.
+        - alert: NoTrafficDetected
+          expr: |
+            sum(rate(http_requests_total{namespace="{{ .Values.global.namespace }}"}[5m])) by (app) == 0
+          for: {{ .Values.monitoring.alerts.noTrafficFor }}
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              {{ "{{" }} $labels.app {{ "}}" }} không nhận được bất kỳ
+              request nào (kể cả từ Prometheus/probe) trong ít nhất
+              {{ .Values.monitoring.alerts.noTrafficFor }}.
+            description: >-
+              Ngay cả traffic hạ tầng (health probe, Prometheus scrape)
+              cũng không tới được — Pod có thể đang treo/deadlock dù vẫn
+              hiện "Running". Kiểm tra
+              "kubectl get pods -n {{ .Values.global.namespace }}" và log
+              gần nhất.
+
+        # Đo lượng REQUEST NGHIỆP VỤ thật (đã loại route scrape/probe) —
+        # phát hiện traffic tăng đột biến (nhiều client cùng truy cập),
+        # khác NoTrafficDetected (không dùng được vì baseline scrape/probe
+        # không bao giờ về 0, không phản ánh đúng traffic thật).
+        - alert: HighTrafficSurge
+          expr: |
+            sum(rate(http_requests_total{namespace="{{ .Values.global.namespace }}", route!~"{{ .Values.monitoring.alerts.nonBusinessRoutesRegex }}"}[1m])) by (app)
+              > {{ .Values.monitoring.alerts.trafficSurgeThresholdReqPerSec }}
+          for: {{ .Values.monitoring.alerts.trafficSurgeFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ "{{" }} $labels.app {{ "}}" }} đang nhận
+              ({{ "{{" }} $value | printf "%.1f" {{ "}}" }} request/giây),
+              vượt ngưỡng {{ .Values.monitoring.alerts.trafficSurgeThresholdReqPerSec }}.
+            description: >-
+              Traffic tăng bất thường — theo dõi CPU/RAM Pod và cân nhắc
+              scale thêm replica nếu xu hướng tiếp tục tăng.
+
+        - alert: HighEventLoopLag
+          expr: |
+            nodejs_eventloop_lag_seconds{namespace="{{ .Values.global.namespace }}"} > {{ .Values.monitoring.alerts.eventLoopLagThresholdSeconds }}
+          for: {{ .Values.monitoring.alerts.eventLoopLagFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ "{{" }} $labels.app {{ "}}" }} có event loop lag
+              ({{ "{{" }} $value | printf "%.3f" {{ "}}" }}s) vượt ngưỡng
+              {{ .Values.monitoring.alerts.eventLoopLagThresholdSeconds }}s.
+            description: >-
+              Có code đồng bộ đang chặn event loop quá lâu — kiểm tra các
+              đoạn xử lý CPU nặng (mã hoá, xử lý ảnh, vòng lặp lớn...)
+              chạy đồng bộ thay vì bất đồng bộ/worker thread.
+
+        - alert: HighV8HeapUsagePercent
+          expr: |
+            100 * nodejs_heap_size_used_bytes{namespace="{{ .Values.global.namespace }}"}
+                / nodejs_heap_size_total_bytes{namespace="{{ .Values.global.namespace }}"}
+              > {{ .Values.monitoring.alerts.v8HeapUsageThresholdPercent }}
+          for: {{ .Values.monitoring.alerts.v8HeapUsageFor }}
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ "{{" }} $labels.app {{ "}}" }} dùng
+              ({{ "{{" }} $value | printf "%.1f" {{ "}}" }}%) V8 heap, vượt
+              ngưỡng {{ .Values.monitoring.alerts.v8HeapUsageThresholdPercent }}%.
+            description: >-
+              GC đang phải chạy dồn dập để dọn chỗ trống — cân nhắc tăng
+              memory limit cho Pod hoặc kiểm tra rò rỉ bộ nhớ (memory leak).
+
+    - name: electronics-shop.kubernetes
+      rules:
+        # Dùng metric có sẵn từ kube-state-metrics, không cần code app tự
+        # expose gì thêm.
+        - alert: ContainerRestartingTooOften
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="{{ .Values.global.namespace }}", pod=~"(backend|frontend).*"}[{{ .Values.monitoring.alerts.restartWindow }}]) >= {{ .Values.monitoring.alerts.restartCountThreshold }}
+          for: {{ .Values.monitoring.alerts.restartFor }}
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Pod {{ "{{" }} $labels.pod {{ "}}" }} restart
+              ({{ "{{" }} $value | printf "%.0f" {{ "}}" }} lần) trong
+              {{ .Values.monitoring.alerts.restartWindow }} gần nhất.
+            description: >-
+              Container liên tục crash — kiểm tra
+              "kubectl describe pod {{ "{{" }} $labels.pod {{ "}}" }} -n {{ .Values.global.namespace }}"
+              và log lần restart trước ("kubectl logs ... --previous").
 {{- end }}
