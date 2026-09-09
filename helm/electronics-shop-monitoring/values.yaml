@@ -134,5 +134,31 @@ monitoring:
     # loại riêng "/metrics" khỏi global prefix "api/v1" — xem main.ts).
     metricsPath: /api/metrics
   alerts:
+    # Loại các route chỉ phục vụ hạ tầng (Prometheus tự scrape, k8s probe
+    # tự gọi định kỳ) — luôn 200, luôn nhanh, nếu không loại sẽ pha loãng
+    # số liệu thật, làm error-rate/latency/traffic-surge kém nhạy hơn thực
+    # tế. Chỉnh lại nếu backend/frontend có thêm route hạ tầng khác.
+    nonBusinessRoutesRegex: "/metrics|/api/metrics|/api/ping|/api/v1/health"
+
     errorRateThresholdPercent: 5   # cảnh báo khi tỷ lệ lỗi 5xx > 5%
     errorRateFor: 2m               # phải duy trì liên tục 2 phút mới firing
+
+    latencyP95ThresholdSeconds: 1
+    latencyP95For: 3m
+    latencyP50ThresholdSeconds: 0.5
+    latencyP50For: 3m
+
+    noTrafficFor: 5m
+
+    trafficSurgeThresholdReqPerSec: 5
+    trafficSurgeFor: 1m
+
+    eventLoopLagThresholdSeconds: 0.1
+    eventLoopLagFor: 1m
+
+    v8HeapUsageThresholdPercent: 95
+    v8HeapUsageFor: 3m
+
+    restartCountThreshold: 3
+    restartWindow: 15m
+    restartFor: 5m
