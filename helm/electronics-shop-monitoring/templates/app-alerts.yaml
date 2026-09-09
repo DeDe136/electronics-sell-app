@@ -28,11 +28,13 @@ spec:
           labels:
             severity: warning
           annotations:
-            # {{ "{{" }} ... {{ "}}" }} — cú pháp Go template CỦA PROMETHEUS
-            # (không phải Helm), cần "thoát" khỏi Helm template engine bằng
-            # {{ "{{" }} vì Helm cũng dùng {{ }} — nếu viết thẳng
-            # "{{ $labels.app }}", Helm sẽ cố tự render nó như biến Helm
-            # (không tồn tại) và báo lỗi ngay lúc "helm template".
+            # Cú pháp dấu ngoặc nhọn kép chứa "$labels.app" bên dưới là của
+            # PROMETHEUS (điền lúc alert firing), không phải của Helm —
+            # nhưng Helm xử lý TOÀN BỘ nội dung file bằng Go template
+            # TRƯỚC KHI biết đây là YAML, nên không phân biệt được dòng
+            # nào là comment. Viết thẳng cú pháp đó (dù trong comment)
+            # khiến Helm cố parse như lệnh của chính nó — phải escape
+            # bằng cách bọc trong chuỗi, xem cách làm ở "summary" bên dưới.
             summary: >-
               {{ "{{" }} $labels.app {{ "}}" }} có tỷ lệ lỗi 5xx cao
               ({{ "{{" }} $value | printf "%.1f" {{ "}}" }}%) trong 5 phút qua.
