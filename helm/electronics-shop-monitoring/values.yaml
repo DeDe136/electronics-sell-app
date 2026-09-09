@@ -133,3 +133,6 @@ monitoring:
     # của Next.js App Router), KHÁC path "/metrics" bên backend (NestJS
     # loại riêng "/metrics" khỏi global prefix "api/v1" — xem main.ts).
     metricsPath: /api/metrics
+  alerts:
+    errorRateThresholdPercent: 5   # cảnh báo khi tỷ lệ lỗi 5xx > 5%
+    errorRateFor: 2m               # phải duy trì liên tục 2 phút mới firing

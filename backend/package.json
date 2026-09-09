@@ -25,7 +25,7 @@
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
-    "multer": "^2.2.0",
+    "multer": "^2.3.0",
     "passport": "^0.6.0",
     "passport-jwt": "^4.0.0",
     "passport-local": "^1.0.0",
@@ -37,9 +37,9 @@
     "uuid": "^9.0.0"
   },
   "overrides": {
-    "multer": "^2.2.0",
+    "multer": "^2.3.0",
     "lodash": "^4.18.0",
-    "js-yaml": "^4.3.0",
+    "js-yaml": "^4.3.2",
     "brace-expansion": "2.1.4"
   },
   "devDependencies": {

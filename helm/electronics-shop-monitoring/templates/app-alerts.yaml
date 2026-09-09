@@ -1,0 +1,42 @@
+{{- if or .Values.monitoring.backend.enabled .Values.monitoring.frontend.enabled }}
+# PrometheusRule — CRD của Prometheus Operator, cùng cơ chế "dịch" như
+# PodMonitor/AlertmanagerConfig đã dùng: Operator watch resource này, tự
+# sinh file rule thật cho Prometheus, không cần reload tay.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: electronics-shop-http-alerts
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    # BẮT BUỘC — giống PodMonitor, Prometheus Operator (kube-prometheus-stack)
+    # mặc định chỉ đọc PrometheusRule có label "release" khớp đúng tên
+    # Helm release lúc cài stack (ruleSelectorNilUsesHelmValues: true).
+    release: {{ .Values.monitoring.backend.prometheusReleaseLabel }}
+spec:
+  groups:
+    - name: electronics-shop.http
+      rules:
+        - alert: HighErrorRate5xx
+          expr: |
+            100 * sum by (app) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}", status_code=~"5.."}[5m]))
+                / sum by (app) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}"}[5m]))
+              > {{ .Values.monitoring.alerts.errorRateThresholdPercent }}
+          # Phải VI PHẠM LIÊN TỤC trong khoảng thời gian này mới chuyển
+          # sang "firing" (và mới được Prometheus đẩy sang Alertmanager) —
+          # tránh báo động giả vì 1-2 request lỗi thoáng qua.
+          for: {{ .Values.monitoring.alerts.errorRateFor }}
+          labels:
+            severity: warning
+          annotations:
+            # {{ "{{" }} ... {{ "}}" }} — cú pháp Go template CỦA PROMETHEUS
+            # (không phải Helm), cần "thoát" khỏi Helm template engine bằng
+            # {{ "{{" }} vì Helm cũng dùng {{ }} — nếu viết thẳng
+            # "{{ $labels.app }}", Helm sẽ cố tự render nó như biến Helm
+            # (không tồn tại) và báo lỗi ngay lúc "helm template".
+            summary: >-
+              {{ "{{" }} $labels.app {{ "}}" }} có tỷ lệ lỗi 5xx cao
+              ({{ "{{" }} $value | printf "%.1f" {{ "}}" }}%) trong 5 phút qua.
+            description: >-
+              Namespace {{ .Values.global.namespace }} — kiểm tra logs
+              backend/frontend và dashboard Grafana ngay.
+{{- end }}

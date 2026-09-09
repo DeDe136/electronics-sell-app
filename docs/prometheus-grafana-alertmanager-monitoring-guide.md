@@ -103,6 +103,9 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
+    resources:
+      requests: { cpu: 50m, memory: 200Mi }
+      limits: { cpu: 200m, memory: 256Mi }
   ingress:
     enabled: true
     ingressClassName: traefik
@@ -126,8 +129,8 @@ grafana:
     # 256Mi KHÔNG đủ cho Grafana 13.x (tầng "unified storage" dùng Bleve
     # đánh index tốn thêm RAM đáng kể so với bản cũ) — Pod sẽ bị
     # OOMKilled (exit code 137) liên tục nếu để thấp hơn mức này.
-    requests: { cpu: 100m, memory: 256Mi }
-    limits: { cpu: 500m, memory: 512Mi }
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { cpu: 500m, memory: 1Gi }
 ```
 
 Copy ra file thật, điền giá trị thật (`adminPassword` trong Grafana):
@@ -319,6 +322,9 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
+    resources:
+      requests: { cpu: 50m, memory: 200Mi }
+      limits: { cpu: 200m, memory: 256Mi }
     # Gắn Secret chứa Gmail App Password (tạo ở bên dưới) — chart tự mount
     # vào /etc/alertmanager/secrets/alertmanager-gmail-credentials/password
     secrets:
@@ -694,9 +700,10 @@ Dashboard sẽ tự biến mất rồi tự xuất hiện lại sau khi Argo CD 
 |---|---|---|
 | `node-exporter` `CreateContainerError`, log `not a shared or slave mount` | WSL2 mount `/` ở chế độ `private` | `sudo mount --make-rshared /` + thêm vào `/etc/wsl.conf` |
 | Target `kube-proxy`/`scheduler`/`controller-manager`/`etcd` luôn `DOWN` | Các component này bind `127.0.0.1`, Prometheus (network namespace riêng) không với tới | Tắt hẳn ServiceMonitor tương ứng trong values (`enabled: false`) |
-| Grafana `OOMKilled`, restart liên tục | `limits.memory: 256Mi` không đủ cho Grafana 13.x (tầng Bleve index tốn thêm RAM) | Tăng `limits.memory` lên `512Mi` |
+| Grafana `OOMKilled`, restart liên tục | `limits.memory: 256Mi` không đủ cho Grafana 13.x (tầng Bleve index tốn thêm RAM) | Tăng `limits.memory` lên `1Gi` |
 | Alertmanager Operator log `undefined receiver "null" used in route` | Helm merge `receivers` (list) THAY THẾ hoàn toàn, nhưng `route.routes` (map, merge đệ quy) vẫn giữ sub-route mặc định trỏ receiver `"null"` đã bị xoá | Thêm `route.routes: []` để ghi đè hẳn |
 | Grafana Settings → JSON Model không có field `id` cấp dashboard giống hướng dẫn | Grafana 13 đổi schema mặc định sang "V2 Resource", sidecar không đọc được | Lấy JSON qua API `/api/dashboards/uid/{uid}` (trả về schema Classic) |
 | Xoá dashboard trên UI báo "provisioned dashboard cannot be deleted" | Dashboard đang được provisioning từ ConfigMap — đúng hành vi, không phải lỗi | Xoá đúng nguồn: `kubectl delete configmap ...` |
 | Panel Error Rate báo "No data" dù chưa có lỗi | Time series `status_code=~"5.."` chưa tồn tại (không phải "bằng 0") khi chưa có request lỗi nào | Thêm `or vector(0)` vào query |
+| `AlertmanagerClusterCrashlooping` firing dù `kubectl get pods` không tăng RESTARTS; đồ thị `process_start_time_seconds` đi bậc thang tăng/giảm dần (mọi container trên node đều bị, không riêng Alertmanager) | WSL2 có jitter NTP cao (~130ms) + lệch tần số đồng hồ hệ thống (~12ppm, xem `Frequency` trong `timedatectl show-timesync --all`) — mỗi ~32s `systemd-timesyncd` slew lại `CLOCK_REALTIME`, kéo `btime` (`/proc/stat`) trôi theo 1 chiều, khiến `process_start_time_seconds` (= `btime` + uptime tick tiến trình) lệch dần dù process không hề restart, làm `changes()` đếm nhầm | **Giữ nguyên rule** này vì khi lên EKS (jitter NTP của Amazon Time Sync Service chỉ vài ms, không đủ gây false positive) |
 | Dashboard backend lẫn số liệu frontend (hoặc ngược lại) | `http_requests_total` và các metric Node.js trùng tên giữa 2 app | Luôn lọc thêm `app="backend"` / `app="frontend"` trong mọi query |
