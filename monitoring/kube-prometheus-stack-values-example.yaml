@@ -43,6 +43,9 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
+    resources:
+      requests: { cpu: 50m, memory: 200Mi }
+      limits: { cpu: 200m, memory: 256Mi }
   ingress:
     enabled: true
     ingressClassName: traefik
@@ -63,5 +66,5 @@ grafana:
       - grafana.techshop.local
     path: /
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits:   { cpu: 500m, memory: 512Mi }
+    requests: { cpu: 100m, memory: 512Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
