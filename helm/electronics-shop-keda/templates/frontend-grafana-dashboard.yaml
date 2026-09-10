@@ -1,0 +1,15 @@
+{{- if .Values.monitoring.frontend.enabled }}
+# Y hệt logic backend-grafana-dashboard.yaml — sidecar "grafana-sc-dashboards"
+# tự watch ConfigMap có label "grafana_dashboard: \"1\"", tự nạp vào
+# Grafana, không cần import tay qua UI.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-grafana-dashboard
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    grafana_dashboard: "1"
+data:
+  frontend-dashboard.json: |
+{{ .Files.Get "dashboards/frontend-dashboard.json" | indent 4 }}
+{{- end }}

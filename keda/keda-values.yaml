@@ -1,0 +1,17 @@
+# Resource cho 2 component chính: Operator (quản lý ScaledObject, activate 0↔1)
+# và Metrics Server/Adapter (expose external.metrics.k8s.io cho HPA đọc).
+# Cụm k3s local tài nguyên hạn chế nên set request/limit nhỏ, tương tự cách
+# đã làm với kube-prometheus-stack.
+operator:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+metricsServer:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# webhooks validate ScaledObject (vd chặn tạo trùng scaleTargetRef) — nên bật
+webhooks:
+  enabled: true

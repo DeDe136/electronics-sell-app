@@ -1,0 +1,23 @@
+{{- if .Values.monitoring.frontend.enabled }}
+# Y hệt logic backend-podmonitor.yaml: chọn theo label Pod "app: frontend"
+# (không đổi qua canary), không phải qua Service (bị patch thêm hash lúc
+# runtime) — xem giải thích đầy đủ trong backend-podmonitor.yaml.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: frontend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    release: {{ .Values.monitoring.frontend.prometheusReleaseLabel }}
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.global.namespace }}
+  podMetricsEndpoints:
+    - port: http
+      path: {{ .Values.monitoring.frontend.metricsPath }}
+      interval: 15s
+{{- end }}

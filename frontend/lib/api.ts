@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-//
 // axios instance này được dùng ở CẢ 2 nơi:
 //   1. Client Components trong useEffect/event handler -> chạy TRONG TRÌNH
 //      DUYỆT của người dùng.
