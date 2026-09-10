@@ -179,3 +179,10 @@ monitoring:
 # bằng: kubectl get svc -n monitoring | grep prometheus
 keda:
   prometheusServerAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+  # Route hạ tầng (health check, self-scrape metrics...) cần loại khỏi query
+  # trigger prometheus — KHÔNG dùng chung monitoring.alerts.nonBusinessRoutesRegex
+  # vì 2 field phục vụ 2 mục đích khác nhau dù giá trị hiện đang giống nhau:
+  # cái kia quyết định NGƯỠNG CẢNH BÁO lỗi/latency, cái này quyết định SỐ POD
+  # thật sự chạy — thay đổi 1 route ở service này (vd thêm /health/live mới)
+  # không nên vô tình ảnh hưởng bên còn lại nếu 2 đội phụ trách khác nhau.
+  nonBusinessRoutesRegex: "/metrics|/api/metrics|/api/ping|/api/v1/health"
