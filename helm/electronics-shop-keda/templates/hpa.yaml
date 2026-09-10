@@ -1,0 +1,80 @@
+{{- if .Values.autoscaling.backend.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend
+  namespace: {{ .Values.global.namespace }}
+spec:
+  scaleTargetRef:
+    # ĐỔI so với chart gốc: backend giờ là "Rollout" (Argo Rollouts CRD),
+    # không còn "Deployment" nữa — Deployment "backend" đã bị chart này
+    # thay thế hoàn toàn (xem templates/backend.yaml). Rollout CRD có hỗ
+    # trợ sẵn "/scale" subresource (giống Deployment/ReplicaSet), nên HPA
+    # điều khiển được y hệt như cũ, chỉ cần trỏ đúng apiVersion/kind — tên
+    # "backend" giữ nguyên (đây là tên Rollout, không phải tên Service, nên
+    # không bị đổi thành "backend-stable" như 2 Service).
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: backend
+  minReplicas: {{ .Values.autoscaling.backend.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.backend.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.backend.targetCPUUtilizationPercentage }}
+    {{- if .Values.autoscaling.backend.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.backend.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  # Chống "flapping" (scale lên/xuống liên tục do traffic dao động ngắn hạn):
+  # đợi tối thiểu 60s traffic thấp liên tục mới scale down, scale up thì phản
+  # ứng gần như ngay (0s) để không delay khi traffic đột ngột tăng.
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+{{- end }}
+---
+{{- if .Values.autoscaling.frontend.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend
+  namespace: {{ .Values.global.namespace }}
+spec:
+  scaleTargetRef:
+    # Tương tự backend — xem comment chi tiết ở khối backend phía trên.
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: frontend
+  minReplicas: {{ .Values.autoscaling.frontend.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.frontend.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.frontend.targetCPUUtilizationPercentage }}
+    {{- if .Values.autoscaling.frontend.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.frontend.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+{{- end }}

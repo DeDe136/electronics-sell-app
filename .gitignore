@@ -86,6 +86,7 @@ desktop.ini
 helm/electronics-shop/values-dev.yaml
 helm/electronics-shop-rollout/values-dev.yaml
 helm/electronics-shop-monitoring/values-dev.yaml
+helm/electronics-shop-keda/values-dev.yaml
 
 # ── Misc ──────────────────────────────────
 *.zip

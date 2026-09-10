@@ -1,0 +1,32 @@
+{{- if .Values.monitoring.backend.enabled }}
+# Dùng PodMonitor (không phải ServiceMonitor) vì chọn thẳng theo label
+# Pod "app: backend" — label này KHÔNG đổi qua các giai đoạn canary,
+# khác với Service "backend-stable"/"backend-canary" bị Argo Rollouts
+# patch thêm "rollouts-pod-template-hash" vào selector lúc runtime (xem
+# comment giải thích 3 giai đoạn hash trong templates/backend.yaml).
+# Nhờ vậy Prometheus luôn scrape đủ TOÀN BỘ Pod backend đang tồn tại,
+# bất kể đang stable hay đang canary, không bị đứt quãng dữ liệu mỗi
+# lần deploy.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: backend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    # BẮT BUỘC có label này — Prometheus Operator (kube-prometheus-stack)
+    # mặc định chỉ đọc PodMonitor có label "release" khớp đúng tên Helm
+    # release lúc cài stack đó, để tránh vô tình đọc nhầm PodMonitor của
+    # người khác/namespace khác trong cùng cluster.
+    release: {{ .Values.monitoring.backend.prometheusReleaseLabel }}
+spec:
+  selector:
+    matchLabels:
+      app: backend
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.global.namespace }}
+  podMetricsEndpoints:
+    - port: http          # khớp tên "name: http" vừa thêm vào containerPort
+      path: /metrics
+      interval: 15s
+{{- end }}

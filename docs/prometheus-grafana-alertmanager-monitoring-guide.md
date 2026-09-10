@@ -694,7 +694,7 @@ Dashboard sẽ tự biến mất rồi tự xuất hiện lại sau khi Argo CD 
 
 ---
 
-## 9. PrometheusRule — cảnh báo cho backend/frontend
+## 9. PrometheusRule — Phát các cảnh báo liên quan đến backend/frontend gửi về email, nằm ngoài các alert giám sát hệ thống mặc định của chart kube-promethues-stack
  
 ### 9.1. `values.yaml` — ngưỡng cấu hình
  
@@ -1043,7 +1043,7 @@ này). `wait` đợi toàn bộ tiến trình nền chạy xong trước khi ti�
  
 Theo dõi `http://prometheus.techshop.local` → **Alerts** →
 `HighTrafficSurge`. Vì `for: 1m` khá ngắn, có thể cần lặp lại lệnh trên
-2-3 lần liên tiếp để duy trì đủ 1 phút vượt ngưỡng.
+nhiều liên tiếp để duy trì đủ 1 phút vượt ngưỡng.
  
 #### e) `HighEventLoopLag`
  
