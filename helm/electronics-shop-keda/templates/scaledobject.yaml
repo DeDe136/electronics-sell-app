@@ -1,0 +1,120 @@
+{{/*
+  Thay thế hoàn toàn templates/hpa.yaml.
+
+  Mỗi ScaledObject khai NHIỀU trigger cùng lúc (cpu + memory + prometheus).
+  Giống hệt cách HPA multi-metric hoạt động: KEDA tính desiredReplicas RIÊNG
+  cho từng trigger theo đúng công thức chuẩn, rồi HPA (do KEDA operator tạo)
+  LẤY GIÁ TRỊ LỚN NHẤT trong tất cả — chỉ cần 1 trigger vượt ngưỡng là đã
+  scale up, giống nguyên tắc "nghiêm ngặt hơn" mà values.yaml cũ đã ghi chú
+  cho cpu/memory.
+*/}}
+{{- if .Values.autoscaling.backend.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: backend
+  namespace: {{ .Values.global.namespace }}
+spec:
+  scaleTargetRef:
+    # Giữ nguyên như hpa.yaml cũ — backend là Rollout (Argo Rollouts CRD),
+    # có sẵn "/scale" subresource nên KEDA điều khiển được y hệt Deployment.
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: backend
+  minReplicaCount: {{ .Values.autoscaling.backend.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.backend.maxReplicas }}
+  # Nhịp Operator tự hỏi scaler để quyết định activate/deactivate (0<->1) —
+  # KHÔNG liên quan tới nhịp HPA đọc external.metrics.k8s.io (nhịp đó do
+  # k8s core quyết định, mặc định 30s, không cấu hình ở đây).
+  pollingInterval: {{ .Values.autoscaling.backend.pollingInterval }}
+  # Vì minReplicaCount >= 1 (không scale về 0), cooldownPeriod thực chất
+  # không có tác dụng cho case này — giữ lại để values.yaml nhất quán, phòng
+  # khi sau này có service khác trong chart cần scale về 0.
+  cooldownPeriod: {{ .Values.autoscaling.backend.cooldownPeriod }}
+  # Giữ nguyên hành vi chống flapping y hệt hpa.yaml cũ.
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 0
+  triggers:
+    # --- Trigger 1: CPU (tương đương metrics.type=Resource/cpu của HPA cũ) ---
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.autoscaling.backend.targetCPUUtilizationPercentage }}"
+
+    {{- if .Values.autoscaling.backend.targetMemoryUtilizationPercentage }}
+    # --- Trigger 2: Memory (tương đương metrics.type=Resource/memory) ---
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.autoscaling.backend.targetMemoryUtilizationPercentage }}"
+    {{- end }}
+
+    {{- if .Values.autoscaling.backend.prometheus.enabled }}
+    # --- Trigger 3: Prometheus — request rate trung bình MỖI POD ---
+    # Query: sum by (pod) gom request rate của mọi route/method/status_code
+    # về còn 1 số/pod, rồi avg(...) lấy trung bình giữa các pod hiện có —
+    # ĐÚNG ý nghĩa "target trung bình mỗi pod" mà công thức HPA cần, KHÔNG
+    # dùng sum() thô (tổng luôn tăng theo số pod -> scale không hội tụ, và
+    # KEDA/HPA ở đây thường là giá trị trung bình per-pod để tính desiredReplicas).
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.keda.prometheusServerAddress }}
+        query: >-
+          avg(sum by (pod) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}", app="backend"}[1m])))
+        threshold: "{{ .Values.autoscaling.backend.prometheus.threshold }}"
+        # Chỉ activate 0->1 khi có ít nhất traffic nhỏ giọt — không dùng ở
+        # case này vì minReplicaCount>=1, giữ mặc định 0 cho rõ ràng.
+        activationThreshold: "0"
+    {{- end }}
+{{- end }}
+---
+{{- if .Values.autoscaling.frontend.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: frontend
+  namespace: {{ .Values.global.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: frontend
+  minReplicaCount: {{ .Values.autoscaling.frontend.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.frontend.maxReplicas }}
+  pollingInterval: {{ .Values.autoscaling.frontend.pollingInterval }}
+  cooldownPeriod: {{ .Values.autoscaling.frontend.cooldownPeriod }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 0
+  triggers:
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.autoscaling.frontend.targetCPUUtilizationPercentage }}"
+
+    {{- if .Values.autoscaling.frontend.targetMemoryUtilizationPercentage }}
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.autoscaling.frontend.targetMemoryUtilizationPercentage }}"
+    {{- end }}
+
+    {{- if .Values.autoscaling.frontend.prometheus.enabled }}
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.keda.prometheusServerAddress }}
+        query: >-
+          avg(sum by (pod) (rate(http_requests_total{namespace="{{ .Values.global.namespace }}", app="frontend"}[1m])))
+        threshold: "{{ .Values.autoscaling.frontend.prometheus.threshold }}"
+        activationThreshold: "0"
+    {{- end }}
+{{- end }}
