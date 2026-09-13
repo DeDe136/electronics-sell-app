@@ -48,14 +48,25 @@ export class StorageService {
     } else {
       this.bucket =
         this.config.get<string>('storage.aws.bucket') ?? 'electronics-shop';
+      const accessKeyId = this.config.get<string>('storage.aws.accessKeyId');
+      const secretAccessKey = this.config.get<string>(
+        'storage.aws.secretAccessKey',
+      );
       this.s3Client = new S3Client({
         region:
           this.config.get<string>('storage.aws.region') ?? 'ap-southeast-1',
-        credentials: {
-          accessKeyId: this.config.get<string>('storage.aws.accessKeyId') ?? '',
-          secretAccessKey:
-            this.config.get<string>('storage.aws.secretAccessKey') ?? '',
-        },
+        // CHỈ truyền "credentials" tĩnh khi có khai báo rõ (vd test local với
+        // tài khoản AWS thật). Khi chạy trên EKS với IRSA (không set 2 biến
+        // AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY), CỐ Ý không truyền gì cả —
+        // AWS SDK sẽ tự lấy credentials tạm thời qua
+        // AWS_ROLE_ARN/AWS_WEB_IDENTITY_TOKEN_FILE mà EKS tự tiêm vào pod.
+        // Nếu truyền "credentials: { accessKeyId: '', secretAccessKey: '' }"
+        // (kể cả rỗng) như trước, SDK sẽ dùng đúng object rỗng đó và KHÔNG
+        // rơi về cơ chế tự nhận diện IRSA nữa — mọi request sẽ bị AWS từ
+        // chối do thiếu chữ ký hợp lệ.
+        ...(accessKeyId && secretAccessKey
+          ? { credentials: { accessKeyId, secretAccessKey } }
+          : {}),
       });
     }
   }
@@ -168,10 +179,17 @@ export class StorageService {
 
   private buildPublicUrl(key: string): string {
     if (this.provider === 'minio') {
+      // KHÔNG đổi gì ở nhánh này — local/docker-compose/k3s vẫn hoạt động
+      // y hệt trước giờ (bucket MinIO local đang set anonymous download,
+      // xem "mc anonymous set download" trong docker-compose.yml/minio.yaml).
       const endpoint = this.config.get<string>('storage.minio.endpoint');
       return `${endpoint}/${this.bucket}/${key}`;
     }
-    const region = this.config.get<string>('storage.aws.region');
-    return `https://${this.bucket}.s3.${region}.amazonaws.com/${key}`;
+    // AWS S3: bucket PRIVATE (Block Public Access bật) — trả về đường dẫn
+    // proxy nội bộ do route /api/images/[...key] bên FRONTEND tự gọi S3
+    // bằng SDK (credentials cấp qua IRSA), browser không bao giờ gọi thẳng
+    // S3. Đây là path tương đối (cùng origin với frontend), Next.js Image
+    // fetch được luôn mà không cần khai remotePatterns.
+    return `/api/images/${encodeURIComponent(key)}`;
   }
 }
