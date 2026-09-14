@@ -1,0 +1,19 @@
+{{- if .Values.monitoring.backend.enabled }}
+# Sidecar "grafana-sc-dashboards" (chạy trong Pod Grafana, cùng
+# kube-prometheus-stack) tự watch MỌI ConfigMap có label
+# "grafana_dashboard: \"1\"" trên TOÀN cluster (NAMESPACE: ALL), tự copy
+# vào /tmp/dashboards rồi gọi API Grafana nạp lại — không cần import tay
+# qua UI, và dashboard sống lại tự động mỗi khi Pod Grafana bị tạo mới
+# (PVC hỏng, node restart...), vì nguồn sự thật nằm ở Git, không phải ở
+# state bên trong Grafana.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-grafana-dashboard
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    grafana_dashboard: "1"
+data:
+  backend-dashboard.json: |
+{{ .Files.Get "dashboards/backend-dashboard.json" | indent 4 }}
+{{- end }}

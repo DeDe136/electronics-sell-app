@@ -1,0 +1,111 @@
+# Frontend chuyển từ "kind: Deployment" (chart gốc) sang "kind: Rollout"
+# (Argo Rollouts) + strategy "canary" — Y HỆT pattern đã dùng cho backend
+# (xem templates/backend.yaml, phần comment ở đó giải thích rất chi tiết
+# về dynamicStableScale, cơ chế rollouts-pod-template-hash, cách promote
+# bằng tay... — không lặp lại toàn bộ ở đây, chỉ note phần KHÁC với
+# backend).
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: frontend
+  namespace: {{ .Values.global.namespace }}
+  labels: { app: frontend }
+spec:
+  # Giống backend: khi HPA quản lý (autoscaling.frontend.enabled=true), bỏ
+  # hẳn field "replicas" để tránh Argo CD Self Heal đánh nhau với HPA.
+  {{- if not .Values.autoscaling.frontend.enabled }}
+  replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels: { app: frontend }
+  strategy:
+    canary:
+      stableService: frontend-stable
+      canaryService: frontend-canary
+      # Giống backend — xem giải thích công thức + ví dụ số trong
+      # templates/backend.yaml.
+      dynamicStableScale: true
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: frontend-traefik
+      # Steps giống hệt backend để 2 service lên bản mới đồng bộ nhịp độ
+      # (dễ theo dõi/deploy cùng lúc). Có thể tách nhịp riêng cho frontend
+      # nếu sau này muốn canary frontend độc lập với backend.
+      steps:
+        - setWeight: 33
+        - pause: {}
+        - setWeight: 50
+        - pause: { duration: 30s }
+        - setWeight: 100
+        - pause: { duration: 30s }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecretName }}
+      containers:
+        - name: frontend
+          image: {{ include "electronics-shop.frontendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: {{ .Values.frontend.port }} }]
+          env:
+            # (ĐỔI so với chart gốc) Gọi vào chính TRAEFIK thay vì gọi thẳng
+            # Service "backend" — để traffic SSR đi qua đúng IngressRoute ->
+            # TraefikService, được chia weight stable/canary y hệt traffic
+            # browser thật, thay vì luôn cố định vào bản stable.
+            # "traefik.kube-system" = Service nội bộ của Traefik trong K3s
+            # (xác nhận đúng tên/namespace bằng lệnh:
+            #   kubectl get svc -n kube-system | grep -i traefik
+            # trước khi dùng — nếu khác, sửa lại giá trị bên dưới).
+            - name: INTERNAL_API_URL
+              value: "http://traefik.kube-system/api/v1"
+            # IngressRoute route theo điều kiện Host(...) — khi gọi thẳng vào
+            # Service nội bộ của Traefik (không qua DNS public), header Host
+            # mặc định sẽ là "traefik.kube-system" (suy ra từ URL trên),
+            # KHÔNG khớp rule "Host(`{{ .Values.ingress.host }}`)" trong
+            # IngressRoute, khiến Traefik trả 404. Biến này được code trong
+            # frontend/lib/api.ts đọc để tự ghi đè header "Host" đúng domain,
+            # giúp request "giả vờ" như đến từ đúng domain public.
+            - name: INTERNAL_API_HOST_HEADER
+              value: {{ .Values.ingress.host | quote }}
+          readinessProbe:
+            # Đổi từ "/" sang "/api/ping" — "/" là trang chủ thật (Server
+            # Component), mỗi lần probe gọi vào sẽ kích hoạt render lại
+            # toàn trang, kéo theo gọi getProducts() -> gọi thật sang
+            # backend mỗi periodSeconds giây, dù không có người dùng thật
+            # nào truy cập. "/api/ping" là route tĩnh, không render page,
+            # không gọi backend (xem frontend/app/api/ping/route.ts).
+            httpGet: { path: /api/ping, port: {{ .Values.frontend.port }} }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources: {{ toYaml .Values.frontend.resources | nindent 12 }}
+---
+# 2 Service "stable"/"canary" — cùng pattern với backend-stable/backend-canary
+# trong templates/backend.yaml (đọc comment ở đó để hiểu vì sao 2 Service
+# khai selector giống hệt nhau "app: frontend" mà vẫn trỏ đúng nhóm Pod
+# khác nhau ở từng giai đoạn canary, nhờ Argo Rollouts controller tự PATCH
+# thêm label "rollouts-pod-template-hash").
+#
+# Từ giờ KHÔNG còn Service tên "frontend" trần trụi nữa — mọi nguồn traffic
+# (cả browser qua Ingress lẫn nội bộ) đều phải đi qua TraefikService
+# "frontend-traefik" (xem templates/frontend-traffic.yaml) để được chia
+# weight đúng, giống hệt cách backend đang làm với "backend-traefik".
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-stable
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector: { app: frontend }
+  ports: [{ port: {{ .Values.frontend.port }}, targetPort: {{ .Values.frontend.port }} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-canary
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector: { app: frontend }
+  ports: [{ port: {{ .Values.frontend.port }}, targetPort: {{ .Values.frontend.port }} }]
+  
