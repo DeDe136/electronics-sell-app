@@ -103,4 +103,5 @@ argo/argocd-repo-secret.yaml
 
 ## ── Monitoring / Prometheus & Grafana values and secrets ──────────────────────────
 monitoring/kube-prometheus-stack-values.yaml
+monitoring/kube-prometheus-stack-values-eks.yaml
 

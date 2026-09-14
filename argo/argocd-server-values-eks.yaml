@@ -1,0 +1,25 @@
+# argocd-server-values-eks.yaml — bản EKS (copy từ argocd-server-values.yaml,
+# file gốc giữ nguyên cho docs local K3s cũ, không đụng vào).
+#
+# CÁCH DÙNG:
+#   helm upgrade argocd argo/argo-cd -n argocd -f argo/argocd-server-values-eks.yaml
+
+configs:
+  params:
+    server.insecure: true
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hostname: argocd.techshop.dynv6.net
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      # PHẢI trùng chính xác giá trị group.name ở
+      # helm/electronics-shop-eks/templates/ingress.yaml,
+      # argo/argo-rollouts-values-eks.yaml,
+      # monitoring/kube-prometheus-stack-values-eks.yaml — để AWS Load
+      # Balancer Controller gộp chung 1 ALB duy nhất thay vì tạo riêng.
+      alb.ingress.kubernetes.io/group.name: techshop-shared

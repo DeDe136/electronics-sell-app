@@ -1,0 +1,129 @@
+## monitoring/kube-prometheus-stack-values-eks.yaml — bản EKS (copy từ
+## kube-prometheus-stack-values-example.yaml, file gốc giữ nguyên cho docs
+## local K3s cũ, không đụng vào).
+##
+## QUAN TRỌNG: storageClassName đổi từ "local-path" (chỉ có trên K3s) sang
+## "gp3" — StorageClass này KHÔNG tự có sẵn trên EKS, cần cài EBS CSI Driver
+## + tạo StorageClass "gp3" trước (đúng bước "Bước 5 — Cài EBS CSI Driver"
+## đã bỏ qua lúc trước vì tưởng chỉ Postgres/MinIO cần — thực ra Prometheus/
+## Alertmanager/Grafana ở file này VẪN cần PVC để lưu dữ liệu, khác với
+## Postgres/MinIO đã chuyển hẳn sang RDS/S3). Nếu chưa cài EBS CSI Driver,
+## "helm upgrade" bằng file này sẽ treo ở trạng thái Pod "Pending" (PVC
+## không bao giờ được bind).
+
+# --- Tắt 4 component K3s không expose theo kiểu chart kube-prometheus-stack kỳ vọng ---
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+# kubelet: K3s vẫn expose được, để enabled: true (mặc định) là đủ
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3   # EBS CSI Driver phải cài trước (xem comment đầu file)
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 1Gi }
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hosts:
+      - prometheus.techshop.dynv6.net
+    paths: ["/"]
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      # PHẢI trùng chính xác group.name ở 3 file Ingress còn lại (xem
+      # argo/argocd-server-values-eks.yaml) — gộp chung 1 ALB.
+      alb.ingress.kubernetes.io/group.name: techshop-shared
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    resources:
+      requests: { cpu: 50m, memory: 200Mi }
+      limits: { cpu: 200m, memory: 256Mi }
+    # Gắn Secret chứa Gmail App Password — PHẢI tạo secret này bằng tay
+    # TRƯỚC KHI "helm install/upgrade" (xem scripts/install-eks-tools.sh):
+    #   kubectl create secret generic alertmanager-gmail-credentials \
+    #     -n monitoring --from-literal=password='<app-password-16-ký-tự>'
+    # Chart tự mount vào
+    # /etc/alertmanager/secrets/alertmanager-gmail-credentials/password
+    # (đúng path "smtp_auth_password_file" bên dưới).
+    secrets:
+      - alertmanager-gmail-credentials
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hosts:
+      - alertmanager.techshop.dynv6.net
+    paths: ["/"]
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      alb.ingress.kubernetes.io/group.name: techshop-shared
+  config:
+    global:
+      smtp_smarthost: "smtp.gmail.com:587"
+      smtp_from: "REPLACE_ME_GMAIL_GUI@gmail.com"
+      smtp_auth_username: "REPLACE_ME_GMAIL_GUI@gmail.com"
+      smtp_auth_password_file: /etc/alertmanager/secrets/alertmanager-gmail-credentials/password
+      smtp_require_tls: true
+    route:
+      receiver: "email-notifications"
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      # BẮT BUỘC — xem giải thích lý do trong
+      # docs/prometheus-grafana-alertmanager-monitoring-guide.md mục 5.1
+      # (Helm merge "receivers" theo list, THAY THẾ hoàn toàn — không khai
+      # "routes: []" sẽ dính lỗi "undefined receiver \"null\"").
+      routes: []
+    receivers:
+      - name: "email-notifications"
+        email_configs:
+          - to: "REPLACE_ME_NHAN_CANH_BAO@gmail.com"
+            send_resolved: true
+
+grafana:
+  adminPassword: "changeme-strong-password"   # điền giá trị thật trong file values thật (GITIGNORE)
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 2Gi
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hosts:
+      - grafana.techshop.dynv6.net
+    path: /
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      alb.ingress.kubernetes.io/group.name: techshop-shared
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
