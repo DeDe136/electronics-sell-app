@@ -275,7 +275,7 @@ kubectl port-forward svc/postgres -n electronics-shop 5432:5432
 
 Terminal khác, cấu hình `backend/.env` (chỉ cần đúng `DB_PORT`,
 `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME` khớp với `values-dev.yaml` hoặc giá trị mặc định trong `values.yaml`; **không
-cần sửa `SEED_DB_HOST`** — script mặc định luôn dùng `localhost`), rồi chạy:
+cần sửa `SEED_DB_HOST`** — script mặc định luôn dùng `localhost`; gán biến `SEED_MEDIA_BASE` trong backend/.env thành **http://minio:9000/electronics-shop**), rồi chạy:
 
 ```bash
 cd ~/electronics-sell-app

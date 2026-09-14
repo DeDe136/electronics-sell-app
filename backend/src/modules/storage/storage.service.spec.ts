@@ -255,7 +255,7 @@ describe('StorageService', () => {
       );
     });
 
-    it('trả về URL dạng proxy "/api/images/<key>" khi provider là AWS S3 (bucket private)', async () => {
+    it('trả về URL dạng proxy "/api/images/<key>" khi provider là AWS S3 (bucket private) — KHÔNG mã hoá key vì key luôn do chính code sinh ra (uuid), không phải input người dùng', async () => {
       const config = buildConfigService({
         'storage.provider': 'aws',
         'storage.aws.bucket': 'private-bucket',
@@ -271,7 +271,10 @@ describe('StorageService', () => {
 
       const result = await service.uploadFile(file, 'products');
 
-      expect(result.url).toBe(`/api/images/${encodeURIComponent(result.key)}`);
+      expect(result.url).toBe(`/api/images/${result.key}`);
+      // Xác nhận rõ đây KHÔNG phải chuỗi đã encode (vd "%2F" thay cho "/")
+      // — vì trước đây có encodeURIComponent(key), nay đã bỏ.
+      expect(result.url).not.toContain('%2F');
     });
 
     it('dùng folder mặc định "uploads" khi không truyền folder', async () => {

@@ -190,6 +190,12 @@ export class StorageService {
     // bằng SDK (credentials cấp qua IRSA), browser không bao giờ gọi thẳng
     // S3. Đây là path tương đối (cùng origin với frontend), Next.js Image
     // fetch được luôn mà không cần khai remotePatterns.
-    return `/api/images/${encodeURIComponent(key)}`;
+    // (Không mã hoá key) — key luôn do chính code sinh ra
+    // (uploadFile(): `${folder}/${uuidv4()}.${ext}`, hoặc set tay khi tự
+    // upload qua UI MinIO/S3 rồi ghi vào DB/seed), không phải input gõ tay
+    // tuỳ ý của người dùng cuối, nên không có khoảng trắng/ký tự đặc biệt
+    // cần escape. Trả thẳng key vào path cho dễ đọc/dễ đối chiếu với đúng
+    // tên file thật trên S3.
+    return `/api/images/${key}`;
   }
 }
