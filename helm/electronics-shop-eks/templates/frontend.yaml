@@ -22,12 +22,10 @@ spec:
     canary:
       stableService: frontend-stable
       canaryService: frontend-canary
-      # Giống backend — xem giải thích công thức + ví dụ số trong
+      # Giống backend — xem giải thích công thức + ví dụ số, và lý do bỏ
+      # hẳn "trafficRouting.traefik" (CRD không tồn tại trên EKS), trong
       # templates/backend.yaml.
       dynamicStableScale: true
-      trafficRouting:
-        traefik:
-          weightedTraefikServiceName: frontend-traefik
       # Steps giống hệt backend để 2 service lên bản mới đồng bộ nhịp độ
       # (dễ theo dõi/deploy cùng lúc). Có thể tách nhịp riêng cho frontend
       # nếu sau này muốn canary frontend độc lập với backend.
@@ -42,6 +40,10 @@ spec:
     metadata:
       labels: { app: frontend }
     spec:
+      # ServiceAccount riêng, gắn role read-only S3 qua IRSA — cần để route
+      # /api/images/[...key] (frontend/app/api/images/[...key]/route.ts) gọi
+      # được S3. Xem templates/frontend-serviceaccount.yaml.
+      serviceAccountName: {{ .Values.serviceAccount.frontend.name }}
       imagePullSecrets:
         - name: {{ .Values.image.pullSecretName }}
       containers:
@@ -50,25 +52,19 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: [{ name: http, containerPort: {{ .Values.frontend.port }} }]
           env:
-            # (ĐỔI so với chart gốc) Gọi vào chính TRAEFIK thay vì gọi thẳng
-            # Service "backend" — để traffic SSR đi qua đúng IngressRoute ->
-            # TraefikService, được chia weight stable/canary y hệt traffic
-            # browser thật, thay vì luôn cố định vào bản stable.
-            # "traefik.kube-system" = Service nội bộ của Traefik trong K3s
-            # (xác nhận đúng tên/namespace bằng lệnh:
-            #   kubectl get svc -n kube-system | grep -i traefik
-            # trước khi dùng — nếu khác, sửa lại giá trị bên dưới).
+            # (KHÁC bản Traefik/k3s) Không còn Traefik để hairpin qua nữa —
+            # gọi thẳng Service nội bộ "backend-stable" (DNS trong cluster,
+            # xem templates/backend.yaml). Vì đây là gọi thẳng Service, KHÔNG
+            # đi qua Ingress/ALB, nên không cần trò "ghi đè Host header" như
+            # bản cũ nữa — bỏ luôn INTERNAL_API_HOST_HEADER (code trong
+            # frontend/lib/api.ts vẫn tương thích ngược: chỉ ghi đè header khi
+            # biến này tồn tại, không set thì bỏ qua, không lỗi gì).
             - name: INTERNAL_API_URL
-              value: "http://traefik.kube-system/api/v1"
-            # IngressRoute route theo điều kiện Host(...) — khi gọi thẳng vào
-            # Service nội bộ của Traefik (không qua DNS public), header Host
-            # mặc định sẽ là "traefik.kube-system" (suy ra từ URL trên),
-            # KHÔNG khớp rule "Host(`{{ .Values.ingress.host }}`)" trong
-            # IngressRoute, khiến Traefik trả 404. Biến này được code trong
-            # frontend/lib/api.ts đọc để tự ghi đè header "Host" đúng domain,
-            # giúp request "giả vờ" như đến từ đúng domain public.
-            - name: INTERNAL_API_HOST_HEADER
-              value: {{ .Values.ingress.host | quote }}
+              value: "http://backend-stable.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.backend.port }}/api/v1"
+            - name: AWS_REGION
+              value: {{ .Values.s3.region | quote }}
+            - name: AWS_S3_BUCKET
+              value: {{ .Values.s3.bucket | quote }}
           readinessProbe:
             # Đổi từ "/" sang "/api/ping" — "/" là trang chủ thật (Server
             # Component), mỗi lần probe gọi vào sẽ kích hoạt render lại

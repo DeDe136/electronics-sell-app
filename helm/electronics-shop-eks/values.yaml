@@ -1,5 +1,19 @@
-## values.yaml — default cho môi trường LOCAL K3s.
-## Khi lên EKS: override bằng "values-eks.yaml" (helm upgrade -f values-eks.yaml)
+## values.yaml — chart RIÊNG cho EKS (copy từ electronics-shop-keda).
+## Postgres/MinIO không còn chạy pod — dùng RDS + S3 (xem block "rds"/"s3"/
+## "secretsManager" bên dưới). ServiceAccount backend/frontend gắn IRSA để
+## gọi S3/Secrets Manager mà không cần access key tĩnh.
+##
+## LƯU Ý QUAN TRỌNG (đọc trước khi deploy): Ingress + canary trong chart gốc
+## (electronics-shop-keda) phụ thuộc 100% vào Traefik CRD (TraefikService,
+## IngressRoute) để chia % traffic stable/canary — CRD này KHÔNG tồn tại
+## trên EKS nếu không tự cài thêm Traefik. Chart này đã bỏ hẳn phần
+## trafficRouting đó, Ingress ALB trỏ thẳng 100% traffic vào *-stable Service
+## (không tự động chia % nữa). Rollout vẫn chạy canary (scale dần ReplicaSet
+## mới lên), bạn vẫn "promote" bằng tay như cũ, chỉ là verify canary phải tự
+## test qua Service *-canary (port-forward/internal), Ingress chưa thấy %
+## traffic đang chia. Muốn có lại đúng % traffic như bản Traefik thì cần làm
+## riêng 1 bước: cấu hình Argo Rollouts trafficRouting.alb + TargetGroupBinding
+## với AWS Load Balancer Controller — chưa nằm trong phạm vi thay đổi lần này.
 
 global:
   namespace: electronics-shop
@@ -37,8 +51,8 @@ backend:
   env:
     nodeEnv: production
     jwtExpiresIn: 7d
-    frontendUrl: "http://techshop.local"
-    storageProvider: minio
+    frontendUrl: "http://techshop.dynv6.net"   # đổi theo domain thật + ingress.host bên dưới
+    storageProvider: aws   # code check "=== 'minio'" mới đi nhánh MinIO, còn lại luôn là nhánh AWS S3
 
 frontend:
   replicaCount: 5
@@ -50,45 +64,58 @@ frontend:
     # URL public mà TRÌNH DUYỆT gọi tới backend — phải khớp với ingress host bên dưới.
     # LƯU Ý: giá trị này bị "đóng cứng" lúc build image (xem frontend.Dockerfile),
     # nên nếu đổi domain phải build lại image, sửa ở đây KHÔNG có tác dụng runtime.
-    nextPublicApiUrl: "http://techshop.local/api/v1"
+    nextPublicApiUrl: "http://techshop.dynv6.net/api/v1"
 
-postgres:
-  image: postgres:16-alpine
-  storage: 5Gi
-  storageClassName: local-path   # StorageClass mặc định của K3s. Trên EKS đổi thành "gp3"
+# RDS Postgres (thay cho StatefulSet postgres của chart local). Không có
+# field password ở đây — password lấy qua AWS Secrets Manager lúc runtime
+# (xem block "secretsManager" + code backend/src/config/secrets-manager.ts),
+# không lưu password dạng plaintext trong values.yaml/Git nữa.
+rds:
+  host: "techshop-postgres.xxxxxxxxxxxx.ap-southeast-1.rds.amazonaws.com"   # điền đúng endpoint ở Bước 4
+  port: 5432
   database: electronics_shop
-  username: postgres
-  # password thật để trong Secret riêng (secrets.yaml / --set / external-secrets),
-  # KHÔNG commit giá trị thật vào values.yaml này.
-  resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits:   { cpu: 500m, memory: 512Mi }
+  # username không cần khai ở đây nữa — Secrets Manager JSON đã có sẵn field
+  # "username", code backend đọc thẳng từ đó khi DB_CREDENTIALS_SOURCE=secrets-manager.
 
-minio:
-  image: minio/minio:latest
-  storage: 5Gi
-  storageClassName: local-path
-  bucket: electronics-shop
-  resources:
-    requests: { cpu: 50m, memory: 128Mi }
-    limits:   { cpu: 300m, memory: 256Mi }
+# AWS Secrets Manager — chứa credentials RDS (mục A ở bước "Modify RDS" bạn vừa làm).
+secretsManager:
+  dbSecretArn: "arn:aws:secretsmanager:ap-southeast-1:<ACCOUNT_ID>:secret:rds!db-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx-xxxxxx"
+
+# S3 (thay cho StatefulSet minio). Bucket PRIVATE (Block Public Access bật) —
+# backend upload qua SDK (IRSA), frontend đọc qua route /api/images/[...key]
+# (IRSA riêng, quyền chỉ GetObject) — xem code 2 bên.
+s3:
+  bucket: "techshop-product-images-xxxxx"   # đúng tên bucket tạo ở Bước 5
+  region: "ap-southeast-1"
+
+# ServiceAccount riêng cho backend/frontend, gắn IAM Role qua IRSA (Bước 6).
+# Role ARN điền sau khi tạo role trên IAM — ArgoCD sẽ tạo đúng ServiceAccount
+# này (xem templates/backend-serviceaccount.yaml, frontend-serviceaccount.yaml).
+serviceAccount:
+  backend:
+    name: backend-sa
+    roleArn: "arn:aws:iam::<ACCOUNT_ID>:role/techshop-backend-irsa-role"
+  frontend:
+    name: frontend-sa
+    roleArn: "arn:aws:iam::<ACCOUNT_ID>:role/techshop-frontend-irsa-role"
 
 ingress:
   enabled: true
-  className: traefik    # K3s cài sẵn Traefik làm ingress controller mặc định
-  host: techshop.local
-  # Trên EKS: className: alb (dùng AWS Load Balancer Controller) + annotations riêng
-  minio:
-    enabled: true
-    consoleHost: minio.techshop.local   # giao diện web MinIO, để test upload tay
-    apiHost: s3.techshop.local          # S3 API, nơi presigned URL trỏ tới
+  className: alb
+  host: techshop.dynv6.net   # đổi thành đúng zone bạn tạo trên dynv6.com
+  alb:
+    # scheme=internet-facing để ALB có DNS public; đổi "internal" nếu chỉ
+    # dùng nội bộ VPC (vd sau VPN/bastion).
+    scheme: internet-facing
+    # "ip" bắt buộc khi node dùng VPC CNI (mặc định EKS) — ALB gọi thẳng
+    # IP pod thay vì NodePort, tránh thêm 1 lớp hop qua kube-proxy.
+    targetType: ip
 
 secrets:
-  # Giá trị mặc định CHỈ để test local — bắt buộc đổi trước khi lên EKS/production.
+  # Giá trị mặc định CHỈ để test — bắt buộc đổi trước khi dùng thật.
+  # Đã bỏ postgresPassword/minioAccessKey/minioSecretKey khỏi Secret này vì
+  # không còn dùng nữa (RDS password qua Secrets Manager, S3 qua IRSA).
   jwtSecret: "change-me-in-production"
-  postgresPassword: "postgres"
-  minioAccessKey: "minioadmin"
-  minioSecretKey: "minioadmin"
 
 # HorizontalPodAutoscaler — tự tăng/giảm replica theo % CPU đang dùng so với
 # "resources.requests.cpu" đã khai ở trên (vd: request 100m, targetCPU 70% ->

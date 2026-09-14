@@ -38,10 +38,19 @@ spec:
       # Ví dụ đúng với 5 replicas, setWeight: 33 ->
       #   pod_canary = ceil(0.33 x 5) = ceil(1.65) = 2
       #   pod_stable = ceil(0.67 x 5) = ceil(3.35) = 4  (giảm 1 Pod so với 5)
+      #
+      # (KHÁC bản Traefik/k3s) Đã bỏ hẳn "trafficRouting.traefik" — CRD
+      # "TraefikService" không tồn tại trên EKS nếu không tự cài thêm
+      # Traefik. Không có trafficRouting nghĩa là Ingress ALB LUÔN trỏ
+      # 100% traffic vào "backend-stable" (xem templates/ingress.yaml),
+      # KHÔNG tự động chia % như bản cũ — Argo Rollouts vẫn chạy đúng các
+      # bước "steps" bên dưới (scale dần ReplicaSet mới lên, test được qua
+      # Service "backend-canary" trực tiếp), nhưng traffic thật từ Ingress
+      # chưa được chia theo %, chỉ chuyển hẳn sang bản mới lúc "promote"
+      # xong. Muốn có lại đúng hành vi chia % traffic, cần làm thêm bước
+      # riêng: Argo Rollouts trafficRouting.alb + TargetGroupBinding (AWS
+      # Load Balancer Controller) — chưa nằm trong phạm vi thay đổi lần này.
       dynamicStableScale: true
-      trafficRouting:
-        traefik:
-          weightedTraefikServiceName: backend-traefik
       steps:
         - setWeight: 33
         # Dừng vô thời hạn, chờ ta tự "promote" bằng tay:
@@ -59,6 +68,9 @@ spec:
     metadata:
       labels: { app: backend }
     spec:
+      # ServiceAccount riêng (thay vì "default") — bắt buộc để IRSA hoạt
+      # động, xem templates/backend-serviceaccount.yaml.
+      serviceAccountName: {{ .Values.serviceAccount.backend.name }}
       imagePullSecrets:
         - name: {{ .Values.image.pullSecretName }}
       containers:
@@ -71,12 +83,11 @@ spec:
           env:
             - name: JWT_SECRET
               valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: JWT_SECRET } }
-            - name: DB_PASSWORD
-              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: DB_PASSWORD } }
-            - name: MINIO_ACCESS_KEY
-              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: MINIO_ACCESS_KEY } }
-            - name: MINIO_SECRET_KEY
-              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: MINIO_SECRET_KEY } }
+            # (KHÁC bản k3s) Đã bỏ DB_PASSWORD/MINIO_ACCESS_KEY/MINIO_SECRET_KEY
+            # ở đây — RDS password lấy qua AWS Secrets Manager (DB_SECRET_ARN
+            # trong ConfigMap ở trên), S3 credentials lấy qua IRSA
+            # (serviceAccountName ở trên) — không còn access key/secret nào
+            # cần đưa vào Secret Kubernetes cho DB/storage nữa.
           readinessProbe:
             httpGet: { path: /api/v1/health, port: {{ .Values.backend.port }} }
             initialDelaySeconds: 10
