@@ -1,6 +1,6 @@
 apiVersion: v2
-name: electronics-shop-keda
-description: TechShop (Rollout canary + Prometheus/Grafana monitoring) + KEDA event-driven autoscaling (replace the original HPA)
+name: electronics-shop-eks
+description: TechShop Electronics Shop (EKS) — Helm chart for deploying the electronics shop application on Amazon EKS.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
