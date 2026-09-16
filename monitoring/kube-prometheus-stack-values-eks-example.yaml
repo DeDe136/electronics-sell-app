@@ -1,17 +1,38 @@
-## monitoring/kube-prometheus-stack-values-eks.yaml — bản EKS (copy từ
-## kube-prometheus-stack-values-example.yaml, file gốc giữ nguyên cho docs
-## local K3s cũ, không đụng vào).
+## monitoring/kube-prometheus-stack-values-eks-example.yaml
+##
+## File MẪU (example) — commit lên Git bình thường, KHÔNG chứa giá trị thật.
+## Trước khi deploy, copy thành "kube-prometheus-stack-values-eks.yaml" (đã
+## thêm vào .gitignore) rồi điền giá trị thật vào bản copy đó — KHÔNG sửa
+## trực tiếp file này. Các chỗ cần điền: adminPassword của Grafana, email
+## gửi/nhận cảnh báo của Alertmanager (tìm "REPLACE_ME" / "changeme"), ingress.hosts.
+##
+##   cp monitoring/kube-prometheus-stack-values-eks-example.yaml \
+##      monitoring/kube-prometheus-stack-values-eks.yaml
+##   # ... điền giá trị thật vào file vừa copy ...
 ##
 ## QUAN TRỌNG: storageClassName đổi từ "local-path" (chỉ có trên K3s) sang
 ## "gp3" — StorageClass này KHÔNG tự có sẵn trên EKS, cần cài EBS CSI Driver
-## + tạo StorageClass "gp3" trước (đúng bước "Bước 5 — Cài EBS CSI Driver"
-## đã bỏ qua lúc trước vì tưởng chỉ Postgres/MinIO cần — thực ra Prometheus/
-## Alertmanager/Grafana ở file này VẪN cần PVC để lưu dữ liệu, khác với
-## Postgres/MinIO đã chuyển hẳn sang RDS/S3). Nếu chưa cài EBS CSI Driver,
-## "helm upgrade" bằng file này sẽ treo ở trạng thái Pod "Pending" (PVC
-## không bao giờ được bind).
+## + tạo StorageClass "gp3" trước (xem scripts/install-eks-tools.sh, phần
+## cài EBS CSI Driver). Nếu chưa cài, "helm install" bằng file này sẽ treo
+## ở trạng thái Pod "Pending" (PVC không bao giờ được bind).
 
-# --- Tắt 4 component K3s không expose theo kiểu chart kube-prometheus-stack kỳ vọng ---
+# --- Tắt 4 component "control plane" — LÝ DO Ở EKS KHÁC HẲN K3s ---
+# Ở K3s, các component này chạy chung 1 binary trên chính node của bạn,
+# chỉ là không expose đúng kiểu chart kỳ vọng (endpoint/port khác).
+# Ở EKS, "kubeControllerManager"/"kubeScheduler"/"kubeEtcd" chạy hoàn toàn
+# trong hạ tầng AWS quản lý, NẰM NGOÀI account/VPC của bạn — không có Node
+# nào trong cluster của bạn chạy 3 thứ này cả, nên KHÔNG THỂ bật lên được
+# dù có config đúng cỡ nào — đây là giới hạn cứng của EKS, không phải thiếu
+# cấu hình. Giữ enabled: false là bắt buộc, không phải tuỳ chọn.
+#
+# "kubeProxy" thì khác 1 chút — trên EKS nó VẪN chạy dạng DaemonSet ngay
+# trong cluster của bạn (kubectl get pods -n kube-system -l k8s-app=kube-proxy
+# sẽ thấy), nhưng mặc định port metrics chỉ bind vào 127.0.0.1 (không tự
+# scrape được từ ngoài) — muốn bật thật phải sửa thêm ConfigMap
+# "kube-proxy-config" (đổi metricBindAddress thành "0.0.0.0:10249"), việc
+# này được xem là không cần thiết. Để enabled: false cho đơn giản, coi như
+# chưa cần theo dõi riêng kube-proxy (đã có metrics tổng quan qua
+# node-exporter + cAdvisor rồi).
 kubeControllerManager:
   enabled: false
 kubeScheduler:
@@ -20,7 +41,9 @@ kubeEtcd:
   enabled: false
 kubeProxy:
   enabled: false
-# kubelet: K3s vẫn expose được, để enabled: true (mặc định) là đủ
+# kubelet: EKS vẫn expose được qua node (kubelet chạy trên EC2 worker node,
+# không phải control plane AWS quản lý) — để enabled: true (mặc định) là đủ,
+# không cần đổi gì.
 
 prometheus:
   prometheusSpec:

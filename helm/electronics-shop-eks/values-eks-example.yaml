@@ -19,8 +19,14 @@
 # khoản AWS khác nhau — phần còn lại của chart đọc từ values.yaml như bình
 # thường, không cần lặp lại ở đây.
 
-# RDS — endpoint thật lấy ở Bước 4 (RDS console -> Connectivity & security
-# -> Endpoint).
+# Harbor registry thật — IP hoặc domain của Harbor, và credential của robot account.
+image:
+  registry: "<IP-hoac-domain-harbor-cua-ban>"
+  harborAuth:
+    username: "REPLACE_ME_HARBOR_ROBOT_USERNAME"
+    password: "REPLACE_ME_HARBOR_ROBOT_TOKEN"
+
+# RDS — endpoint (RDS console -> Connectivity & security -> Endpoint).
 rds:
   host: "REPLACE_ME.xxxxxxxxxxxx.ap-southeast-1.rds.amazonaws.com"
 
@@ -30,12 +36,12 @@ rds:
 secretsManager:
   dbSecretArn: "arn:aws:secretsmanager:ap-southeast-1:REPLACE_ME_ACCOUNT_ID:secret:rds!db-REPLACE_ME"
 
-# S3 — tên bucket thật tạo ở Bước 5, và đúng region bạn dùng cho toàn bộ hạ tầng.
+# S3 — tên bucket thật, và đúng region bạn dùng cho toàn bộ hạ tầng.
 s3:
   bucket: "REPLACE_ME_BUCKET_NAME"
   region: "ap-southeast-1"
 
-# IRSA — ARN của 2 role tạo ở Bước 6 (IAM console -> Roles -> copy ARN).
+# IRSA — ARN của 2 role (IAM console -> Roles -> copy ARN).
 serviceAccount:
   backend:
     roleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-backend-irsa-role"

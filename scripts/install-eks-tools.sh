@@ -1,22 +1,44 @@
 #!/bin/bash
-# Cài đặt các tool nền tảng lên cụm EKS: ArgoCD, Argo Rollouts, kube-prometheus-
-# stack, KEDA. Chart helm/electronics-shop-eks khai báo Rollout (CRD của Argo
-# Rollouts) và ScaledObject (CRD của KEDA), lấy metrics từ Prometheus (CRD
-# ServiceMonitor/PrometheusRule của kube-prometheus-stack) — thiếu bất kỳ tool
-# nào trong 4 tool này, "helm install electronics-shop-eks" sẽ báo lỗi thiếu
-# CRD hoặc pod đứng yên không chạy được.
+# Cài đặt các tool nền tảng lên cụm EKS: AWS Load Balancer Controller, EBS CSI
+# Driver, ArgoCD, Argo Rollouts, kube-prometheus-stack, KEDA.
+#
+# Chart helm/electronics-shop-eks khai báo Ingress (className: alb — cần AWS
+# LB Controller), Rollout (CRD của Argo Rollouts), ScaledObject (CRD của
+# KEDA), lấy metrics từ Prometheus (kube-prometheus-stack) — thiếu bất kỳ
+# tool nào trong 6 tool này, "helm install electronics-shop-eks" sẽ báo lỗi
+# thiếu CRD/StorageClass hoặc pod đứng yên không chạy được.
+#
+# CỐ Ý KHÔNG tạo IAM Policy/Role bằng AWS CLI trong script này — 2 role dưới
+# đây (ALB Controller, EBS CSI Driver) PHẢI tạo tay qua console TRƯỚC,
+# vì sau này khi đưa Terraform vào, các tài nguyên IAM này sẽ do Terraform
+# quản lý — tạo bằng CLI rải rác trong script ngay từ bây giờ sẽ gây xung
+# đột state với Terraform sau này (Terraform không biết resource đã tồn tại
+# ngoài ý nó, dễ dính lỗi "already exists" hoặc phải import tay).
 #
 # ĐIỀU KIỆN CẦN TRƯỚC KHI CHẠY:
 #   - kubectl đã trỏ đúng context EKS (kubectl config current-context)
-#   - AWS Load Balancer Controller đã cài (Bước 9), EBS CSI Driver đã cài
-#     (cần cho PVC của kube-prometheus-stack)
+#   - Đã tạo tay 2 IAM Role qua console: techshop-alb-controller-role (Bước 9),
+#     techshop-ebs-csi-role (xem hướng dẫn kèm theo script này) — điền ARN
+#     vào 2 biến bên dưới.
 #   - Namespace "electronics-shop" đã tồn tại
 #
 # Chạy từ root project: bash scripts/install-eks-tools.sh
 
 set -e
 
+# ────────────────────────────────────────────────────────────────────────
+# ĐIỀN GIÁ TRỊ THẬT VÀO ĐÂY TRƯỚC KHI CHẠY
+# ────────────────────────────────────────────────────────────────────────
+CLUSTER_NAME="techshop-cluster"
+AWS_REGION="ap-southeast-1"
+VPC_ID="REPLACE_ME_VPC_ID"                                                        # aws eks describe-cluster --name "$CLUSTER_NAME" --query "cluster.resourcesVpcConfig.vpcId" --output text
+ALB_CONTROLLER_ROLE_ARN="arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-alb-controller-role"
+EBS_CSI_ROLE_ARN="arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-ebs-csi-role"
+# ────────────────────────────────────────────────────────────────────────
+
 echo "=== 0. Thêm các Helm repo cần dùng ==="
+helm repo add eks https://aws.github.io/eks-charts
+helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
 helm repo add argo https://argoproj.github.io/argo-helm
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add kedacore https://kedacore.github.io/charts
@@ -27,8 +49,54 @@ create_namespace_if_missing() {
   kubectl get namespace "$1" >/dev/null 2>&1 || kubectl create namespace "$1"
 }
 
+# ── Helper: tạo + annotate ServiceAccount cho IRSA (idempotent) ──
+# CHỈ tạo K8s ServiceAccount (tài nguyên trong cluster) — KHÔNG đụng gì tới
+# IAM Role/Policy (tài nguyên AWS, đã tạo tay ngoài script, xem đầu file).
+create_irsa_serviceaccount() {
+  local sa_name="$1" ns="$2" role_arn="$3"
+  if kubectl get serviceaccount "$sa_name" -n "$ns" >/dev/null 2>&1; then
+    echo "ServiceAccount $sa_name (namespace $ns) đã tồn tại, chỉ cập nhật annotation."
+  else
+    kubectl create serviceaccount "$sa_name" -n "$ns"
+  fi
+  kubectl annotate serviceaccount "$sa_name" -n "$ns" \
+    eks.amazonaws.com/role-arn="$role_arn" --overwrite
+}
+
 echo ""
-echo "=== 1. Cài Argo CD ==="
+echo "=== 1. Cài AWS Load Balancer Controller ==="
+create_irsa_serviceaccount aws-load-balancer-controller kube-system "$ALB_CONTROLLER_ROLE_ARN"
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName="$CLUSTER_NAME" \
+  --set region="$AWS_REGION" \
+  --set vpcId="$VPC_ID" \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller
+
+echo ""
+echo "=== 2. Cài EBS CSI Driver + tạo StorageClass gp3 ==="
+create_irsa_serviceaccount ebs-csi-controller-sa kube-system "$EBS_CSI_ROLE_ARN"
+helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
+  -n kube-system \
+  --set controller.serviceAccount.create=false \
+  --set controller.serviceAccount.name=ebs-csi-controller-sa
+# Add-on chỉ cài driver, KHÔNG tự tạo StorageClass tên "gp3" — cần apply tay
+# (monitoring/kube-prometheus-stack-values-eks.yaml ở Bước 6 dưới đây cần
+# đúng StorageClass tên này).
+kubectl apply -f - <<'EOF'
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+volumeBindingMode: WaitForFirstConsumer
+EOF
+
+echo ""
+echo "=== 3. Cài Argo CD ==="
 create_namespace_if_missing argocd
 # Cài trước bằng values mặc định của chart (chưa có Ingress) — đúng cách cài
 # ban đầu trong docs/argocd-rolling-update-guide.md.
@@ -53,12 +121,12 @@ echo "=================================================================="
 read -r -p "Điền xong 2 file trên rồi, nhấn Enter để tiếp tục... " _
 
 echo ""
-echo "=== 2. Apply Argo CD Application + repo secret vào cluster ==="
+echo "=== 4. Apply Argo CD Application + repo secret vào cluster ==="
 kubectl apply -f argo/argocd-repo-secret.yaml
 kubectl apply -f argo/argocd-application.yaml
 
 echo ""
-echo "=== 3. Cài Argo Rollouts (controller + CRD Rollout) ==="
+echo "=== 5. Cài Argo Rollouts (controller + CRD Rollout) ==="
 create_namespace_if_missing argo-rollouts
 helm install argo-rollouts argo/argo-rollouts \
   --namespace argo-rollouts
@@ -69,11 +137,29 @@ helm upgrade argo-rollouts argo/argo-rollouts \
   -f argo/argo-rollouts-values-eks.yaml
 
 echo ""
-echo "=== 4. Cài kube-prometheus-stack (Prometheus + Alertmanager + Grafana) ==="
+echo "=================================================================="
+echo "  DỪNG LẠI — cần làm tay trước khi script tiếp tục:"
+echo ""
+echo "  cp monitoring/kube-prometheus-stack-values-eks-example.yaml \\"
+echo "     monitoring/kube-prometheus-stack-values-eks.yaml"
+echo ""
+echo "  Mở file monitoring/kube-prometheus-stack-values-eks.yaml (không phải"
+echo "  bản -example) vừa tạo, điền giá trị thật vào các chỗ đang để"
+echo "  REPLACE_ME/changeme, gồm:"
+echo "     - grafana.adminPassword"
+echo "     - alertmanager.config.global.smtp_from / smtp_auth_username (Gmail dùng để gửi)"
+echo "     - alertmanager.config.receivers[0].email_configs[0].to (email nhận cảnh báo)"
+echo "  File này đã có sẵn trong .gitignore — điền giá trị thật KHÔNG sợ bị"
+echo "  commit nhầm lên Git."
+echo "=================================================================="
+read -r -p "Điền xong file trên rồi, nhấn Enter để tiếp tục... " _
+
+echo ""
+echo "=== 6. Cài kube-prometheus-stack (Prometheus + Alertmanager + Grafana) ==="
 create_namespace_if_missing monitoring
 
 # Secret chứa Gmail App Password cho Alertmanager — PHẢI tạo TRƯỚC khi cài,
-# vì monitoring/kube-prometheus-stack-values-eks.yaml có mount
+# vì file values ở trên có mount
 # "alertmanagerSpec.secrets: [alertmanager-gmail-credentials]" (xem file đó
 # + docs/prometheus-grafana-alertmanager-monitoring-guide.md mục 5) — thiếu
 # secret này Alertmanager pod sẽ không khởi động được (thiếu volume).
@@ -95,7 +181,7 @@ helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   -f monitoring/kube-prometheus-stack-values-eks.yaml
 
 echo ""
-echo "=== 5. Cài KEDA (CRD ScaledObject dùng trong chart electronics-shop-eks) ==="
+echo "=== 7. Cài KEDA (CRD ScaledObject dùng trong chart electronics-shop-eks) ==="
 create_namespace_if_missing keda
 # Dùng thẳng keda/keda-values.yaml — không cần bản "-eks" riêng, vì KEDA chỉ
 # gọi vào Prometheus qua Service nội bộ namespace "monitoring", không phụ
@@ -106,12 +192,15 @@ helm install keda kedacore/keda \
 
 echo ""
 echo "=== XONG. Kiểm tra nhanh ==="
+echo "kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller"
+echo "kubectl get pods -n kube-system -l app=ebs-csi-controller"
+echo "kubectl get storageclass gp3"
 echo "kubectl get pods -n argocd"
 echo "kubectl get pods -n argo-rollouts"
 echo "kubectl get pods -n monitoring"
 echo "kubectl get pods -n keda"
 echo ""
-echo "Sau khi cả 4 namespace trên đều Running, mới chạy tiếp:"
+echo "Sau khi tất cả đều Running, mới chạy tiếp:"
 echo "  helm upgrade --install electronics-shop helm/electronics-shop-eks \\"
 echo "    -n electronics-shop --create-namespace \\"
 echo "    -f helm/electronics-shop-eks/values.yaml \\"
