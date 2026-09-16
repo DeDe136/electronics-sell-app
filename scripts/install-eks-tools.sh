@@ -19,7 +19,8 @@
 # ĐIỀU KIỆN CẦN TRƯỚC KHI CHẠY:
 #   - kubectl đã trỏ đúng context EKS (kubectl config current-context)
 #   - Đã tạo tay 2 IAM Role qua console: techshop-alb-controller-role,
-#     techshop-ebs-csi-role — điền ARN vào 2 biến bên dưới.
+#     techshop-ebs-csi-role — script sẽ hỏi ARN của 2 role này khi chạy,
+#     không cần sửa file.
 #   - Namespace "electronics-shop" đã tồn tại
 #   - Đã điền giá trị domain thật trong các field ingress.hosts/hostname của các file
 #     argo/argocd-server-values-eks.yaml, argo/argo-rollouts-values-eks.yaml và
@@ -30,13 +31,30 @@
 set -e
 
 # ────────────────────────────────────────────────────────────────────────
-# ĐIỀN GIÁ TRỊ THẬT VÀO ĐÂY TRƯỚC KHI CHẠY
+# NHẬP GIÁ TRỊ THẬT KHI SCRIPT CHẠY (không viết cứng vào file)
 # ────────────────────────────────────────────────────────────────────────
-CLUSTER_NAME="techshop-cluster"
-AWS_REGION="ap-southeast-1"
-VPC_ID="REPLACE_ME_VPC_ID"                                                        # aws eks describe-cluster --name "$CLUSTER_NAME" --query "cluster.resourcesVpcConfig.vpcId" --output text
-ALB_CONTROLLER_ROLE_ARN="arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-alb-controller-role"
-EBS_CSI_ROLE_ARN="arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-ebs-csi-role"
+read -r -p "Cluster name [techshop-cluster]: " CLUSTER_NAME
+CLUSTER_NAME="${CLUSTER_NAME:-techshop-cluster}"
+
+read -r -p "AWS region [ap-southeast-1]: " AWS_REGION
+AWS_REGION="${AWS_REGION:-ap-southeast-1}"
+
+# Gợi ý lấy VPC_ID nếu chưa nhớ: aws eks describe-cluster --name "$CLUSTER_NAME" \
+#   --query "cluster.resourcesVpcConfig.vpcId" --output text
+read -r -p "VPC ID: " VPC_ID
+while [ -z "$VPC_ID" ]; do
+  read -r -p "VPC ID (bắt buộc, không được để trống): " VPC_ID
+done
+
+read -r -p "ARN role IAM của AWS Load Balancer Controller (techshop-alb-controller-role): " ALB_CONTROLLER_ROLE_ARN
+while [ -z "$ALB_CONTROLLER_ROLE_ARN" ]; do
+  read -r -p "ARN role ALB Controller (bắt buộc, không được để trống): " ALB_CONTROLLER_ROLE_ARN
+done
+
+read -r -p "ARN role IAM của EBS CSI Driver (techshop-ebs-csi-role): " EBS_CSI_ROLE_ARN
+while [ -z "$EBS_CSI_ROLE_ARN" ]; do
+  read -r -p "ARN role EBS CSI Driver (bắt buộc, không được để trống): " EBS_CSI_ROLE_ARN
+done
 # ────────────────────────────────────────────────────────────────────────
 
 echo "=== 0. Thêm các Helm repo cần dùng ==="
