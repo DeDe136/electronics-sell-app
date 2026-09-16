@@ -1,12 +1,13 @@
 #!/bin/bash
 # Cài đặt các tool nền tảng lên cụm EKS: AWS Load Balancer Controller, EBS CSI
-# Driver, ArgoCD, Argo Rollouts, kube-prometheus-stack, KEDA.
+# Driver, kube-prometheus-stack, KEDA, Argo Rollouts, ArgoCD (ArgoCD cài SAU
+# CÙNG).
 #
 # Chart helm/electronics-shop-eks khai báo Ingress (className: alb — cần AWS
 # LB Controller), Rollout (CRD của Argo Rollouts), ScaledObject (CRD của
 # KEDA), lấy metrics từ Prometheus (kube-prometheus-stack) — thiếu bất kỳ
-# tool nào trong 6 tool này, "helm install electronics-shop-eks" sẽ báo lỗi
-# thiếu CRD/StorageClass hoặc pod đứng yên không chạy được.
+# tool nào trong 6 tool này, app sẽ báo lỗi thiếu CRD/StorageClass hoặc pod
+# đứng yên không chạy được.
 #
 # CỐ Ý KHÔNG tạo IAM Policy/Role bằng AWS CLI trong script này — 2 role dưới
 # đây (ALB Controller, EBS CSI Driver) PHẢI tạo tay qua console TRƯỚC,
@@ -17,10 +18,12 @@
 #
 # ĐIỀU KIỆN CẦN TRƯỚC KHI CHẠY:
 #   - kubectl đã trỏ đúng context EKS (kubectl config current-context)
-#   - Đã tạo tay 2 IAM Role qua console: techshop-alb-controller-role (Bước 9),
-#     techshop-ebs-csi-role (xem hướng dẫn kèm theo script này) — điền ARN
-#     vào 2 biến bên dưới.
+#   - Đã tạo tay 2 IAM Role qua console: techshop-alb-controller-role,
+#     techshop-ebs-csi-role — điền ARN vào 2 biến bên dưới.
 #   - Namespace "electronics-shop" đã tồn tại
+#   - Đã điền giá trị domain thật trong các field ingress.hosts/hostname của các file
+#     argo/argocd-server-values-eks.yaml, argo/argo-rollouts-values-eks.yaml và
+#     monitoring/kube-prometheus-stack-values-eks-example.yaml
 #
 # Chạy từ root project: bash scripts/install-eks-tools.sh
 
@@ -39,9 +42,9 @@ EBS_CSI_ROLE_ARN="arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-ebs-csi-role"
 echo "=== 0. Thêm các Helm repo cần dùng ==="
 helm repo add eks https://aws.github.io/eks-charts
 helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-helm repo add argo https://argoproj.github.io/argo-helm
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add kedacore https://kedacore.github.io/charts
+helm repo add argo https://argoproj.github.io/argo-helm
 helm repo update
 
 # ── Helper: tạo namespace nếu chưa có (idempotent, chạy lại script không lỗi) ──
@@ -82,7 +85,7 @@ helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
   --set controller.serviceAccount.create=false \
   --set controller.serviceAccount.name=ebs-csi-controller-sa
 # Add-on chỉ cài driver, KHÔNG tự tạo StorageClass tên "gp3" — cần apply tay
-# (monitoring/kube-prometheus-stack-values-eks.yaml ở Bước 6 dưới đây cần
+# (monitoring/kube-prometheus-stack-values-eks.yaml ở mục 3 dưới đây cần
 # đúng StorageClass tên này).
 kubectl apply -f - <<'EOF'
 apiVersion: storage.k8s.io/v1
@@ -94,47 +97,6 @@ parameters:
   type: gp3
 volumeBindingMode: WaitForFirstConsumer
 EOF
-
-echo ""
-echo "=== 3. Cài Argo CD ==="
-create_namespace_if_missing argocd
-# Cài trước bằng values mặc định của chart (chưa có Ingress) — đúng cách cài
-# ban đầu trong docs/argocd-rolling-update-guide.md.
-helm install argocd argo/argo-cd -n argocd
-# Upgrade ngay sau đó để bật Ingress (ALB, domain dynv6) — xem
-# argo/argocd-server-values-eks.yaml.
-helm upgrade argocd argo/argo-cd -n argocd -f argo/argocd-server-values-eks.yaml
-
-echo ""
-echo "=================================================================="
-echo "  DỪNG LẠI — cần làm tay trước khi script tiếp tục:"
-echo ""
-echo "  1) cp argo/argocd-application.example.yaml argo/argocd-application.yaml"
-echo "     cp argo/argocd-repo-secret.example.yaml  argo/argocd-repo-secret.yaml"
-echo "  2) Mở 2 file *.yaml (không phải *.example.yaml) vừa tạo, điền đúng:"
-echo "     - URL/branch repo Git thật của bạn"
-echo "     - Đường dẫn chart (helm/electronics-shop-eks)"
-echo "     - Credential Git thật (nếu repo private) trong argocd-repo-secret.yaml"
-echo "  2 file này đã có sẵn trong .gitignore — điền giá trị thật KHÔNG sợ"
-echo "  bị commit nhầm lên Git."
-echo "=================================================================="
-read -r -p "Điền xong 2 file trên rồi, nhấn Enter để tiếp tục... " _
-
-echo ""
-echo "=== 4. Apply Argo CD Application + repo secret vào cluster ==="
-kubectl apply -f argo/argocd-repo-secret.yaml
-kubectl apply -f argo/argocd-application.yaml
-
-echo ""
-echo "=== 5. Cài Argo Rollouts (controller + CRD Rollout) ==="
-create_namespace_if_missing argo-rollouts
-helm install argo-rollouts argo/argo-rollouts \
-  --namespace argo-rollouts
-# Upgrade để bật Dashboard chạy thường trực + Ingress — xem
-# argo/argo-rollouts-values-eks.yaml.
-helm upgrade argo-rollouts argo/argo-rollouts \
-  -n argo-rollouts \
-  -f argo/argo-rollouts-values-eks.yaml
 
 echo ""
 echo "=================================================================="
@@ -155,14 +117,13 @@ echo "=================================================================="
 read -r -p "Điền xong file trên rồi, nhấn Enter để tiếp tục... " _
 
 echo ""
-echo "=== 6. Cài kube-prometheus-stack (Prometheus + Alertmanager + Grafana) ==="
+echo "=== 3. Cài kube-prometheus-stack (Prometheus + Alertmanager + Grafana) ==="
 create_namespace_if_missing monitoring
 
 # Secret chứa Gmail App Password cho Alertmanager — PHẢI tạo TRƯỚC khi cài,
 # vì file values ở trên có mount
-# "alertmanagerSpec.secrets: [alertmanager-gmail-credentials]" (xem file đó
-# + docs/prometheus-grafana-alertmanager-monitoring-guide.md mục 5) — thiếu
-# secret này Alertmanager pod sẽ không khởi động được (thiếu volume).
+# "alertmanagerSpec.secrets: [alertmanager-gmail-credentials]" — thiếu
+# secret này Alertmanager pod sẽ không khởi động được.
 # Không đưa App Password vào bất kỳ file values nào (kể cả bản gitignore) —
 # nhạy cảm hơn cả các secret khác vì gắn với tài khoản Gmail cá nhân.
 if kubectl get secret alertmanager-gmail-credentials -n monitoring >/dev/null 2>&1; then
@@ -181,7 +142,7 @@ helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   -f monitoring/kube-prometheus-stack-values-eks.yaml
 
 echo ""
-echo "=== 7. Cài KEDA (CRD ScaledObject dùng trong chart electronics-shop-eks) ==="
+echo "=== 4. Cài KEDA (CRD ScaledObject dùng trong chart electronics-shop-eks) ==="
 create_namespace_if_missing keda
 # Dùng thẳng keda/keda-values.yaml — không cần bản "-eks" riêng, vì KEDA chỉ
 # gọi vào Prometheus qua Service nội bộ namespace "monitoring", không phụ
@@ -191,17 +152,66 @@ helm install keda kedacore/keda \
   -f keda/keda-values.yaml
 
 echo ""
+echo "=== 5. Cài Argo Rollouts (controller + CRD Rollout) ==="
+create_namespace_if_missing argo-rollouts
+helm install argo-rollouts argo/argo-rollouts \
+  --namespace argo-rollouts
+# Upgrade để bật Dashboard chạy thường trực + Ingress — xem
+# argo/argo-rollouts-values-eks.yaml.
+helm upgrade argo-rollouts argo/argo-rollouts \
+  -n argo-rollouts \
+  -f argo/argo-rollouts-values-eks.yaml
+
+echo ""
+echo "=== 6. Cài Argo CD (CÀI SAU CÙNG) ==="
+# ArgoCD cố ý cài SAU CÙNG, không phải đầu script: Application của ArgoCD
+# (mục apply ở dưới) sync thẳng chart electronics-shop-eks vào cluster —
+# chart này có object thuộc CRD của Argo Rollouts (Rollout) và KEDA
+# (ScaledObject), và Ingress cần AWS LB Controller đã chạy để tạo ALB. Nếu
+# cài ArgoCD trước rồi apply Application ngay, Argo CD sẽ cố sync các object
+# đó khi CRD/controller tương ứng CHƯA tồn tại trong cluster — sync thất bại
+# ngay ("no matches for kind Rollout"/"ScaledObject"...), phải Sync lại tay
+# sau khi cài đủ mới hết lỗi. Cài đủ 5 mục ở trên trước sẽ tránh hẳn lỗi này.
+create_namespace_if_missing argocd
+helm install argocd argo/argo-cd -n argocd
+helm upgrade argocd argo/argo-cd -n argocd -f argo/argocd-server-values-eks.yaml
+
+echo ""
+echo "=================================================================="
+echo "  DỪNG LẠI — cần làm tay trước khi script tiếp tục:"
+echo ""
+echo "  1) cp argo/argocd-application-eks.example.yaml argo/argocd-application-eks.yaml"
+echo "     cp argo/argocd-repo-secret.example.yaml       argo/argocd-repo-secret.yaml"
+echo "  2) Mở 2 file *.yaml (không phải *.example.yaml) vừa tạo, điền đúng:"
+echo "     - URL/branch repo Git thật của bạn"
+echo "     - Toàn bộ giá trị AWS thật trong valuesObject (rds.host, s3.bucket,"
+echo "       s3.region, secretsManager.dbSecretArn, serviceAccount.*.roleArn,"
+echo "       ingress.host, harborAuth...) — file này thay cho \"-f values-eks.yaml\""
+echo "       khi deploy qua Argo CD (GitOps), không dùng \"-f\" như helm CLI tay"
+echo "     - Credential Git thật (nếu repo private) trong argocd-repo-secret.yaml"
+echo "  2 file này đã có sẵn trong .gitignore — điền giá trị thật KHÔNG sợ"
+echo "  bị commit nhầm lên Git."
+echo "=================================================================="
+read -r -p "Điền xong 2 file trên rồi, nhấn Enter để tiếp tục... " _
+
+echo ""
+echo "=== 7. Apply Argo CD Application + repo secret vào cluster ==="
+kubectl apply -f argo/argocd-repo-secret.yaml
+kubectl apply -f argo/argocd-application-eks.yaml
+
+echo ""
 echo "=== XONG. Kiểm tra nhanh ==="
 echo "kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller"
 echo "kubectl get pods -n kube-system -l app=ebs-csi-controller"
 echo "kubectl get storageclass gp3"
-echo "kubectl get pods -n argocd"
-echo "kubectl get pods -n argo-rollouts"
 echo "kubectl get pods -n monitoring"
 echo "kubectl get pods -n keda"
+echo "kubectl get pods -n argo-rollouts"
+echo "kubectl get pods -n argocd"
 echo ""
-echo "Sau khi tất cả đều Running, mới chạy tiếp:"
-echo "  helm upgrade --install electronics-shop helm/electronics-shop-eks \\"
-echo "    -n electronics-shop --create-namespace \\"
-echo "    -f helm/electronics-shop-eks/values.yaml \\"
-echo "    -f helm/electronics-shop-eks/values-eks.yaml"
+echo "App được Argo CD tự động deploy qua Application vừa apply — KHÔNG cần"
+echo "chạy tay \"helm install/upgrade\" cho electronics-shop-eks nữa. Theo dõi"
+echo "tiến trình sync bằng:"
+echo "  kubectl get application electronics-shop -n argocd"
+echo "hoặc mở UI Argo CD (xem argo/argocd-server-values-eks.yaml để lấy đúng"
+echo "domain Ingress đã cấu hình)."

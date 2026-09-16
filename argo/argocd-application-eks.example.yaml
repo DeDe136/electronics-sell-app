@@ -1,0 +1,151 @@
+# argocd-application-eks.example.yaml
+#
+# File MẪU (example) — commit lên Git bình thường, KHÔNG chứa credential/ARN
+# thật. Trước khi dùng, copy thành "argocd-application-eks.yaml" (đã thêm
+# vào .gitignore) rồi điền giá trị thật vào bản copy đó — không sửa trực
+# tiếp file example này.
+#
+# App deploy qua Argo CD (GitOps) không có khái niệm "helm upgrade -f
+# values-eks.yaml" như chạy Helm CLI tay — Argo CD chỉ đọc đúng 1 nguồn:
+# "spec.source.helm.valuesObject" trong chính Application này. Vì vậy toàn
+# bộ giá trị lẽ ra nằm trong
+# "helm/electronics-shop-eks/values-eks-example.yaml" (rds.host,
+# secretsManager.dbSecretArn, s3.bucket, s3.region,
+# serviceAccount.backend/frontend.roleArn, ingress.host...) phải NHÚNG
+# THẲNG vào "valuesObject" bên dưới — file "values-eks.yaml" của chart vẫn
+# giữ lại trong repo để dùng khi ai đó muốn "helm upgrade" bằng tay
+# (debug cục bộ, không qua Argo CD), nhưng khi đã deploy qua Argo CD thì
+# "valuesObject" ở đây mới là nguồn giá trị thật sự được dùng.
+#
+# CÁCH DÙNG:
+#   1. cp argocd-application-eks.example.yaml argocd-application-eks.yaml
+#   2. Sửa các giá trị REPLACE_ME/<...> trong "argocd-application-eks.yaml"
+#      (bản copy) cho đúng với Harbor/repo/AWS của bạn.
+#   3. kubectl apply -f argo/argocd-application-eks.yaml -n argocd
+#
+# LƯU Ý: file bản copy (argocd-application-eks.yaml) đã nằm trong
+# .gitignore — điền giá trị thật (kể cả ARN, App Password Harbor...) không
+# sợ bị commit nhầm. Trước khi apply, repo Git PHẢI đã được đăng ký với
+# Argo CD (Settings > Repositories) — Application không tự mang theo
+# credential đọc repo private.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: electronics-shop
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/<username>/<repo-name>.git
+    targetRevision: main
+    path: helm/electronics-shop-eks
+    helm:
+      # Tương đương nội dung "values.yaml -f values-eks.yaml" cộng lại —
+      # Argo CD merge đè lên values.yaml mặc định của chart, giống hệt
+      # "-f values.yaml -f values-eks.yaml" khi chạy "helm upgrade" bằng tay.
+      valuesObject:
+        # ── Các field lấy từ helm/electronics-shop-eks/values-eks-example.yaml ──
+        image:
+          registry: "<IP-hoac-domain-harbor-cua-ban>"
+          harborAuth:
+            username: "<robot-account-username>"
+            password: "<robot-account-token>"
+
+        rds:
+          host: "REPLACE_ME.xxxxxxxxxxxx.ap-southeast-1.rds.amazonaws.com"
+
+        secretsManager:
+          dbSecretArn: "arn:aws:secretsmanager:ap-southeast-1:REPLACE_ME_ACCOUNT_ID:secret:rds!db-REPLACE_ME"
+
+        s3:
+          bucket: "REPLACE_ME_BUCKET_NAME"
+          region: "ap-southeast-1"
+
+        serviceAccount:
+          backend:
+            roleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-backend-irsa-role"
+          frontend:
+            roleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-frontend-irsa-role"
+
+        ingress:
+          host: "REPLACE_ME.dynv6.net"
+
+        backend:
+          env:
+            frontendUrl: "http://REPLACE_ME.dynv6.net"
+
+        frontend:
+          env:
+            # Chỉ mang tính ghi chú — giá trị này đã đóng cứng lúc build
+            # Docker image (ARG NEXT_PUBLIC_API_URL), sửa ở đây KHÔNG tự
+            # động áp dụng vào image đã build sẵn.
+            nextPublicApiUrl: "http://REPLACE_ME.dynv6.net/api/v1"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: electronics-shop
+
+  syncPolicy:
+    # Để "syncPolicy: {}" (rỗng) nếu muốn Sync bằng tay lần đầu để kiểm tra
+    # trước — CHỈ sync sau khi đã cài xong AWS LB Controller, EBS CSI
+    # Driver, kube-prometheus-stack, KEDA, Argo Rollouts (xem
+    # scripts/install-eks-tools.sh — Application này được apply cuối cùng,
+    # đúng lúc mọi CRD/StorageClass nó cần đã sẵn sàng). Bỏ comment khối
+    # "automated" bên dưới khi đã xác nhận app chạy ổn.
+    #
+    # automated:
+    #   selfHeal: true
+    #   prune: true
+    syncOptions:
+      - CreateNamespace=true
+
+  # Backend/frontend dùng HPA để tự scale Pod — ignore "/spec/replicas" để
+  # Self Heal không đánh nhau với HPA (xem giải thích gốc trong
+  # argocd-application.example.yaml).
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: backend
+      jsonPointers:
+        - /spec/replicas
+    - group: apps
+      kind: Deployment
+      name: frontend
+      jsonPointers:
+        - /spec/replicas
+
+    # Chart electronics-shop-eks LUÔN dùng Argo Rollouts cho backend/frontend
+    # (copy từ electronics-shop-keda) — 4 khối dưới đây LUÔN GIỮ, không cần
+    # tuỳ chọn comment/uncomment như bản K3s (nơi có thể dùng chart
+    # electronics-shop gốc không-Rollout).
+    - group: argoproj.io
+      kind: Rollout
+      name: backend
+      jsonPointers:
+        - /spec/replicas
+    - group: argoproj.io
+      kind: Rollout
+      name: frontend
+      jsonPointers:
+        - /spec/replicas
+    - group: ""
+      kind: Service
+      name: backend-stable
+      jsonPointers:
+        - /spec/selector
+    - group: ""
+      kind: Service
+      name: backend-canary
+      jsonPointers:
+        - /spec/selector
+    - group: ""
+      kind: Service
+      name: frontend-stable
+      jsonPointers:
+        - /spec/selector
+    - group: ""
+      kind: Service
+      name: frontend-canary
+      jsonPointers:
+        - /spec/selector

@@ -100,6 +100,7 @@ temp/
 # ── ArgoCD values and secrets ──────────────────────────
 argo/argocd-application.yaml
 argo/argocd-repo-secret.yaml
+argo/argocd-application-eks.yaml
 
 ## ── Monitoring / Prometheus & Grafana values and secrets ──────────────────────────
 monitoring/kube-prometheus-stack-values.yaml
