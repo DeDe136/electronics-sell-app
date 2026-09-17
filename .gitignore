@@ -87,6 +87,8 @@ helm/electronics-shop/values-dev.yaml
 helm/electronics-shop-rollout/values-dev.yaml
 helm/electronics-shop-monitoring/values-dev.yaml
 helm/electronics-shop-keda/values-dev.yaml
+helm/electronics-shop-eks/values-dev.yaml
+helm/electronics-shop-eks/values-eks.yaml
 
 # ── Misc ──────────────────────────────────
 *.zip
@@ -98,7 +100,9 @@ temp/
 # ── ArgoCD values and secrets ──────────────────────────
 argo/argocd-application.yaml
 argo/argocd-repo-secret.yaml
+argo/argocd-application-eks.yaml
 
 ## ── Monitoring / Prometheus & Grafana values and secrets ──────────────────────────
 monitoring/kube-prometheus-stack-values.yaml
+monitoring/kube-prometheus-stack-values-eks.yaml
 

@@ -1,0 +1,76 @@
+# argo-rollouts-values-eks.yaml — bản EKS (copy từ argo-rollouts-values.yaml,
+# file gốc giữ nguyên cho docs local K3s cũ, không đụng vào).
+#
+# Values override cho chart "argo-rollouts" (argo/argo-rollouts) — cùng chart
+# bạn đã cài ở Bước 1 (helm install argo-rollouts argo/argo-rollouts -n
+# argo-rollouts --create-namespace). File này KHÔNG cài lại từ đầu, chỉ bổ
+# sung Dashboard chạy thường trực trong cluster + Ingress, thay vì phải gõ
+# "kubectl argo rollouts dashboard" (chạy tạm, tắt terminal là mất) mỗi lần
+# muốn xem UI.
+#
+# CÁCH DÙNG:
+#   helm upgrade argo-rollouts argo/argo-rollouts -n argo-rollouts \
+#     -f argo/argo-rollouts-values-eks.yaml
+#
+# LƯU Ý: đoạn "extraArgs: --traefik-api-group/--traefik-api-version" bên dưới
+# chỉ có tác dụng khi 1 Rollout nào đó thật sự khai "trafficRouting.traefik"
+# — chart helm/electronics-shop-eks đã bỏ hẳn khối đó (xem comment trong
+# helm/electronics-shop-eks/templates/backend.yaml), nên 2 flag này hiện
+# không còn được dùng tới trên EKS, để nguyên cũng không gây lỗi gì.
+
+
+controller:
+  # QUAN TRỌNG — bắt buộc khi dùng Traefik v3 (K3s bản mới, chỉ có CRD group
+  # "traefik.io", KHÔNG còn "traefik.containo.us"):
+  #
+  # Binary controller argo-rollouts có 2 flag dòng lệnh
+  # "--traefik-api-group" / "--traefik-api-version" để chọn group/version
+  # CRD TraefikService nó sẽ gọi — nhưng giá trị MẶC ĐỊNH COMPILE SẴN trong
+  # binary (kể cả bản mới v1.9.1) vẫn là group CŨ "traefik.containo.us" (xem
+  # utils/defaults/defaults.go trong source code chính thức). Group này
+  # KHÔNG hề tồn tại trên cluster Traefik v3 — nếu không set 2 flag này,
+  # controller sẽ gọi 1 API group không được đăng ký, K8s API server trả về
+  # 404 "the server could not find the requested resource" — CHÍNH XÁC lỗi
+  # "TrafficRoutingError" ta gặp phải, dù RBAC đã đủ quyền và TraefikService đã
+  # tồn tại trên cluster (không liên quan RBAC/tồn tại object, chỉ do
+  # controller gọi sai group).
+  extraArgs:
+    - --traefik-api-group=traefik.io
+    - --traefik-api-version=traefik.io/v1alpha1
+
+dashboard:
+  enabled: true
+
+  # MẶC ĐỊNH Dashboard chỉ xem được Rollout trong đúng namespace nó được
+  # deploy vào ("argo-rollouts") — KHÔNG tự thấy Rollout ở namespace khác
+  # như "electronics-shop", dù ClusterRole của nó (mặc định
+  # createClusterRole: true) đã đủ quyền đọc TOÀN CLUSTER. Đây là lý do
+  # bạn thấy Dashboard "quan sát trong NS argo-rollouts" dù backend đang
+  # chạy ở "electronics-shop" — chỉ là thiếu 1 flag khai rõ namespace cần
+  # xem, quyền hạn thì đã đủ sẵn.
+  #
+  # Cách 1 (dùng ở đây) — CHỐT CỨNG Dashboard luôn xem "electronics-shop":
+  # extraArgs:
+  #   - --namespace=electronics-shop
+  #
+  # Cách 2 (thay thế, nếu ta có nhiều namespace/app mà có ít nhất 1 object
+  # Rollout và muốn xem đổi qua lại) — bật "full cluster mode" bằng cấu hình
+  # bên dưới, Dashboard cho chọn namespace ngay trên UI thay vì chốt cứng 1 cái:
+  extraArgs:
+    - --namespace=""
+
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hosts:
+      - rollouts.techshop-tde.dynv6.net
+    paths:
+      - /
+    pathType: Prefix
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      # PHẢI trùng chính xác group.name ở 3 file Ingress còn lại (xem
+      # argo/argocd-server-values-eks.yaml) — gộp chung 1 ALB.
+      alb.ingress.kubernetes.io/group.name: techshop-shared

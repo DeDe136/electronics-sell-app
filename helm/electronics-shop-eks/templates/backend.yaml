@@ -1,0 +1,214 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: backend
+  namespace: {{ .Values.global.namespace }}
+  labels: { app: backend }
+spec:
+  # Khi HPA quản lý (autoscaling.backend.enabled=true), CỐ Ý bỏ hẳn field
+  # "replicas" khỏi manifest — để Kubernetes/Argo CD không có giá trị nào để
+  # "áp đặt lại", HPA toàn quyền quyết định số Pod. Nếu vẫn khai replicas cố
+  # định ở đây, Argo CD Self Heal sẽ liên tục kéo số Pod về đúng
+  # "replicaCount" trong Git, đánh nhau với HPA mỗi vài giây.
+  {{- if not .Values.autoscaling.backend.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels: { app: backend }
+  strategy:
+    canary:
+      stableService: backend-stable
+      canaryService: backend-canary
+      # MẶC ĐỊNH (không khai dòng bên dưới = false): ReplicaSet stable luôn giữ
+      # FULL scale (100% số Pod ban đầu) suốt quá trình canary, dù weight
+      # đang chia bao nhiêu % traffic — tốn tài nguyên hơn (có lúc chạy dư
+      # gần gấp đôi Pod), đổi lại nếu "abort" giữa chừng, toàn bộ traffic
+      # quay ngay lập tức về stable (Pod đã có sẵn, không cần chờ scale).
+      #
+      # true: ReplicaSet stable được SCALE XUỐNG theo đúng tỉ lệ (100% -
+      # weight_canary) thay vì giữ nguyên 100% Pod ban đầu — tiết kiệm tài
+      # nguyên đáng kể lúc đang canary, đánh đổi: lúc "abort", cần vài giây
+      # để scale NGƯỢC stable lên lại đủ Pod trước khi traffic chuyển hẳn
+      # về (không còn tức thì 100% như lúc tắt).
+      #
+      # Công thức tính số Pod (làm tròn LÊN — xem hàm trafficWeightToReplicas
+      # trong utils/replicaset/canary.go của argo-rollouts):
+      #   pod_canary = ceil(weight_canary% x tổng_replicas / 100)
+      #   pod_stable = ceil((100 - weight_canary%) x tổng_replicas / 100)
+      # Ví dụ đúng với 5 replicas, setWeight: 33 ->
+      #   pod_canary = ceil(0.33 x 5) = ceil(1.65) = 2
+      #   pod_stable = ceil(0.67 x 5) = ceil(3.35) = 4  (giảm 1 Pod so với 5)
+      #
+      # (KHÁC bản Traefik/k3s) Đã bỏ hẳn "trafficRouting.traefik" — CRD
+      # "TraefikService" không tồn tại trên EKS nếu không tự cài thêm
+      # Traefik. Không có trafficRouting nghĩa là Ingress ALB LUÔN trỏ
+      # 100% traffic vào "backend-stable" (xem templates/ingress.yaml),
+      # KHÔNG tự động chia % như bản cũ — Argo Rollouts vẫn chạy đúng các
+      # bước "steps" bên dưới (scale dần ReplicaSet mới lên, test được qua
+      # Service "backend-canary" trực tiếp), nhưng traffic thật từ Ingress
+      # chưa được chia theo %, chỉ chuyển hẳn sang bản mới lúc "promote"
+      # xong. Muốn có lại đúng hành vi chia % traffic, cần làm thêm bước
+      # riêng: Argo Rollouts trafficRouting.alb + TargetGroupBinding (AWS
+      # Load Balancer Controller) — chưa nằm trong phạm vi thay đổi lần này.
+      dynamicStableScale: true
+      steps:
+        - setWeight: 33
+        # Dừng vô thời hạn, chờ ta tự "promote" bằng tay:
+        # + Cách 1: Dùng lệnh kubectl argo rollouts promote backend -n electronics-shop
+        # + Cách 2: Dùng Argo CD UI nhấn vào 3 chấm bên Rollout backend, rồi chọn
+        #   "Skip-current-step" (tương đương promote). Lúc đó Rollout sẽ bỏ qua step
+        #   pause này, tiếp tục chạy step setWeight: 50.
+        # + Cách 3: Dùng Argo Rollouts UI (Dashboard) nhấn nút "Promote" trên Rollout backend.
+        - pause: {}
+        - setWeight: 50
+        - pause: { duration: 30s }
+        - setWeight: 100
+        - pause: { duration: 30s }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      # ServiceAccount riêng (thay vì "default") — bắt buộc để IRSA hoạt
+      # động, xem templates/backend-serviceaccount.yaml.
+      serviceAccountName: {{ .Values.serviceAccount.backend.name }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecretName }}
+      containers:
+        - name: backend
+          image: {{ include "electronics-shop.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: {{ .Values.backend.port }} }]
+          envFrom:
+            - configMapRef: { name: electronics-shop-config }
+          env:
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: electronics-shop-secrets, key: JWT_SECRET } }
+            # (KHÁC bản k3s) Đã bỏ DB_PASSWORD/MINIO_ACCESS_KEY/MINIO_SECRET_KEY
+            # ở đây — RDS password lấy qua AWS Secrets Manager (DB_SECRET_ARN
+            # trong ConfigMap ở trên), S3 credentials lấy qua IRSA
+            # (serviceAccountName ở trên) — không còn access key/secret nào
+            # cần đưa vào Secret Kubernetes cho DB/storage nữa.
+          readinessProbe:
+            httpGet: { path: /api/v1/health, port: {{ .Values.backend.port }} }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/v1/health, port: {{ .Values.backend.port }} }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources: {{ toYaml .Values.backend.resources | nindent 12 }}
+---
+# ================================================================
+# TẠI SAO 2 SERVICE BÊN DƯỚI ĐỀU KHAI "selector: { app: backend }" GIỐNG
+# HỆT NHAU MÀ VẪN ROUTE ĐÚNG VÀO ĐÚNG NHÓM POD CẦN THIẾT?
+#
+# Vì đây chỉ là phần "selector" ta khai trong Git — KHÔNG PHẢI selector
+# thật đang chạy trên cluster. Argo Rollouts controller tự động PATCH
+# thêm 1 label nữa vào spec.selector thật của từng Service lúc runtime:
+# label "rollouts-pod-template-hash: <hash-của-ReplicaSet>" — giá trị
+# hash này ĐỔI QUA 3 GIAI ĐOẠN theo vòng đời của 1 lần cập nhật (KHÔNG cố định như ta tưởng):
+#
+# 1) ỔN ĐỊNH — không có bản cập nhật nào đang chạy:
+#      backend         -> { app: backend, rollouts-pod-template-hash: X }
+#      backend-canary  -> { app: backend, rollouts-pod-template-hash: X }
+#    Cả 2 Service TRỎ VÀO Y HỆT 1 ReplicaSet (cùng hash X) — không có
+#    Service nào "rảnh rỗi" cả, cả 2 luôn có Pod đích hợp lệ.
+#
+# 2) ĐANG CANARY (từ bước setWeight đầu tiên tới trước khi hoàn tất):
+#      backend         -> { ..., rollouts-pod-template-hash: X }  (bản CŨ)
+#      backend-canary  -> { ..., rollouts-pod-template-hash: Y }  (bản MỚI)
+#    Lúc này 2 Service mới thật sự trỏ vào 2 ReplicaSet khác nhau — nhờ
+#    vậy TraefikService mới chia % traffic đúng giữa 2 phiên bản.
+#    VÌ ĐÃ BẬT "dynamicStableScale: true" (xem giải thích ngay phía trên,
+#    phần "strategy.canary") — SỐ LƯỢNG Pod của ReplicaSet X (stable)
+#    cũng bị SCALE GIẢM dần theo đúng tỉ lệ (100% - weight_canary), KHÔNG
+#    còn giữ nguyên 100% Pod ban đầu trong suốt quá trình như hành vi mặc
+#    định nữa — xem đúng ví dụ số ở comment "dynamicStableScale" phía trên
+#    (5 Pod, setWeight: 33 -> stable X chỉ còn 4 Pod, canary Y có 2 Pod).
+#
+# 3) VỪA PROMOTE XONG (bước setWeight cuối chạy xong, không còn pause):
+#    Controller gắn nhãn ReplicaSet Y (vừa là canary) thành "stable" mới,
+#    ĐỔI CẢ 2 SERVICE cùng trỏ về hash Y:
+#      backend         -> { ..., rollouts-pod-template-hash: Y }
+#      backend-canary  -> { ..., rollouts-pod-template-hash: Y }
+#    Lưu ý phân biệt 2 MỐC khác nhau, dễ nhầm làm 1:
+#
+#    a) Lúc đang chạy step "setWeight: 100" (vẫn còn trong steps, CHƯA
+#       promote xong): TraefikService lúc này đã là canary=100% /
+#       stable=0% — tức Ingress ĐANG gọi 100% traffic qua backend-canary
+#       (trỏ Pod hash Y), đúng như cấu hình steps. backend (stable) lúc
+#       này vẫn trỏ Pod hash X (bản cũ) nhưng không nhận traffic Ingress
+#       nữa.
+#
+#    b) Ngay sau đó, khi Rollout được đánh dấu hoàn tất (hết steps, hết
+#       pause): controller mới thực hiện việc ĐỔI HASH backend sang Y +
+#       RESET TraefikService về stable=100% / canary=0% như mô tả ở trên.
+#       Từ mốc này, Ingress chuyển sang gọi 100% traffic qua backend
+#       (cũng đang trỏ Pod hash Y — CÙNG những Pod mà backend-canary vừa
+#       phục vụ ở mốc (a), không phải Pod khác).
+#
+#    Vì cùng là Pod hash Y ở cả 2 mốc, người dùng thật không hề thấy gián
+#    đoạn hay đổi hành vi gì khi chuyển từ (a) sang (b) — chỉ là "con
+#    đường" (Service nào mang 100% weight) đổi từ backend-canary sang
+#    backend. Đây là bước quan trọng dễ bị bỏ sót: từ (b) trở đi,
+#    backend-canary tuy vẫn trỏ đúng Pod hash Y (giống backend) nhưng
+#    KHÔNG còn % weight nào trong TraefikService trỏ vào nó nữa — nó chỉ
+#    "tái xuất" ở lần cập nhật tiếp theo, khi weight lại được chia lại từ
+#    đầu (setWeight: 20 -> 50 -> 100 như steps đã khai).
+#    Cuối cùng, controller MỚI scale ReplicaSet X (bản cũ thật sự) về 0 —
+#    vì lúc đổi hash + reset weight, Pod hash Y đã chạy sẵn/healthy từ
+#    trước (đã phục vụ traffic canary), nên không có khoảnh khắc nào 2
+#    Service hay TraefikService bị thiếu Pod đích. Cụm quay lại đúng
+#    trạng thái (1) — sẵn sàng cho lần cập nhật tiếp theo.
+#
+# Vì Rollout tạo ReplicaSet mới nào cũng tự gắn ĐÚNG label
+# "rollouts-pod-template-hash" tương ứng lên toàn bộ Pod của nó, nên dù
+# cả 2 Service cùng khai "app: backend", điều kiện hash (được controller
+# thêm/đổi ngầm) luôn đảm bảo mỗi Service khớp đúng nhóm Pod cần thiết ở
+# từng giai đoạn — không có chuyện gom lẫn Pod cũ với Pod mới.
+#
+# Muốn tự mắt thấy phần hash này (không nằm trong Git, chỉ xuất hiện sau
+# khi Rollout đã chạy trên cluster, và đổi qua 3 giai đoạn ở trên), chạy:
+#   kubectl get service backend backend-canary -n electronics-shop \
+#     -o jsonpath='{.items[*].spec.selector}'
+#
+# Chính vì phần hash này bị controller sửa "ngoài luồng Git", cần khai
+# "ignoreDifferences" cho "/spec/selector" của cả 2 Service trong
+# argocd-application.yaml — nếu không, Argo CD Self Heal sẽ liên tục xoá
+# phần hash đó, kéo selector về lại đúng mỗi "app: backend" như trong
+# Git, khiến cả 2 Service lại gom chung TẤT CẢ Pod (cũ lẫn mới cùng lúc)
+# thay vì trỏ đúng theo từng giai đoạn như mô tả ở trên.
+# ================================================================
+
+# Service "stable" — đổi tên thành "backend-stable" (KHÁC bản đầu từng
+# đặt là "backend" để giữ tương thích ngược với INTERNAL_API_URL cũ của
+# frontend). Từ lúc frontend đổi sang gọi hairpin qua Traefik (xem
+# templates/frontend.yaml + frontend/lib/api.ts) thay vì gọi thẳng tên
+# Service này, lý do giữ tên "backend" không còn nữa — đổi sang
+# "backend-stable" cho nhất quán với "backend-canary" bên dưới.
+#
+# Không có nguồn traffic nào (kể cả nội bộ) gọi trực tiếp vào tên Service
+# này nữa — cả traffic browser (qua Ingress) lẫn traffic SSR (hairpin qua
+# Traefik) đều đi qua TraefikService "backend-traefik" trước, Service này
+# chỉ còn đóng vai trò là 1 trong 2 "chân" (stable) mà TraefikService
+# dùng để chia trọng số.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-stable
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector: { app: backend }
+  ports: [{ port: {{ .Values.backend.port }}, targetPort: {{ .Values.backend.port }} }]
+---
+# Service "canary" — MỚI so với chart gốc, chỉ được TraefikService (xem
+# templates/backend-traffic.yaml) và Argo Rollouts controller sử dụng để
+# route 1 phần traffic Ingress vào bản đang canary.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-canary
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector: { app: backend }
+  ports: [{ port: {{ .Values.backend.port }}, targetPort: {{ .Values.backend.port }} }]

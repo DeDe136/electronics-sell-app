@@ -1,0 +1,215 @@
+## values.yaml — chart RIÊNG cho EKS (copy từ electronics-shop-keda).
+## Postgres/MinIO không còn chạy pod — dùng RDS + S3 (xem block "rds"/"s3"/
+## "secretsManager" bên dưới). ServiceAccount backend/frontend gắn IRSA để
+## gọi S3/Secrets Manager mà không cần access key tĩnh.
+##
+## LƯU Ý QUAN TRỌNG (đọc trước khi deploy): Ingress + canary trong chart gốc
+## (electronics-shop-keda) phụ thuộc 100% vào Traefik CRD (TraefikService,
+## IngressRoute) để chia % traffic stable/canary — CRD này KHÔNG tồn tại
+## trên EKS nếu không tự cài thêm Traefik. Chart này đã bỏ hẳn phần
+## trafficRouting đó, Ingress ALB trỏ thẳng 100% traffic vào *-stable Service
+## (không tự động chia % nữa). Rollout vẫn chạy canary (scale dần ReplicaSet
+## mới lên), bạn vẫn "promote" bằng tay như cũ, chỉ là verify canary phải tự
+## test qua Service *-canary (port-forward/internal), Ingress chưa thấy %
+## traffic đang chia. Muốn có lại đúng % traffic như bản Traefik thì cần làm
+## riêng 1 bước: cấu hình Argo Rollouts trafficRouting.alb + TargetGroupBinding
+## với AWS Load Balancer Controller — chưa nằm trong phạm vi thay đổi lần này.
+
+global:
+  namespace: electronics-shop
+
+image:
+  registry: harbor.local            # đổi thành domain/IP Harbor thật của bạn, KHÔNG có https://
+  project: electronics-shop
+  backendRepository: backend
+  frontendRepository: frontend
+  # Tag RIÊNG cho từng service — bắt buộc phải tách, vì CI chỉ build/push
+  # image của service nào thật sự có code thay đổi (xem deploy.yml). Nếu
+  # dùng chung 1 tag, lần chỉ đổi backend sẽ khiến frontend bị trỏ sang 1
+  # tag chưa từng được push lên Harbor -> ImagePullBackOff.
+  backendTag: "1beb337ca957b0c902614bb3a960516b1d631884"
+  frontendTag: "63a9b855013ffce1413a35c2fa42e424a9f21fa6"
+  pullPolicy: IfNotPresent
+  # Tên Secret kiểu kubernetes.io/dockerconfigjson để pull image private từ Harbor.
+  pullSecretName: harbor-pull-secret
+
+  # Nếu create=true, chart tự tạo Secret "pullSecretName" ở trên (không cần
+  # "kubectl create secret docker-registry" bằng tay nữa).
+  # username/password để trống ở đây (file commit lên Git) — điền giá trị thật
+  # trong values-dev.yaml (file KHÔNG commit).
+  harborAuth:
+    create: true
+    username: ""
+    password: ""
+
+backend:
+  replicaCount: 5
+  port: 3001
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  env:
+    nodeEnv: production
+    jwtExpiresIn: 7d
+    frontendUrl: "http://techshop-tde.dynv6.net"   # đổi theo domain thật + ingress.host bên dưới
+    storageProvider: aws   # code check "=== 'minio'" mới đi nhánh MinIO, còn lại luôn là nhánh AWS S3
+
+frontend:
+  replicaCount: 5
+  port: 3000
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 384Mi }
+  env:
+    # URL public mà TRÌNH DUYỆT gọi tới backend — phải khớp với ingress host bên dưới.
+    # LƯU Ý: giá trị này bị "đóng cứng" lúc build image (xem frontend.Dockerfile),
+    # nên nếu đổi domain phải build lại image, sửa ở đây KHÔNG có tác dụng runtime.
+    nextPublicApiUrl: "http://techshop-tde.dynv6.net/api/v1"
+
+# RDS Postgres (thay cho StatefulSet postgres của chart local). Không có
+# field password ở đây — password lấy qua AWS Secrets Manager lúc runtime
+# (xem block "secretsManager" + code backend/src/config/secrets-manager.ts),
+# không lưu password dạng plaintext trong values.yaml/Git nữa.
+rds:
+  host: "techshop-postgres.xxxxxxxxxxxx.ap-southeast-1.rds.amazonaws.com"   # điền đúng endpoint ở Bước 4
+  port: 5432
+  database: electronics_shop
+  # username không cần khai ở đây nữa — Secrets Manager JSON đã có sẵn field
+  # "username", code backend đọc thẳng từ đó khi DB_CREDENTIALS_SOURCE=secrets-manager.
+
+# AWS Secrets Manager — chứa credentials RDS (mục A ở bước "Modify RDS" bạn vừa làm).
+secretsManager:
+  dbSecretArn: "arn:aws:secretsmanager:ap-southeast-1:<ACCOUNT_ID>:secret:rds!db-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx-xxxxxx"
+
+# S3 (thay cho StatefulSet minio). Bucket PRIVATE (Block Public Access bật) —
+# backend upload qua SDK (IRSA), frontend đọc qua route /api/images/[...key]
+# (IRSA riêng, quyền chỉ GetObject) — xem code 2 bên.
+s3:
+  bucket: "techshop-product-images-xxxxx"   # đúng tên bucket tạo ở Bước 5
+  region: "ap-southeast-1"
+
+# ServiceAccount riêng cho backend/frontend, gắn IAM Role qua IRSA (Bước 6).
+# Role ARN điền sau khi tạo role trên IAM — ArgoCD sẽ tạo đúng ServiceAccount
+# này (xem templates/backend-serviceaccount.yaml, frontend-serviceaccount.yaml).
+serviceAccount:
+  backend:
+    name: backend-sa
+    roleArn: "arn:aws:iam::<ACCOUNT_ID>:role/techshop-backend-irsa-role"
+  frontend:
+    name: frontend-sa
+    roleArn: "arn:aws:iam::<ACCOUNT_ID>:role/techshop-frontend-irsa-role"
+
+ingress:
+  enabled: true
+  className: alb
+  host: techshop-tde.dynv6.net   # đổi thành đúng zone bạn tạo trên dynv6.com
+  alb:
+    # scheme=internet-facing để ALB có DNS public; đổi "internal" nếu chỉ
+    # dùng nội bộ VPC (vd sau VPN/bastion).
+    scheme: internet-facing
+    # "ip" bắt buộc khi node dùng VPC CNI (mặc định EKS) — ALB gọi thẳng
+    # IP pod thay vì NodePort, tránh thêm 1 lớp hop qua kube-proxy.
+    targetType: ip
+
+secrets:
+  # Giá trị mặc định CHỈ để test — bắt buộc đổi trước khi dùng thật.
+  # Đã bỏ postgresPassword/minioAccessKey/minioSecretKey khỏi Secret này vì
+  # không còn dùng nữa (RDS password qua Secrets Manager, S3 qua IRSA).
+  jwtSecret: "change-me-in-production"
+
+# HorizontalPodAutoscaler — tự tăng/giảm replica theo % CPU đang dùng so với
+# "resources.requests.cpu" đã khai ở trên (vd: request 100m, targetCPU 70% ->
+# HPA cố giữ mức dùng thực tế quanh 70m/Pod, vượt lên thì thêm Pod, tụt xuống
+# lâu thì bớt Pod). Cần "metrics-server" chạy trong cluster — K3s có sẵn mặc
+# định, kiểm tra bằng: kubectl get deployment metrics-server -n kube-system
+autoscaling:
+  backend:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 8
+    pollingInterval: 30
+    cooldownPeriod: 300
+    targetCPUUtilizationPercentage: 70
+    # Scale thêm khi memory trung bình/Pod vượt 80% so với
+    # "resources.requests.memory" (192Mi -> ngưỡng ~154Mi). HPA lấy điều kiện
+    # NGHIÊM NGẶT HƠN trong 2 metric (CPU hoặc memory, cái nào yêu cầu nhiều
+    # Pod hơn thì áp dụng) — chỉ cần 1 trong 2 vượt ngưỡng là đã scale up.
+    targetMemoryUtilizationPercentage: 80
+    prometheus:
+      enabled: true
+      # Ngưỡng request/s TRUNG BÌNH MỖI POD — không phải tổng traffic.
+      # Ví dụ: 4 pod, tổng 60 req/s -> avg mỗi pod = 15 -> vượt 10 -> scale up.
+      threshold: "10"
+  frontend:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 8
+    pollingInterval: 30
+    cooldownPeriod: 300
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    prometheus:
+      enabled: true
+      threshold: "10"
+
+# PodMonitor cho Prometheus Operator (CRD "monitoring.coreos.com/v1") — chỉ
+# bật khi cluster ĐÃ cài kube-prometheus-stack (CRD PodMonitor tồn tại),
+# nếu không "helm upgrade" sẽ báo lỗi "no matches for kind PodMonitor".
+monitoring:
+  backend:
+    enabled: true
+    # PHẢI khớp đúng label "release" mà kube-prometheus-stack đang dùng để
+    # lọc PodMonitor (mặc định Operator chỉ đọc PodMonitor có label
+    # "release: <tên-Helm-release-lúc-cài>" — ở đây ta đã cài bằng lệnh
+    # "helm install kube-prometheus-stack ..." nên giá trị là chính tên đó).
+    # Kiểm tra lại giá trị đúng bằng:
+    #   helm list -n monitoring
+    prometheusReleaseLabel: kube-prometheus-stack
+  frontend:
+    enabled: true
+    prometheusReleaseLabel: kube-prometheus-stack
+    # Frontend expose metrics ở "/api/metrics" (quy ước file-based routing
+    # của Next.js App Router), KHÁC path "/metrics" bên backend (NestJS
+    # loại riêng "/metrics" khỏi global prefix "api/v1" — xem main.ts).
+    metricsPath: /api/metrics
+  alerts:
+    # Loại các route chỉ phục vụ hạ tầng (Prometheus tự scrape, k8s probe
+    # tự gọi định kỳ) — luôn 200, luôn nhanh, nếu không loại sẽ pha loãng
+    # số liệu thật, làm error-rate/latency/traffic-surge kém nhạy hơn thực
+    # tế. Chỉnh lại nếu backend/frontend có thêm route hạ tầng khác.
+    nonBusinessRoutesRegex: "/metrics|/api/metrics|/api/ping|/api/v1/health"
+
+    errorRateThresholdPercent: 5   # cảnh báo khi tỷ lệ lỗi 5xx > 5%
+    errorRateFor: 2m               # phải duy trì liên tục 2 phút mới firing
+
+    latencyP95ThresholdSeconds: 1
+    latencyP95For: 3m
+    latencyP50ThresholdSeconds: 0.5
+    latencyP50For: 3m
+
+    noTrafficFor: 5m
+
+    trafficSurgeThresholdReqPerSec: 5
+    trafficSurgeFor: 1m
+
+    eventLoopLagThresholdSeconds: 0.1
+    eventLoopLagFor: 1m
+
+    v8HeapUsageThresholdPercent: 95
+    v8HeapUsageFor: 3m
+
+    restartCountThreshold: 3
+    restartWindow: 15m
+    restartFor: 5m
+
+# Địa chỉ Prometheus nội bộ cluster để KEDA query — verify đúng tên Service
+# bằng: kubectl get svc -n monitoring | grep prometheus
+keda:
+  prometheusServerAddress: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+  # Route hạ tầng (health check, self-scrape metrics...) cần loại khỏi query
+  # trigger prometheus — KHÔNG dùng chung monitoring.alerts.nonBusinessRoutesRegex
+  # vì 2 field phục vụ 2 mục đích khác nhau dù giá trị hiện đang giống nhau:
+  # cái kia quyết định NGƯỠNG CẢNH BÁO lỗi/latency, cái này quyết định SỐ POD
+  # thật sự chạy — thay đổi 1 route ở service này (vd thêm /health/live mới)
+  # không nên vô tình ảnh hưởng bên còn lại nếu 2 đội phụ trách khác nhau.
+  nonBusinessRoutesRegex: "/metrics|/api/metrics|/api/ping|/api/v1/health"

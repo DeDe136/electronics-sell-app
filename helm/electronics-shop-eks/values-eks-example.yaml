@@ -1,0 +1,70 @@
+# helm/electronics-shop-eks/values-eks-example.yaml
+#
+# File MẪU (example) — commit lên Git bình thường, KHÔNG chứa giá trị thật.
+# Trước khi deploy, copy thành "values-eks.yaml" (đã thêm vào .gitignore)
+# rồi điền giá trị thật vào bản copy đó — KHÔNG sửa trực tiếp file này,
+# và KHÔNG commit "values-eks.yaml" lên Git.
+#
+#   cp helm/electronics-shop-eks/values-eks-example.yaml \
+#      helm/electronics-shop-eks/values-eks.yaml
+#   # ... điền giá trị thật vào values-eks.yaml ...
+#
+# CÁCH DÙNG (values.yaml là base, file này override đè lên trên):
+#   helm upgrade --install electronics-shop helm/electronics-shop-eks \
+#     -n electronics-shop --create-namespace \
+#     -f helm/electronics-shop-eks/values.yaml \
+#     -f helm/electronics-shop-eks/values-eks.yaml
+#
+# Chỉ liệt kê ở đây đúng những giá trị PHẢI đổi theo từng lần deploy/tài
+# khoản AWS khác nhau — phần còn lại của chart đọc từ values.yaml như bình
+# thường, không cần lặp lại ở đây.
+
+# Harbor registry thật — IP hoặc domain của Harbor, và credential của robot account.
+image:
+  registry: "<IP-hoac-domain-harbor-cua-ban>"
+  harborAuth:
+    username: "REPLACE_ME_HARBOR_ROBOT_USERNAME"
+    password: "REPLACE_ME_HARBOR_ROBOT_TOKEN"
+
+# RDS — endpoint (RDS console -> Connectivity & security -> Endpoint).
+rds:
+  host: "REPLACE_ME.xxxxxxxxxxxx.ap-southeast-1.rds.amazonaws.com"
+
+# AWS Secrets Manager — ARN thật lấy ở phần "Modify RDS -> Manage master
+# credentials in Secrets Manager" (RDS console -> Configuration -> Master
+# credentials ARN).
+secretsManager:
+  dbSecretArn: "arn:aws:secretsmanager:ap-southeast-1:REPLACE_ME_ACCOUNT_ID:secret:rds!db-REPLACE_ME"
+
+# S3 — tên bucket thật, và đúng region bạn dùng cho toàn bộ hạ tầng.
+s3:
+  bucket: "REPLACE_ME_BUCKET_NAME"
+  region: "ap-southeast-1"
+
+# IRSA — ARN của 2 role (IAM console -> Roles -> copy ARN).
+serviceAccount:
+  backend:
+    roleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-backend-irsa-role"
+  frontend:
+    roleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-frontend-irsa-role"
+
+# Domain thật — dùng chung 1 domain cho frontend + backend (xem
+# helm/electronics-shop-eks/templates/ingress.yaml, route "/" và "/api" cùng
+# 1 host). Nếu đang test bằng dynv6 (xem hướng dẫn trước đó), điền đúng zone
+# đã tạo, ví dụ "techshop.dynv6.net".
+ingress:
+  host: "REPLACE_ME.dynv6.net"
+
+backend:
+  env:
+    # PHẢI khớp chính xác "ingress.host" ở trên (thêm scheme http:// hoặc
+    # https:// tuỳ ALB đã có ACM certificate hay chưa).
+    frontendUrl: "http://REPLACE_ME.dynv6.net"
+
+frontend:
+  env:
+    # Chỉ mang tính GHI CHÚ — giá trị này đã bị đóng cứng lúc build Docker
+    # image (ARG NEXT_PUBLIC_API_URL), sửa ở đây KHÔNG tự động áp dụng vào
+    # image đã build sẵn. Đổi thật sự phải build lại image với đúng
+    # --build-arg NEXT_PUBLIC_API_URL=http://REPLACE_ME.dynv6.net/api/v1
+    nextPublicApiUrl: "http://REPLACE_ME.dynv6.net/api/v1"

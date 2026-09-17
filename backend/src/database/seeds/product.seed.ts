@@ -5,10 +5,29 @@ import {
 } from '../../modules/catalog/entities/product.entity';
 import { Category } from '../../modules/catalog/entities/category.entity';
 
-// Xem giải thích chi tiết trong category.seed.ts — cùng 1 hằng số, tách
-// riêng ở đây vì file này chạy độc lập (import trong run-seeds.ts).
+// (MỚI) Trước đây file này LUÔN ghép URL kiểu
+// "${MEDIA_BASE_URL}/products/x/1.jpg" — đúng cho luồng bạn hay dùng: tự tay
+// upload ảnh qua UI của MinIO/S3 rồi set thẳng URL vào DB (seed script này
+// mô phỏng đúng thao tác tay đó, KHÔNG đi qua storageService.uploadFile()/
+// buildPublicUrl() — 2 hàm đó chỉ chạy khi có người dùng thật upload qua API,
+// ví dụ avatar). Vì vậy sửa buildPublicUrl() ở storage.service.ts KHÔNG hề
+// ảnh hưởng gì tới URL sinh ra ở file này — phải sửa riêng ở đây.
+//
+// Giữ nguyên hành vi cũ khi STORAGE_PROVIDER=minio (mặc định, không set gì
+// cũng vào nhánh này) — không đổi 1 ký tự nào so với trước, docs local vẫn
+// đúng. Khi STORAGE_PROVIDER=aws (chart electronics-shop-eks), trả về đúng
+// path "/api/images/{key}" — PHẢI khớp key thật của file bạn tự tay upload
+// lên S3 qua console UI (ví dụ đúng thư mục/tên "products/iphone17promax/1.jpg").
+const STORAGE_PROVIDER = process.env.STORAGE_PROVIDER || 'minio';
 const MEDIA_BASE_URL =
   process.env.SEED_MEDIA_BASE_URL || 'http://localhost:9000/electronics-shop';
+
+function buildSeedImageUrl(key: string): string {
+  if (STORAGE_PROVIDER === 'minio') {
+    return `${MEDIA_BASE_URL}/${key}`;
+  }
+  return `/api/images/${key}`;
+}
 
 export async function seedProducts(dataSource: DataSource) {
   const productRepo = dataSource.getRepository(Product);
@@ -38,15 +57,15 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 32990000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/iphone17promax/1.jpg`,
+          url: buildSeedImageUrl('products/iphone17promax/1.jpg'),
           key: 'products/iphone17promax/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/iphone17promax/2.jpg`,
+          url: buildSeedImageUrl('products/iphone17promax/2.jpg'),
           key: 'products/iphone17promax/2.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/iphone17promax/3.jpg`,
+          url: buildSeedImageUrl('products/iphone17promax/3.jpg'),
           key: 'products/iphone17promax/3.jpg',
         },
       ],
@@ -74,15 +93,15 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 29990000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/s24ultra/1.jpg`,
+          url: buildSeedImageUrl('products/s24ultra/1.jpg'),
           key: 'products/s24ultra/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/s24ultra/2.jpg`,
+          url: buildSeedImageUrl('products/s24ultra/2.jpg'),
           key: 'products/s24ultra/2.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/s24ultra/3.jpg`,
+          url: buildSeedImageUrl('products/s24ultra/3.jpg'),
           key: 'products/s24ultra/3.jpg',
         },
       ],
@@ -111,15 +130,15 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 20990000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/1.jpg`,
+          url: buildSeedImageUrl('products/xiaomi17ultra/1.jpg'),
           key: 'products/xiaomi17ultra/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/2.jpg`,
+          url: buildSeedImageUrl('products/xiaomi17ultra/2.jpg'),
           key: 'products/xiaomi17ultra/2.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/xiaomi17ultra/3.jpg`,
+          url: buildSeedImageUrl('products/xiaomi17ultra/3.jpg'),
           key: 'products/xiaomi17ultra/3.jpg',
         },
       ],
@@ -150,11 +169,11 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 66990000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/mbp16m3pro/1.jpg`,
+          url: buildSeedImageUrl('products/mbp16m3pro/1.jpg'),
           key: 'products/mbp16m3pro/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/mbp16m3pro/2.jpg`,
+          url: buildSeedImageUrl('products/mbp16m3pro/2.jpg'),
           key: 'products/mbp16m3pro/2.jpg',
         },
       ],
@@ -182,11 +201,11 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 42990000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/dellxps15/1.jpg`,
+          url: buildSeedImageUrl('products/dellxps15/1.jpg'),
           key: 'products/dellxps15/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/dellxps15/2.jpg`,
+          url: buildSeedImageUrl('products/dellxps15/2.jpg'),
           key: 'products/dellxps15/2.jpg',
         },
       ],
@@ -214,11 +233,11 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: undefined,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/rogg14-2024/1.jpg`,
+          url: buildSeedImageUrl('products/rogg14-2024/1.jpg'),
           key: 'products/rogg14-2024/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/rogg14-2024/2.jpg`,
+          url: buildSeedImageUrl('products/rogg14-2024/2.jpg'),
           key: 'products/rogg14-2024/2.jpg',
         },
       ],
@@ -248,11 +267,11 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 7490000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/1.jpg`,
+          url: buildSeedImageUrl('products/sonywh1000xm5/1.jpg'),
           key: 'products/sonywh1000xm5/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/sonywh1000xm5/2.jpg`,
+          url: buildSeedImageUrl('products/sonywh1000xm5/2.jpg'),
           key: 'products/sonywh1000xm5/2.jpg',
         },
       ],
@@ -278,15 +297,15 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 5990000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/airpodspro2/1.jpg`,
+          url: buildSeedImageUrl('products/airpodspro2/1.jpg'),
           key: 'products/airpodspro2/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/airpodspro2/2.jpg`,
+          url: buildSeedImageUrl('products/airpodspro2/2.jpg'),
           key: 'products/airpodspro2/2.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/airpodspro2/3.jpg`,
+          url: buildSeedImageUrl('products/airpodspro2/3.jpg'),
           key: 'products/airpodspro2/3.jpg',
         },
       ],
@@ -314,15 +333,15 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 11490000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/1.jpg`,
+          url: buildSeedImageUrl('products/applewatch-s9-45/1.jpg'),
           key: 'products/applewatch-s9-45/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/2.jpg`,
+          url: buildSeedImageUrl('products/applewatch-s9-45/2.jpg'),
           key: 'products/applewatch-s9-45/2.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/applewatch-s9-45/3.jpg`,
+          url: buildSeedImageUrl('products/applewatch-s9-45/3.jpg'),
           key: 'products/applewatch-s9-45/3.jpg',
         },
       ],
@@ -348,11 +367,11 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 8290000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/gw6classic47/1.jpg`,
+          url: buildSeedImageUrl('products/gw6classic47/1.jpg'),
           key: 'products/gw6classic47/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/gw6classic47/2.jpg`,
+          url: buildSeedImageUrl('products/gw6classic47/2.jpg'),
           key: 'products/gw6classic47/2.jpg',
         },
       ],
@@ -380,11 +399,11 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 22490000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/ipadpro11m4/1.jpg`,
+          url: buildSeedImageUrl('products/ipadpro11m4/1.jpg'),
           key: 'products/ipadpro11m4/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/ipadpro11m4/2.jpg`,
+          url: buildSeedImageUrl('products/ipadpro11m4/2.jpg'),
           key: 'products/ipadpro11m4/2.jpg',
         },
       ],
@@ -412,15 +431,15 @@ export async function seedProducts(dataSource: DataSource) {
       salePrice: 9290000,
       images: [
         {
-          url: `${MEDIA_BASE_URL}/products/tabs9fe/1.jpg`,
+          url: buildSeedImageUrl('products/tabs9fe/1.jpg'),
           key: 'products/tabs9fe/1.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/tabs9fe/2.jpg`,
+          url: buildSeedImageUrl('products/tabs9fe/2.jpg'),
           key: 'products/tabs9fe/2.jpg',
         },
         {
-          url: `${MEDIA_BASE_URL}/products/tabs9fe/3.jpg`,
+          url: buildSeedImageUrl('products/tabs9fe/3.jpg'),
           key: 'products/tabs9fe/3.jpg',
         },
       ],
