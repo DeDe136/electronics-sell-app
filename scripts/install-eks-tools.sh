@@ -87,7 +87,7 @@ create_irsa_serviceaccount() {
 echo ""
 echo "=== 1. Cài AWS Load Balancer Controller ==="
 create_irsa_serviceaccount aws-load-balancer-controller kube-system "$ALB_CONTROLLER_ROLE_ARN"
-helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName="$CLUSTER_NAME" \
   --set region="$AWS_REGION" \
@@ -98,7 +98,7 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 echo ""
 echo "=== 2. Cài EBS CSI Driver + tạo StorageClass gp3 ==="
 create_irsa_serviceaccount ebs-csi-controller-sa kube-system "$EBS_CSI_ROLE_ARN"
-helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
+helm upgrade --install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
   -n kube-system \
   --set controller.serviceAccount.create=false \
   --set controller.serviceAccount.name=ebs-csi-controller-sa
@@ -155,7 +155,7 @@ else
   unset GMAIL_APP_PASSWORD
 fi
 
-helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   -f monitoring/kube-prometheus-stack-values-eks.yaml
 
@@ -165,19 +165,15 @@ create_namespace_if_missing keda
 # Dùng thẳng keda/keda-values.yaml — không cần bản "-eks" riêng, vì KEDA chỉ
 # gọi vào Prometheus qua Service nội bộ namespace "monitoring", không phụ
 # thuộc gì vào Traefik/local-path như phần Ingress ở các chart khác.
-helm install keda kedacore/keda \
+helm upgrade --install keda kedacore/keda \
   --namespace keda \
   -f keda/keda-values.yaml
 
 echo ""
 echo "=== 5. Cài Argo Rollouts (controller + CRD Rollout) ==="
 create_namespace_if_missing argo-rollouts
-helm install argo-rollouts argo/argo-rollouts \
-  --namespace argo-rollouts
-# Upgrade để bật Dashboard chạy thường trực + Ingress — xem
-# argo/argo-rollouts-values-eks.yaml.
-helm upgrade argo-rollouts argo/argo-rollouts \
-  -n argo-rollouts \
+helm upgrade --install argo-rollouts argo/argo-rollouts \
+  --namespace argo-rollouts \
   -f argo/argo-rollouts-values-eks.yaml
 
 echo ""
@@ -191,8 +187,7 @@ echo "=== 6. Cài Argo CD (CÀI SAU CÙNG) ==="
 # ngay ("no matches for kind Rollout"/"ScaledObject"...), phải Sync lại tay
 # sau khi cài đủ mới hết lỗi. Cài đủ 5 mục ở trên trước sẽ tránh hẳn lỗi này.
 create_namespace_if_missing argocd
-helm install argocd argo/argo-cd -n argocd
-helm upgrade argocd argo/argo-cd -n argocd -f argo/argocd-server-values-eks.yaml
+helm upgrade --install argocd argo/argo-cd -n argocd -f argo/argocd-server-values-eks.yaml
 
 echo ""
 echo "=================================================================="
