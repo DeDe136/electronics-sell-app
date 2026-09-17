@@ -50,7 +50,7 @@ spec:
       # xong. Muốn có lại đúng hành vi chia % traffic, cần làm thêm bước
       # riêng: Argo Rollouts trafficRouting.alb + TargetGroupBinding (AWS
       # Load Balancer Controller) — chưa nằm trong phạm vi thay đổi lần này.
-      dynamicStableScale: true
+      # dynamicStableScale: true
       steps:
         - setWeight: 33
         # Dừng vô thời hạn, chờ ta tự "promote" bằng tay:
