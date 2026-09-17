@@ -63,7 +63,7 @@ prometheus:
     enabled: true
     ingressClassName: alb
     hosts:
-      - prometheus.techshop.dynv6.net
+      - prometheus.techshop-tde.dynv6.net
     paths: ["/"]
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
@@ -99,7 +99,7 @@ alertmanager:
     enabled: true
     ingressClassName: alb
     hosts:
-      - alertmanager.techshop.dynv6.net
+      - alertmanager.techshop-tde.dynv6.net
     paths: ["/"]
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
@@ -140,7 +140,7 @@ grafana:
     enabled: true
     ingressClassName: alb
     hosts:
-      - grafana.techshop.dynv6.net
+      - grafana.techshop-tde.dynv6.net
     path: /
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing

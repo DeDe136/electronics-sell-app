@@ -51,7 +51,7 @@ backend:
   env:
     nodeEnv: production
     jwtExpiresIn: 7d
-    frontendUrl: "http://techshop.dynv6.net"   # đổi theo domain thật + ingress.host bên dưới
+    frontendUrl: "http://techshop-tde.dynv6.net"   # đổi theo domain thật + ingress.host bên dưới
     storageProvider: aws   # code check "=== 'minio'" mới đi nhánh MinIO, còn lại luôn là nhánh AWS S3
 
 frontend:
@@ -64,7 +64,7 @@ frontend:
     # URL public mà TRÌNH DUYỆT gọi tới backend — phải khớp với ingress host bên dưới.
     # LƯU Ý: giá trị này bị "đóng cứng" lúc build image (xem frontend.Dockerfile),
     # nên nếu đổi domain phải build lại image, sửa ở đây KHÔNG có tác dụng runtime.
-    nextPublicApiUrl: "http://techshop.dynv6.net/api/v1"
+    nextPublicApiUrl: "http://techshop-tde.dynv6.net/api/v1"
 
 # RDS Postgres (thay cho StatefulSet postgres của chart local). Không có
 # field password ở đây — password lấy qua AWS Secrets Manager lúc runtime
@@ -102,7 +102,7 @@ serviceAccount:
 ingress:
   enabled: true
   className: alb
-  host: techshop.dynv6.net   # đổi thành đúng zone bạn tạo trên dynv6.com
+  host: techshop-tde.dynv6.net   # đổi thành đúng zone bạn tạo trên dynv6.com
   alb:
     # scheme=internet-facing để ALB có DNS public; đổi "internal" nếu chỉ
     # dùng nội bộ VPC (vd sau VPN/bastion).

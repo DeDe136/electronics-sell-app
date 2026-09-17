@@ -104,7 +104,7 @@ echo "  3) Chờ vài phút cho DNS lan truyền, kiểm tra bằng:"
 echo "       dig +short <domain-bạn-vừa-tạo>"
 echo "     Phải trả về đúng $EC2_PUBLIC_IP"
 echo "=================================================================="
-read -r -p "Đã tạo xong A record và dig ra đúng IP rồi, nhập domain Harbor (vd harbor.techshop.dynv6.net): " HARBOR_DOMAIN
+read -r -p "Đã tạo xong A record và dig ra đúng IP rồi, nhập domain Harbor (vd harbor.techshop-tde.dynv6.net): " HARBOR_DOMAIN
 while [ -z "$HARBOR_DOMAIN" ]; do
   read -r -p "Domain Harbor (bắt buộc, không được để trống): " HARBOR_DOMAIN
 done

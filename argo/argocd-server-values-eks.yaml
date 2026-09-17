@@ -12,7 +12,7 @@ server:
   ingress:
     enabled: true
     ingressClassName: alb
-    hostname: argocd.techshop.dynv6.net
+    hostname: argocd.techshop-tde.dynv6.net
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip

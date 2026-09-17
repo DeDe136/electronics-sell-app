@@ -63,7 +63,7 @@ dashboard:
     enabled: true
     ingressClassName: alb
     hosts:
-      - rollouts.techshop.dynv6.net
+      - rollouts.techshop-tde.dynv6.net
     paths:
       - /
     pathType: Prefix
