@@ -25,7 +25,7 @@ spec:
       # Giống backend — xem giải thích công thức + ví dụ số, và lý do bỏ
       # hẳn "trafficRouting.traefik" (CRD không tồn tại trên EKS), trong
       # templates/backend.yaml.
-      dynamicStableScale: true
+      # dynamicStableScale: true
       # Steps giống hệt backend để 2 service lên bản mới đồng bộ nhịp độ
       # (dễ theo dõi/deploy cùng lúc). Có thể tách nhịp riêng cho frontend
       # nếu sau này muốn canary frontend độc lập với backend.
