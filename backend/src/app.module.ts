@@ -26,17 +26,28 @@ import { MetricsModule } from './modules/metrics/metrics.module';
     // Database
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('database.host'),
-        port: config.get('database.port'),
-        username: config.get('database.username'),
-        password: config.get('database.password'),
-        database: config.get('database.name'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: config.get('nodeEnv') !== 'production', // Auto migrate dev only
-        logging: config.get('nodeEnv') === 'development',
-      }),
+      useFactory: (config: ConfigService) => {
+        const dbConfig = {
+          host: config.get('database.host'),
+          port: config.get('database.port'),
+          username: config.get('database.username'),
+          database: config.get('database.name'),
+        };
+
+        console.log('TYPEORM_DB_CONFIG', dbConfig);
+
+        return {
+          type: 'postgres',
+          host: config.get('database.host'),
+          port: config.get('database.port'),
+          username: config.get('database.username'),
+          password: config.get('database.password'),
+          database: config.get('database.name'),
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: config.get('nodeEnv') !== 'production',
+          logging: config.get('nodeEnv') === 'development',
+        };
+      },
       inject: [ConfigService],
     }),
 
