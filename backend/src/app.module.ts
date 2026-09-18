@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration from './config/configuration';
+import { getDbCredentialsFromSecretsManager } from './config/secrets-manager';
 import { HealthController } from './health.controller';
 
 // Business Modules
@@ -26,23 +27,25 @@ import { MetricsModule } from './modules/metrics/metrics.module';
     // Database
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => {
-        const dbConfig = {
-          host: config.get('database.host'),
-          port: config.get('database.port'),
-          username: config.get('database.username'),
-          database: config.get('database.name'),
-        };
-
-        console.log('TYPEORM_DB_CONFIG', dbConfig);
+      useFactory: async (config: ConfigService) => {
+        const database =
+          process.env.DB_CREDENTIALS_SOURCE === 'secrets-manager'
+            ? await getDbCredentialsFromSecretsManager()
+            : {
+                host: config.get<string>('database.host') || 'localhost',
+                port: config.get<number>('database.port') || 5432,
+                username: config.get<string>('database.username') || 'postgres',
+                password: config.get<string>('database.password') || 'postgres',
+                name: config.get<string>('database.name') || 'electronics_shop',
+              };
 
         return {
           type: 'postgres',
-          host: config.get('database.host'),
-          port: config.get('database.port'),
-          username: config.get('database.username'),
-          password: config.get('database.password'),
-          database: config.get('database.name'),
+          host: database.host,
+          port: database.port,
+          username: database.username,
+          password: database.password,
+          database: database.name,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: config.get('nodeEnv') !== 'production',
           logging: config.get('nodeEnv') === 'development',

@@ -1,18 +1,10 @@
-jest.mock('./secrets-manager', () => ({
-  getDbCredentialsFromSecretsManager: jest.fn(),
-}));
-
 import configuration from './configuration';
-import { getDbCredentialsFromSecretsManager } from './secrets-manager';
-
-const mockedGetDbCredentials = getDbCredentialsFromSecretsManager as jest.Mock;
 
 describe('config/configuration.ts', () => {
   const ORIGINAL_ENV = { ...process.env };
 
   afterEach(() => {
     process.env = { ...ORIGINAL_ENV };
-    jest.clearAllMocks();
   });
 
   describe('nhánh mặc định (KHÔNG set DB_CREDENTIALS_SOURCE) — đọc thẳng từ env', () => {
@@ -33,7 +25,6 @@ describe('config/configuration.ts', () => {
         password: 'pass1',
         name: 'shop',
       });
-      expect(mockedGetDbCredentials).not.toHaveBeenCalled();
     });
 
     it('dùng giá trị mặc định cho database khi thiếu toàn bộ biến môi trường DB_*', async () => {
@@ -67,39 +58,22 @@ describe('config/configuration.ts', () => {
     it('KHÔNG gọi Secrets Manager khi DB_CREDENTIALS_SOURCE là giá trị khác (không phải "secrets-manager")', async () => {
       process.env.DB_CREDENTIALS_SOURCE = 'env';
 
-      await configuration();
+      const config = await configuration();
 
-      expect(mockedGetDbCredentials).not.toHaveBeenCalled();
+      expect(config.database.host).toBe(process.env.DB_HOST || 'localhost');
     });
-  });
 
-  describe('nhánh DB_CREDENTIALS_SOURCE=secrets-manager', () => {
-    it('gọi getDbCredentialsFromSecretsManager() và dùng kết quả làm "database"', async () => {
+    it('vẫn giữ configuration sync và không gọi Secrets Manager khi DB_CREDENTIALS_SOURCE=secrets-manager', async () => {
       process.env.DB_CREDENTIALS_SOURCE = 'secrets-manager';
-      const fakeCredentials = {
-        host: 'rds.internal',
-        port: 5432,
-        username: 'app_user',
-        password: 'secret-pw',
-        name: 'shop_db',
-      };
-      mockedGetDbCredentials.mockResolvedValue(fakeCredentials);
+      process.env.DB_HOST = 'rds.from.env';
+      process.env.DB_PORT = '5432';
 
       const config = await configuration();
 
-      expect(mockedGetDbCredentials).toHaveBeenCalledTimes(1);
-      expect(config.database).toEqual(fakeCredentials);
-    });
-
-    it('không nuốt lỗi khi getDbCredentialsFromSecretsManager() reject (vd thiếu DB_SECRET_ARN)', async () => {
-      process.env.DB_CREDENTIALS_SOURCE = 'secrets-manager';
-      mockedGetDbCredentials.mockRejectedValue(
-        new Error(
-          'DB_CREDENTIALS_SOURCE=secrets-manager nhưng thiếu biến DB_SECRET_ARN.',
-        ),
-      );
-
-      await expect(configuration()).rejects.toThrow('DB_SECRET_ARN');
+      expect(config.database).toMatchObject({
+        host: 'rds.from.env',
+        port: 5432,
+      });
     });
   });
 

@@ -1,25 +1,17 @@
-import { getDbCredentialsFromSecretsManager } from './secrets-manager';
-
-// (MỚI) @nestjs/config cho phép factory trong "load: [...]" trả về Promise —
-// không cần sửa gì ở app.module.ts. Mặc định (KHÔNG set
-// DB_CREDENTIALS_SOURCE) đi đúng nhánh cũ, đọc thẳng DB_HOST/DB_PASSWORD từ
-// env y hệt trước giờ — giữ nguyên 100% hành vi cho local/docker-compose/k3s.
-export default async () => {
-  const database =
-    process.env.DB_CREDENTIALS_SOURCE === 'secrets-manager'
-      ? await getDbCredentialsFromSecretsManager()
-      : {
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT ?? '5432', 10) || 5432,
-          username: process.env.DB_USERNAME || 'postgres',
-          password: process.env.DB_PASSWORD || 'postgres',
-          name: process.env.DB_NAME || 'electronics_shop',
-        };
-
+// Factory này phải giữ sync để ConfigModule nạp cấu hình thường ổn định.
+// Database credentials cần gọi Secrets Manager sẽ được xử lý trực tiếp trong
+// TypeOrmModule.forRootAsync(), nơi Nest có hỗ trợ async factory rõ ràng.
+export default () => {
   return {
     port: parseInt(process.env.PORT ?? '3001', 10) || 3001,
     nodeEnv: process.env.NODE_ENV || 'development',
-    database,
+    database: {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT ?? '5432', 10) || 5432,
+      username: process.env.DB_USERNAME || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+      name: process.env.DB_NAME || 'electronics_shop',
+    },
     jwt: {
       secret: process.env.JWT_SECRET || 'fallback-secret',
       expiresIn: process.env.JWT_EXPIRES_IN || '7d',
