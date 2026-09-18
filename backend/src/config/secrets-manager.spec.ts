@@ -22,6 +22,13 @@ jest.mock('@aws-sdk/client-secrets-manager', () => {
  * require() lại CẢ HAI module (SDK giả lập + module đích) TRONG CÙNG 1
  * beforeEach, sau resetModules(), để chúng cùng dùng chung 1 bản module
  * registry mới.
+ *
+ * LƯU Ý VỀ NGUỒN DỮ LIỆU (cập nhật): chỉ "username"/"password" lấy từ
+ * secret (SecretString trả về từ Secrets Manager) — "host"/"port"/"name"
+ * giờ lấy thẳng từ biến môi trường DB_HOST/DB_PORT/DB_NAME, KHÔNG còn đọc
+ * từ secret nữa (khác bản trước). RDS-managed secret không phải lúc nào
+ * cũng có sẵn "host"/"dbname" tuỳ cách bật tính năng, nên tách phần này ra
+ * khỏi secret để không phụ thuộc vào cấu trúc secret cụ thể.
  */
 describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', () => {
   const ORIGINAL_ENV = { ...process.env };
@@ -63,13 +70,7 @@ describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', (
     process.env.DB_SECRET_ARN =
       'arn:aws:secretsmanager:ap-southeast-1:123:secret:db';
     sendMock.mockResolvedValue({
-      SecretString: JSON.stringify({
-        host: 'rds.internal',
-        port: 5432,
-        username: 'app',
-        password: 'pw',
-        dbname: 'electronics_shop',
-      }),
+      SecretString: JSON.stringify({ username: 'app', password: 'pw' }),
     });
 
     await getDbCredentialsFromSecretsManager();
@@ -87,13 +88,7 @@ describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', (
   it('khởi tạo SecretsManagerClient KHÔNG truyền "credentials" tường minh (để SDK tự lấy qua IRSA)', async () => {
     process.env.DB_SECRET_ARN = 'arn:test';
     sendMock.mockResolvedValue({
-      SecretString: JSON.stringify({
-        host: 'h',
-        port: 5432,
-        username: 'u',
-        password: 'p',
-        dbname: 'd',
-      }),
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
     });
 
     await getDbCredentialsFromSecretsManager();
@@ -107,13 +102,7 @@ describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', (
     process.env.DB_SECRET_ARN = 'arn:test';
     delete process.env.AWS_REGION;
     sendMock.mockResolvedValue({
-      SecretString: JSON.stringify({
-        host: 'h',
-        port: 5432,
-        username: 'u',
-        password: 'p',
-        dbname: 'd',
-      }),
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
     });
 
     await getDbCredentialsFromSecretsManager();
@@ -123,15 +112,34 @@ describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', (
     );
   });
 
-  it('parse đúng SecretString JSON thành DbCredentials', async () => {
+  it('dùng region ap-southeast-1 khi AWS_REGION được set giá trị khác', async () => {
     process.env.DB_SECRET_ARN = 'arn:test';
+    process.env.AWS_REGION = 'us-east-1';
+    sendMock.mockResolvedValue({
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
+    });
+
+    await getDbCredentialsFromSecretsManager();
+
+    expect(MockedSecretsManagerClient).toHaveBeenCalledWith(
+      expect.objectContaining({ region: 'us-east-1' }),
+    );
+  });
+
+  it('lấy "username"/"password" từ SecretString, "host"/"port"/"name" từ biến môi trường', async () => {
+    process.env.DB_SECRET_ARN = 'arn:test';
+    process.env.DB_HOST = 'rds.internal';
+    process.env.DB_PORT = '5433';
+    process.env.DB_NAME = 'shop_db';
     sendMock.mockResolvedValue({
       SecretString: JSON.stringify({
-        host: 'rds.internal',
-        port: 5432,
         username: 'app_user',
         password: 'super-secret',
-        dbname: 'shop_db',
+        // "host"/"port"/"dbname" nếu secret CÓ trả về cũng KHÔNG được dùng
+        // nữa — cố tình đặt giá trị khác để khẳng định điều đó.
+        host: 'khong-duoc-dung-gia-tri-nay',
+        port: 9999,
+        dbname: 'khong-duoc-dung-ten-nay',
       }),
     });
 
@@ -139,43 +147,32 @@ describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', (
 
     expect(result).toEqual({
       host: 'rds.internal',
-      port: 5432,
+      port: 5433,
       username: 'app_user',
       password: 'super-secret',
       name: 'shop_db',
     });
   });
 
-  it('fallback "name" về process.env.DB_NAME khi secret thiếu field "dbname"', async () => {
+  it('fallback "host" về "localhost" khi thiếu DB_HOST', async () => {
     process.env.DB_SECRET_ARN = 'arn:test';
-    process.env.DB_NAME = 'from_env_name';
+    delete process.env.DB_HOST;
     sendMock.mockResolvedValue({
-      SecretString: JSON.stringify({
-        host: 'h',
-        port: 5432,
-        username: 'u',
-        password: 'p',
-        // không có "dbname"
-      }),
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
     });
 
     const result = (await getDbCredentialsFromSecretsManager()) as {
-      name: string;
+      host: string;
     };
 
-    expect(result.name).toBe('from_env_name');
+    expect(result.host).toBe('localhost');
   });
 
-  it('fallback "name" về "electronics_shop" khi thiếu cả "dbname" lẫn DB_NAME', async () => {
+  it('fallback "name" về "electronics_shop" khi thiếu DB_NAME', async () => {
     process.env.DB_SECRET_ARN = 'arn:test';
     delete process.env.DB_NAME;
     sendMock.mockResolvedValue({
-      SecretString: JSON.stringify({
-        host: 'h',
-        port: 5432,
-        username: 'u',
-        password: 'p',
-      }),
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
     });
 
     const result = (await getDbCredentialsFromSecretsManager()) as {
@@ -185,15 +182,25 @@ describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', (
     expect(result.name).toBe('electronics_shop');
   });
 
-  it('fallback "port" về 5432 khi secret không có "port" hợp lệ', async () => {
+  it('fallback "port" về 5432 khi thiếu DB_PORT', async () => {
     process.env.DB_SECRET_ARN = 'arn:test';
+    delete process.env.DB_PORT;
     sendMock.mockResolvedValue({
-      SecretString: JSON.stringify({
-        host: 'h',
-        username: 'u',
-        password: 'p',
-        dbname: 'd',
-      }),
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
+    });
+
+    const result = (await getDbCredentialsFromSecretsManager()) as {
+      port: number;
+    };
+
+    expect(result.port).toBe(5432);
+  });
+
+  it('fallback "port" về 5432 khi DB_PORT là chuỗi không phải số hợp lệ', async () => {
+    process.env.DB_SECRET_ARN = 'arn:test';
+    process.env.DB_PORT = 'khong-phai-so';
+    sendMock.mockResolvedValue({
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
     });
 
     const result = (await getDbCredentialsFromSecretsManager()) as {
@@ -215,13 +222,7 @@ describe('config/secrets-manager.ts — getDbCredentialsFromSecretsManager()', (
   it('CACHE kết quả — gọi lần 2 KHÔNG gọi lại Secrets Manager', async () => {
     process.env.DB_SECRET_ARN = 'arn:test';
     sendMock.mockResolvedValue({
-      SecretString: JSON.stringify({
-        host: 'h',
-        port: 5432,
-        username: 'u',
-        password: 'p',
-        dbname: 'd',
-      }),
+      SecretString: JSON.stringify({ username: 'u', password: 'p' }),
     });
 
     const first = await getDbCredentialsFromSecretsManager();

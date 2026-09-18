@@ -50,6 +50,10 @@ spec:
       # xong. Muốn có lại đúng hành vi chia % traffic, cần làm thêm bước
       # riêng: Argo Rollouts trafficRouting.alb + TargetGroupBinding (AWS
       # Load Balancer Controller) — chưa nằm trong phạm vi thay đổi lần này.
+      # dynamicStableScale CHỈ hợp lệ khi có khai báo "trafficRouting"
+      # đi kèm — vì nó điều chỉnh tỉ lệ pod stable/canary DỰA THEO % traffic
+      # đang được router chia, không có traffic router thì không có gì để
+      # "dynamic" theo, bật lại lúc nâng cấp chart để dùng trafficRouting.alb sau này
       # dynamicStableScale: true
       steps:
         - setWeight: 33
