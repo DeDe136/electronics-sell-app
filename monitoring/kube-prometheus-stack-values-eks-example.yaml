@@ -72,6 +72,11 @@ prometheus:
       # PHẢI trùng chính xác group.name ở 3 file Ingress còn lại (xem
       # argo/argocd-server-values-eks.yaml) — gộp chung 1 ALB.
       alb.ingress.kubernetes.io/group.name: techshop-shared
+      # Prometheus tự redirect "/" -> "/graph" (302) — ALB mặc định chỉ
+      # coi 200 là Healthy, 302 bị tính Unhealthy dù pod chạy hoàn toàn
+      # bình thường. "/-/healthy" là endpoint chính thức của Prometheus,
+      # luôn trả 200 "Prometheus Server is Healthy." không redirect.
+      alb.ingress.kubernetes.io/healthcheck-path: /-/healthy
 
 alertmanager:
   alertmanagerSpec:
@@ -147,6 +152,11 @@ grafana:
       alb.ingress.kubernetes.io/target-type: ip
       alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
       alb.ingress.kubernetes.io/group.name: techshop-shared
+      # Grafana mặc định redirect "/" -> "/login" (302) khi chưa đăng nhập
+      # — cùng lý do như Prometheus. "/api/health" là endpoint chính thức
+      # của Grafana, luôn trả 200 kèm JSON trạng thái, không redirect,
+      # không cần đăng nhập.
+      alb.ingress.kubernetes.io/healthcheck-path: /api/health
   resources:
     requests: { cpu: 100m, memory: 512Mi }
     limits:   { cpu: 500m, memory: 1Gi }

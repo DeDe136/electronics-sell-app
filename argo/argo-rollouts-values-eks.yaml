@@ -74,3 +74,8 @@ dashboard:
       # PHẢI trùng chính xác group.name ở 3 file Ingress còn lại (xem
       # argo/argocd-server-values-eks.yaml) — gộp chung 1 ALB.
       alb.ingress.kubernetes.io/group.name: techshop-shared
+      # Dashboard redirect "/" sang path khác (302) — khác Prometheus/
+      # Grafana, Argo Rollouts Dashboard không có tài liệu chính thức nào
+      # công bố 1 endpoint health riêng (dạng /-/healthy, /api/health), nên
+      # dùng cách đơn giản hơn: báo thẳng cho ALB coi 302 cũng là Healthy
+      alb.ingress.kubernetes.io/success-codes: '200,302'
