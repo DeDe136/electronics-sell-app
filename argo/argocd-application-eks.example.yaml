@@ -47,7 +47,7 @@ spec:
       valuesObject:
         # ── Các field lấy từ helm/electronics-shop-eks/values-eks-example.yaml ──
         image:
-          registry: "<IP-hoac-domain-harbor-cua-ban>"
+          registry: "harbor.techshop-tde.dynv6.net"
           harborAuth:
             username: "<robot-account-username>"
             password: "<robot-account-token>"
@@ -69,18 +69,18 @@ spec:
             roleArn: "arn:aws:iam::REPLACE_ME_ACCOUNT_ID:role/techshop-frontend-irsa-role"
 
         ingress:
-          host: "REPLACE_ME.dynv6.net"
+          host: "app.techshop-tde.dynv6.net"
 
         backend:
           env:
-            frontendUrl: "http://REPLACE_ME.dynv6.net"
+            frontendUrl: "http://app.techshop-tde.dynv6.net"
 
         frontend:
           env:
             # Chỉ mang tính ghi chú — giá trị này đã đóng cứng lúc build
             # Docker image (ARG NEXT_PUBLIC_API_URL), sửa ở đây KHÔNG tự
             # động áp dụng vào image đã build sẵn.
-            nextPublicApiUrl: "http://REPLACE_ME.dynv6.net/api/v1"
+            nextPublicApiUrl: "http://app.techshop-tde.dynv6.net/api/v1"
 
   destination:
     server: https://kubernetes.default.svc
