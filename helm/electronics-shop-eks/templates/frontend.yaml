@@ -25,6 +25,9 @@ spec:
       # Giống backend — xem giải thích công thức + ví dụ số, và lý do bỏ
       # hẳn "trafficRouting.traefik" (CRD không tồn tại trên EKS), trong
       # templates/backend.yaml.
+      # Giống backend.yaml — dynamicStableScale chỉ hợp lệ khi có
+      # trafficRouting đi kèm. Comment lại, bật lại đúng lúc nâng cấp chart
+      # để dùng trafficRouting.alb sau này
       # dynamicStableScale: true
       # Steps giống hệt backend để 2 service lên bản mới đồng bộ nhịp độ
       # (dễ theo dõi/deploy cùng lúc). Có thể tách nhịp riêng cho frontend

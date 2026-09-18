@@ -4,14 +4,13 @@ import {
 } from '@aws-sdk/client-secrets-manager';
 
 /**
- * File MỚI — chỉ được gọi khi biến môi trường DB_CREDENTIALS_SOURCE=secrets-manager
- * (xem configuration.ts). Không ảnh hưởng gì tới luồng local/k3s cũ (đọc thẳng
- * DB_HOST/DB_PASSWORD từ env), vì nhánh đó vẫn giữ nguyên logic cũ 100%.
+ * File này chỉ được gọi khi biến môi trường DB_CREDENTIALS_SOURCE=secrets-manager
+ * (xem configuration.ts).
  *
  * "SecretsManagerClient" KHÔNG truyền "credentials" tường minh — giống
  * StorageService, SDK tự lấy credentials tạm thời qua IRSA
- * (AWS_ROLE_ARN/AWS_WEB_IDENTITY_TOKEN_FILE mà EKS tiêm sẵn vào pod backend,
- * xem Bước 6 — OIDC + IRSA). Không hardcode access key/secret key ở đây.
+ * (AWS_ROLE_ARN/AWS_WEB_IDENTITY_TOKEN_FILE mà EKS tiêm sẵn vào pod
+ * backend). Không hardcode access key/secret key ở đây.
  */
 
 export interface DbCredentials {
@@ -54,15 +53,13 @@ export async function getDbCredentialsFromSecretsManager(): Promise<DbCredential
   const secret = JSON.parse(response.SecretString);
 
   // RDS-managed secret (bật "Manage master credentials in Secrets Manager")
-  // luôn có sẵn username/password/host/port; "dbname" đôi khi KHÔNG có sẵn
-  // tuỳ cách bạn bật tính năng này — fallback về DB_NAME (biến môi trường
-  // thường, không nhạy cảm) để tránh lỗi nếu thiếu field đó.
+  // luôn có sẵn username/password
   cached = {
-    host: secret.host,
-    port: Number(secret.port) || 5432,
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT ?? '5432', 10) || 5432,
     username: secret.username,
     password: secret.password,
-    name: secret.dbname || process.env.DB_NAME || 'electronics_shop',
+    name: process.env.DB_NAME || 'electronics_shop',
   };
 
   return cached;
