@@ -26,8 +26,13 @@ jest.mock('@nestjs/typeorm', () => {
   return actual;
 });
 
+jest.mock('./config/secrets-manager', () => ({
+  getDbCredentialsFromSecretsManager: jest.fn(),
+}));
+
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { getDbCredentialsFromSecretsManager } from './config/secrets-manager';
 import { AppModule } from './app.module';
 import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
@@ -41,6 +46,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 
 const MockedForRootAsync = TypeOrmModule.forRootAsync as jest.Mock;
+const mockedGetDbCredentials = getDbCredentialsFromSecretsManager as jest.Mock;
 
 /** ConfigService giả — đọc từ 1 object phẳng theo dot-path. */
 function buildConfigService(values: Record<string, unknown>): ConfigService {
@@ -50,12 +56,11 @@ function buildConfigService(values: Record<string, unknown>): ConfigService {
 }
 
 describe('AppModule', () => {
+  const ORIGINAL_ENV = { ...process.env };
+
   beforeEach(() => {
-    // useFactory có dòng console.log('TYPEORM_DB_CONFIG', ...) chạy MỖI
-    // LẦN gọi — mock đi để output test sạch ở các test không quan tâm tới
-    // log (chỉ test riêng "log TYPEORM_DB_CONFIG..." mới tự spy/assert nội
-    // dung, xem bên dưới).
-    jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    process.env = { ...ORIGINAL_ENV };
+    mockedGetDbCredentials.mockReset();
   });
 
   afterEach(() => {
@@ -117,7 +122,8 @@ describe('AppModule', () => {
   describe('TypeOrmModule.forRootAsync — useFactory (logic build config Postgres)', () => {
     const getUseFactory = () => MockedForRootAsync.mock.calls[0][0].useFactory;
 
-    it('trả về type "postgres" và đầy đủ host/port/username/password/database từ ConfigService', () => {
+    it('trả về type "postgres" và đầy đủ host/port/username/password/database từ ConfigService khi không dùng Secrets Manager', async () => {
+      delete process.env.DB_CREDENTIALS_SOURCE;
       const config = buildConfigService({
         'database.host': 'db.internal',
         'database.port': 5432,
@@ -127,7 +133,7 @@ describe('AppModule', () => {
         nodeEnv: 'production',
       });
 
-      const result = getUseFactory()(config);
+      const result = await getUseFactory()(config);
 
       expect(result).toMatchObject({
         type: 'postgres',
@@ -137,72 +143,66 @@ describe('AppModule', () => {
         password: 'super-secret',
         database: 'electronics_shop',
       });
+      expect(mockedGetDbCredentials).not.toHaveBeenCalled();
     });
 
-    it('bật "synchronize" ở mọi môi trường KHÁC "production" (vd development, test, staging)', () => {
+    it('khi DB_CREDENTIALS_SOURCE=secrets-manager, lấy database credentials trực tiếp từ Secrets Manager', async () => {
+      process.env.DB_CREDENTIALS_SOURCE = 'secrets-manager';
+      mockedGetDbCredentials.mockResolvedValue({
+        host: 'rds.internal',
+        port: 5432,
+        username: 'app_user',
+        password: 'super-secret',
+        name: 'electronics_shop',
+      });
+      const config = buildConfigService({ nodeEnv: 'production' });
+
+      const result = await getUseFactory()(config);
+
+      expect(mockedGetDbCredentials).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        type: 'postgres',
+        host: 'rds.internal',
+        port: 5432,
+        username: 'app_user',
+        password: 'super-secret',
+        database: 'electronics_shop',
+      });
+    });
+
+    it('bật "synchronize" ở mọi môi trường KHÁC "production" (vd development, test, staging)', async () => {
       const config = buildConfigService({ nodeEnv: 'development' });
-      expect(getUseFactory()(config).synchronize).toBe(true);
+      expect((await getUseFactory()(config)).synchronize).toBe(true);
 
       const configStaging = buildConfigService({ nodeEnv: 'staging' });
-      expect(getUseFactory()(configStaging).synchronize).toBe(true);
+      expect((await getUseFactory()(configStaging)).synchronize).toBe(true);
     });
 
-    it('tắt "synchronize" khi nodeEnv là "production" — tránh auto-migrate schema trên môi trường thật', () => {
+    it('tắt "synchronize" khi nodeEnv là "production" — tránh auto-migrate schema trên môi trường thật', async () => {
       const config = buildConfigService({ nodeEnv: 'production' });
 
-      expect(getUseFactory()(config).synchronize).toBe(false);
+      expect((await getUseFactory()(config)).synchronize).toBe(false);
     });
 
-    it('chỉ bật "logging" khi nodeEnv CHÍNH XÁC là "development"', () => {
+    it('chỉ bật "logging" khi nodeEnv CHÍNH XÁC là "development"', async () => {
       const dev = buildConfigService({ nodeEnv: 'development' });
-      expect(getUseFactory()(dev).logging).toBe(true);
+      expect((await getUseFactory()(dev)).logging).toBe(true);
 
       const prod = buildConfigService({ nodeEnv: 'production' });
-      expect(getUseFactory()(prod).logging).toBe(false);
+      expect((await getUseFactory()(prod)).logging).toBe(false);
 
       const staging = buildConfigService({ nodeEnv: 'staging' });
-      expect(getUseFactory()(staging).logging).toBe(false);
+      expect((await getUseFactory()(staging)).logging).toBe(false);
     });
 
-    it('khai báo entities theo glob pattern "*.entity.{ts,js}" quét toàn bộ src', () => {
+    it('khai báo entities theo glob pattern "*.entity.{ts,js}" quét toàn bộ src', async () => {
       const config = buildConfigService({ nodeEnv: 'production' });
 
-      const result = getUseFactory()(config);
+      const result = await getUseFactory()(config);
 
       expect(result.entities).toEqual([
         expect.stringContaining('/**/*.entity{.ts,.js}'),
       ]);
-    });
-
-    it('log "TYPEORM_DB_CONFIG" ra console để debug lúc deploy, KHÔNG lộ "password" trong log', () => {
-      const consoleLogSpy = jest
-        .spyOn(console, 'log')
-        .mockImplementation(() => undefined);
-      const config = buildConfigService({
-        'database.host': 'db.internal',
-        'database.port': 5432,
-        'database.username': 'app_user',
-        'database.password': 'super-secret-khong-duoc-lo',
-        'database.name': 'electronics_shop',
-        nodeEnv: 'production',
-      });
-
-      getUseFactory()(config);
-
-      expect(consoleLogSpy).toHaveBeenCalledWith('TYPEORM_DB_CONFIG', {
-        host: 'db.internal',
-        port: 5432,
-        username: 'app_user',
-        database: 'electronics_shop',
-      });
-      // Xác nhận rõ ràng: "password" KHÔNG nằm trong bất kỳ lệnh log nào —
-      // tránh vô tình in ra bí mật trong log tập trung (CloudWatch/Loki...).
-      const loggedArgs = consoleLogSpy.mock.calls.flat();
-      expect(JSON.stringify(loggedArgs)).not.toContain(
-        'super-secret-khong-duoc-lo',
-      );
-
-      consoleLogSpy.mockRestore();
     });
   });
 });
