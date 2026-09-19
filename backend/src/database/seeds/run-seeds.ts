@@ -8,6 +8,7 @@
 
 import 'reflect-metadata';
 import * as dotenv from 'dotenv';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DataSource } from 'typeorm';
 
@@ -55,6 +56,22 @@ async function main() {
     username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_NAME || 'electronics_shop',
+    // RDS PostgreSQL mặc định BẮT BUỘC SSL — không bật sẽ lỗi
+    // "no pg_hba.conf entry ... no encryption". Script này chạy được cả
+    // 2 kiểu: seed vào Postgres local (không cần SSL, mặc định) VÀ seed vào
+    // RDS qua bastion (scripts/seed-rds-via-bastion.sh tự set SEED_SSL=true)
+    ...(process.env.SEED_SSL === 'true'
+      ? {
+          ssl: {
+            ca: fs
+              .readFileSync(
+                path.resolve(__dirname, '../../../certs/global-bundle.pem'),
+              )
+              .toString(),
+            rejectUnauthorized: true,
+          },
+        }
+      : {}),
     entities: [
       Category,
       Product,
