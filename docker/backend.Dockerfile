@@ -99,6 +99,12 @@ COPY --from=deps    --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist         ./dist
 # Copy package.json để Node có thể đọc metadata (version, main entry, ...)
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
+# Chứng chỉ CA công khai của AWS (không phải bí mật) — dùng để xác thực
+# chuỗi cert RDS khi kết nối SSL.
+# Không tự copy được qua "nest build" (không phải file .ts), phải COPY thủ
+# công ở đây. Nếu thiếu file này lúc build, lệnh COPY dưới đây sẽ FAIL ngay
+# — đó là chủ đích, để phát hiện sớm thay vì để lỗi ẩn tới lúc chạy mới biết.
+COPY --from=builder --chown=nestjs:nodejs /app/certs/global-bundle.pem ./certs/global-bundle.pem
 
 # App runtime chỉ chạy bằng "node dist/main", không hề gọi tới "npm"/"npx".
 # Xoá hẳn npm CLI (vốn được đóng gói sẵn trong base image node:20-alpine)
