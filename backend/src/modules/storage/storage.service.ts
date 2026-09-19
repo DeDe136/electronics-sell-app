@@ -99,8 +99,23 @@ export class StorageService {
           `⚠️  ${label} reachable nhưng bucket "${this.bucket}" không tồn tại. Hãy tạo bucket trước khi upload.`,
         );
       } else {
+        // (SỬA) "err.message" của AWS SDK v3 nhiều khi chỉ in đúng chữ
+        // "UnknownError" — đây là tên GENERIC khi SDK không parse được
+        // response HTTP nào cả (lỗi xảy ra ở tầng network/TLS, trước khi
+        // tới được S3), không phải lỗi nghiệp vụ S3 (sai bucket/region/quyền
+        // sẽ có tên rõ ràng như NoSuchBucket/AccessDenied). Lỗi gốc thật sự
+        // (ECONNREFUSED/ENOTFOUND/ETIMEDOUT từ Node.js) nằm trong
+        // "err.cause"
         this.logger.error(
           `❌ Không thể kết nối ${label}: ${err?.message ?? err}`,
+        );
+        if (err?.cause) {
+          this.logger.error(
+            `   Nguyên nhân gốc (err.cause): ${JSON.stringify(err.cause, Object.getOwnPropertyNames(err.cause))}`,
+          );
+        }
+        this.logger.error(
+          `   Bucket đang dùng: "${this.bucket}", region: "${this.config.get<string>('storage.aws.region')}"`,
         );
       }
     }
