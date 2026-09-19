@@ -109,7 +109,7 @@ describe('GET /api/images/[...key]', () => {
     });
   });
 
-  it('trả về 200 với đúng bytes ảnh, Content-Type từ S3 và Cache-Control 1 ngày', async () => {
+  it('trả về 200 với đúng bytes ảnh và Cache-Control 1 ngày', async () => {
     const bytes = new Uint8Array([137, 80, 78, 71]);
     mockSend.mockResolvedValue(buildS3Response({ bytes, contentType: 'image/png' }));
 
@@ -117,21 +117,79 @@ describe('GET /api/images/[...key]', () => {
     const arrayBuffer = await response.arrayBuffer();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get('Content-Type')).toBe('image/png');
     expect(response.headers.get('Cache-Control')).toBe(
       'public, max-age=86400',
     );
     expect(new Uint8Array(arrayBuffer)).toEqual(bytes);
   });
 
-  it('fallback Content-Type về "application/octet-stream" khi S3 không trả ContentType', async () => {
-    mockSend.mockResolvedValue(buildS3Response({ contentType: undefined }));
+  describe('Content-Type — suy từ đuôi file trong key, KHÔNG dùng ContentType metadata của S3', () => {
+    it.each([
+      ['photo.jpg', 'image/jpeg'],
+      ['photo.jpeg', 'image/jpeg'],
+      ['photo.png', 'image/png'],
+      ['photo.webp', 'image/webp'],
+      ['photo.gif', 'image/gif'],
+      ['logo.svg', 'image/svg+xml'],
+      ['photo.avif', 'image/avif'],
+    ])('key "%s" -> Content-Type "%s"', async (fileName, expected) => {
+      mockSend.mockResolvedValue(buildS3Response({ contentType: 'binary/octet-stream' }));
 
-    const response = await GET(undefined, buildCtx(['file']));
+      const response = await GET(undefined, buildCtx(['products', fileName]));
 
-    expect(response.headers.get('Content-Type')).toBe(
-      'application/octet-stream',
-    );
+      expect(response.headers.get('Content-Type')).toBe(expected);
+    });
+
+    it('nhận diện đuôi file KHÔNG phân biệt hoa/thường (vd ".PNG" vẫn ra "image/png")', async () => {
+      mockSend.mockResolvedValue(buildS3Response({}));
+
+      const response = await GET(undefined, buildCtx(['photo.PNG']));
+
+      expect(response.headers.get('Content-Type')).toBe('image/png');
+    });
+
+    it('lấy đúng đuôi cuối cùng khi tên file có nhiều dấu chấm (vd "my.file.name.png")', async () => {
+      mockSend.mockResolvedValue(buildS3Response({}));
+
+      const response = await GET(undefined, buildCtx(['my.file.name.png']));
+
+      expect(response.headers.get('Content-Type')).toBe('image/png');
+    });
+
+    it('fallback về "application/octet-stream" khi đuôi file không nằm trong danh sách nhận diện (vd ".bmp")', async () => {
+      mockSend.mockResolvedValue(buildS3Response({ contentType: 'image/bmp' }));
+
+      const response = await GET(undefined, buildCtx(['photo.bmp']));
+
+      expect(response.headers.get('Content-Type')).toBe(
+        'application/octet-stream',
+      );
+    });
+
+    it('fallback về "application/octet-stream" khi key không có đuôi file (không có dấu chấm)', async () => {
+      mockSend.mockResolvedValue(buildS3Response({}));
+
+      const response = await GET(undefined, buildCtx(['file']));
+
+      expect(response.headers.get('Content-Type')).toBe(
+        'application/octet-stream',
+      );
+    });
+
+    // Test này khoá lại đúng chủ đích của thay đổi: dù S3 trả ContentType
+    // hợp lệ và ĐÚNG với ảnh thật, route vẫn phải bỏ qua nó và tự suy từ
+    // key — để phòng trường hợp ai đó sau này lỡ tay đọc lại
+    // "result.ContentType" (revert về hành vi cũ) mà không nhận ra qua các
+    // test khác (vì phần lớn ví dụ ở trên tình cờ khớp cả hai cách).
+    it('BỎ QUA hoàn toàn ContentType do S3 trả về, kể cả khi nó khác với đuôi file suy ra', async () => {
+      mockSend.mockResolvedValue(
+        buildS3Response({ contentType: 'image/png' }),
+      );
+
+      const response = await GET(undefined, buildCtx(['weird.webp']));
+
+      expect(response.headers.get('Content-Type')).toBe('image/webp');
+    });
   });
 
   it('trả về 404 khi S3 trả response nhưng Body rỗng/không đọc được', async () => {
