@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration from './config/configuration';
@@ -28,6 +30,10 @@ import { MetricsModule } from './modules/metrics/metrics.module';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (config: ConfigService) => {
+        // Gọi Secrets Manager trực tiếp NGAY TRONG useFactory này —
+        // không qua configuration.ts nữa.
+        // Nest CHẮC CHẮN await xong Promise này trước khi khởi tạo
+        // TypeOrmModule, không còn phụ thuộc thứ tự "load" ngầm định.
         const database =
           process.env.DB_CREDENTIALS_SOURCE === 'secrets-manager'
             ? await getDbCredentialsFromSecretsManager()
@@ -49,6 +55,25 @@ import { MetricsModule } from './modules/metrics/metrics.module';
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: config.get('nodeEnv') !== 'production',
           logging: config.get('nodeEnv') === 'development',
+          // Dùng đúng CA bundle thật của AWS để xác thực
+          // chuỗi chứng chỉ RDS — chặt chẽ hơn "rejectUnauthorized: false"
+          // (bỏ qua xác thực hoàn toàn).
+          // "process.cwd()" là "/app" trong container Docker (đúng WORKDIR
+          // trong Dockerfile) hoặc thư mục "backend/" lúc chạy dev — cả 2
+          // trường hợp file đều nằm đúng tại "certs/global-bundle.pem"
+          // tương đối so với đó.
+          ...(process.env.DB_CREDENTIALS_SOURCE === 'secrets-manager'
+            ? {
+                ssl: {
+                  ca: fs
+                    .readFileSync(
+                      path.join(process.cwd(), 'certs', 'global-bundle.pem'),
+                    )
+                    .toString(),
+                  rejectUnauthorized: true,
+                },
+              }
+            : {}),
         };
       },
       inject: [ConfigService],
