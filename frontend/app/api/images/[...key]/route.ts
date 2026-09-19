@@ -25,6 +25,28 @@ const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'ap-southeast-1',
 });
 
+// Tự suy ra Content-Type từ đuôi file thay vì tin metadata lưu trên
+// S3 — metadata đó phụ thuộc hoàn toàn vào CÁCH ảnh được upload lên: Console
+// UI thường tự nhận diện đúng, nhưng "aws s3 cp" (CLI) KHÔNG tự nhận diện
+// nếu không truyền thêm "--content-type", mặc định gắn
+// "binary/octet-stream" — không phải kiểu ảnh hợp lệ, khiến Next.js Image
+// từ chối thẳng với lỗi "isn't a valid image ... received null". Suy từ
+// đuôi file đảm bảo đúng bất kể ảnh được upload bằng cách nào.
+const EXTENSION_TO_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  avif: 'image/avif',
+};
+
+function guessContentType(key: string): string {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  return EXTENSION_TO_MIME[ext] ?? 'application/octet-stream';
+}
+
 async function handler(
   _req?: NextRequest,
   ctx?: { params: Promise<{ key: string[] }> },
@@ -60,7 +82,7 @@ async function handler(
     return new NextResponse(Buffer.from(body), {
       status: 200,
       headers: {
-        'Content-Type': result.ContentType || 'application/octet-stream',
+        'Content-Type': guessContentType(key),
         // Cache 1 ngày ở phía client/CDN — ảnh sản phẩm hiếm khi đổi nội
         // dung ứng với cùng 1 key (key có uuid random, ảnh mới luôn là key
         // mới, xem storage.service.ts hàm uploadFile).
