@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { User } from '../user/entities/user.entity';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +17,7 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly jwtService: JwtService,
+    private readonly storageService: StorageService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -25,13 +27,16 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already registered');
 
     const hashed = await bcrypt.hash(dto.password, 12);
-    const minioEndpoint = process.env.MINIO_ENDPOINT || 'http://localhost:9000';
-    const minioBucket = process.env.MINIO_BUCKET || 'electronics-shop';
+    // Dùng lại StorageService.buildPublicUrl() thay vì tự đọc
+    // process.env.MINIO_* — nhánh minio (URL tuyệt
+    // đối), nhánh aws tự trả về "/api/images/avatars/nov.jpg" (khớp đúng
+    // key thật, không cần biết bucket/region ở đây, StorageService lo hết).
+    const avatarKey = 'avatars/nov.jpg';
     const user = this.userRepo.create({
       ...dto,
       password: hashed,
-      avatarUrl: `${minioEndpoint}/${minioBucket}/avatars/nov.jpg`,
-      avatarKey: 'avatars/nov.jpg',
+      avatarUrl: this.storageService.buildPublicUrl(avatarKey),
+      avatarKey,
     });
     await this.userRepo.save(user);
 

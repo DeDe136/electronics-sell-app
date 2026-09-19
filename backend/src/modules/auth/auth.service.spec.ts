@@ -4,12 +4,14 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
+import { StorageService } from '../storage/storage.service';
 import { User, UserRole } from '../user/entities/user.entity';
 
 describe('AuthService', () => {
   let service: AuthService;
   let userRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
   let jwtService: { sign: jest.Mock };
+  let storageService: { buildPublicUrl: jest.Mock };
 
   const buildUser = (overrides: Partial<User> = {}): User =>
     ({
@@ -32,12 +34,16 @@ describe('AuthService', () => {
     jwtService = {
       sign: jest.fn(() => 'signed-jwt-token'),
     };
+    storageService = {
+      buildPublicUrl: jest.fn((key: string) => `http://minio/${key}`),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: JwtService, useValue: jwtService },
+        { provide: StorageService, useValue: storageService },
       ],
     }).compile();
 

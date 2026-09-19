@@ -192,7 +192,7 @@ export class StorageService {
     return getSignedUrl(this.s3Client, command, { expiresIn });
   }
 
-  private buildPublicUrl(key: string): string {
+  buildPublicUrl(key: string): string {
     if (this.provider === 'minio') {
       // KHÔNG đổi gì ở nhánh này — local/docker-compose/k3s vẫn hoạt động
       // y hệt trước giờ (bucket MinIO local đang set anonymous download,
