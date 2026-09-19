@@ -262,7 +262,7 @@ describe('StorageService', () => {
       expect(causeLogCall).toBeUndefined();
     });
 
-    it('luôn log dòng "Bucket đang dùng" kèm đúng bucket/region khi có lỗi kết nối (không phải NotFound/404)', async () => {
+    it('log dòng "Bucket đang dùng" kèm đúng bucket/region khi có lỗi kết nối (không phải NotFound/404)', async () => {
       const config = buildConfigService({
         'storage.provider': 'aws',
         'storage.aws.bucket': 'private-bucket',
@@ -273,15 +273,56 @@ describe('StorageService', () => {
 
       await expect(service.checkConnection()).resolves.toBeUndefined();
 
-      const bucketLogCall = errorSpy.mock.calls.find((call) =>
+      const bucketLogCalls = errorSpy.mock.calls.filter((call) =>
         String(call[0]).includes('Bucket đang dùng'),
       );
-      expect(bucketLogCall).toBeDefined();
-      expect(bucketLogCall![0]).toContain('private-bucket');
-      expect(bucketLogCall![0]).toContain('ap-southeast-1');
+      expect(bucketLogCalls.length).toBeGreaterThan(0);
+      expect(bucketLogCalls[0][0]).toContain('private-bucket');
+      expect(bucketLogCalls[0][0]).toContain('ap-southeast-1');
     });
 
-    it('KHÔNG log "Nguyên nhân gốc" hay "Bucket đang dùng" khi lỗi là NotFound (chỉ log warning riêng, không rơi vào nhánh error chi tiết)', async () => {
+    // Đây KHÔNG phải hành vi mong muốn thông thường, mà là ghi lại đúng bug
+    // hiện có trong code: dòng "Bucket đang dùng: ..." bị gọi log 2 LẦN
+    // (một lần trước "Chi tiết đầy đủ", một lần lặp lại y hệt ngay sau đó).
+    // Test này cố tình assert đúng số lần 2 để nếu ai đó vô tình xoá dòng lặp
+    // (tức là fix bug) thì test sẽ FAIL và nhắc phải cập nhật lại — không
+    // phải vì hành vi lặp là "đúng cần giữ", mà để buộc phải review có chủ
+    // đích thay vì trôi qua âm thầm.
+    it('[GHI NHẬN BUG] log "Bucket đang dùng" 2 lần trùng lặp cho mỗi lỗi kết nối — có vẻ là copy-paste thừa, nên cân nhắc xoá bớt 1 dòng', async () => {
+      const config = buildConfigService({ 'storage.provider': 'aws' });
+      const service = new StorageService(config);
+      sendMock.mockRejectedValue(new Error('Access Denied'));
+
+      await expect(service.checkConnection()).resolves.toBeUndefined();
+
+      const bucketLogCalls = errorSpy.mock.calls.filter((call) =>
+        String(call[0]).includes('Bucket đang dùng'),
+      );
+      expect(bucketLogCalls).toHaveLength(2);
+      expect(bucketLogCalls[0][0]).toEqual(bucketLogCalls[1][0]);
+    });
+
+    it('log dòng "Chi tiết đầy đủ" chứa output của util.inspect(err) — bao gồm cả field không enumerable như message/stack', async () => {
+      const config = buildConfigService({ 'storage.provider': 'aws' });
+      const service = new StorageService(config);
+      const err = Object.assign(new Error('Access Denied'), {
+        name: 'AccessDenied',
+        $metadata: { httpStatusCode: 403, requestId: 'req-123' },
+      });
+      sendMock.mockRejectedValue(err);
+
+      await expect(service.checkConnection()).resolves.toBeUndefined();
+
+      const detailLogCall = errorSpy.mock.calls.find((call) =>
+        String(call[0]).includes('Chi tiết đầy đủ'),
+      );
+      expect(detailLogCall).toBeDefined();
+      expect(detailLogCall![0]).toContain('Access Denied');
+      expect(detailLogCall![0]).toContain('403');
+      expect(detailLogCall![0]).toContain('req-123');
+    });
+
+    it('KHÔNG log "Nguyên nhân gốc", "Bucket đang dùng" hay "Chi tiết đầy đủ" khi lỗi là NotFound (chỉ log warning riêng, không rơi vào nhánh error chi tiết)', async () => {
       const config = buildConfigService({ 'storage.provider': 'minio' });
       const service = new StorageService(config);
       const notFoundError = Object.assign(new Error('not found'), {
@@ -292,6 +333,8 @@ describe('StorageService', () => {
 
       await expect(service.checkConnection()).resolves.toBeUndefined();
 
+      // Nhánh NotFound chỉ gọi logger.warn(), hoàn toàn không đụng tới
+      // logger.error() — bao gồm cả 3 dòng chi tiết mới thêm.
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
