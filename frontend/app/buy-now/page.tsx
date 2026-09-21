@@ -9,6 +9,7 @@ import {
   CheckCircle, Loader2, ArrowLeft, Zap,
 } from 'lucide-react';
 import { orderApi, paymentMethodApi, type BuyNowPayload } from '@/lib/api';
+import { isApiImageProxyUrl } from '@/lib/image';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
@@ -387,7 +388,7 @@ export default function BuyNowPage() {
                   <div className="w-14 h-14 rounded-lg overflow-hidden relative shrink-0
                     bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700">
                     {item.productImage ? (
-                      <Image src={item.productImage} alt={item.productName} fill className="object-contain p-1" />
+                      <Image src={item.productImage} alt={item.productName} fill unoptimized={isApiImageProxyUrl(item.productImage)} className="object-contain p-1" />
                     ) : (
                       <div className="w-full h-full bg-gray-100 dark:bg-slate-700" />
                     )}

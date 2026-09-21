@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
 import { orderApi, paymentMethodApi, type CreateOrderPayload } from '@/lib/api';
+import { isApiImageProxyUrl } from '@/lib/image';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
@@ -529,6 +530,7 @@ export default function CheckoutPage() {
                         src={item.productImage}
                         alt={item.productName}
                         fill
+                        unoptimized={isApiImageProxyUrl(item.productImage)}
                         className="object-contain p-1"
                       />
                     ) : (

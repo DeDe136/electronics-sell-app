@@ -8,6 +8,7 @@ import {
   Trash2, ShoppingBag, ArrowRight, Minus, Plus, CheckSquare, Square,
 } from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
+import { isApiImageProxyUrl } from '@/lib/image';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
@@ -211,7 +212,9 @@ export default function CartPage() {
                       <Image
                         src={item.product.images[0].url}
                         alt={item.product.name}
-                        fill className="object-contain p-2"
+                        fill
+                        unoptimized={isApiImageProxyUrl(item.product.images[0].url)}
+                        className="object-contain p-2"
                       />
                     ) : (
                       <div className="w-full h-full bg-gray-100 dark:bg-slate-700" />

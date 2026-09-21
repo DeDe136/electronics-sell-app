@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '@/lib/hooks/useCart';
+import { isApiImageProxyUrl } from '@/lib/image';
 
 interface Product {
   id: string;
@@ -45,6 +46,7 @@ export function ProductCard({ product }: { product: Product }) {
             src={product.images[0].url}
             alt={product.name}
             fill
+            unoptimized={isApiImageProxyUrl(product.images[0].url)}
             className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           />

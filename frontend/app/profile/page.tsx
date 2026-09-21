@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { User, Package, MapPin, Phone, Mail, Camera, LogOut } from 'lucide-react';
 import { userApi, orderApi } from '@/lib/api';
+import { isApiImageProxyUrl } from '@/lib/image';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
@@ -129,6 +130,7 @@ export default function ProfilePage() {
                   alt="avatar"
                   width={80}
                   height={80}
+                  unoptimized={isApiImageProxyUrl(user.avatarUrl)}
                   className="w-full h-full object-cover"
                 />
               ) : (

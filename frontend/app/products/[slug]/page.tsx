@@ -8,6 +8,7 @@ import { catalogApi } from '@/lib/api';
 import { ProductSpecs } from '@/components/product/ProductSpecs';
 import { Button } from '@/components/ui/Button';
 import { useCart } from '@/lib/hooks/useCart';
+import { isApiImageProxyUrl } from '@/lib/image';
 import toast from 'react-hot-toast';
 
 export default function ProductDetailPage({
@@ -111,6 +112,7 @@ export default function ProductDetailPage({
               src={images[activeImg]?.url}
               alt={product.name}
               fill
+              unoptimized={isApiImageProxyUrl(images[activeImg]?.url)}
               className="object-contain p-6"
               priority
             />
@@ -154,7 +156,7 @@ export default function ProductDetailPage({
                       ? 'border-blue-500'
                       : 'border-transparent hover:border-gray-300 dark:hover:border-slate-500'}`}
                 >
-                  <Image src={img.url} alt="" width={64} height={64} className="object-contain w-full h-full p-1" />
+                  <Image src={img.url} alt="" width={64} height={64} unoptimized={isApiImageProxyUrl(img.url)} className="object-contain w-full h-full p-1" />
                 </button>
               ))}
             </div>
