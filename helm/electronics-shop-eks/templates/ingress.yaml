@@ -32,6 +32,12 @@ spec:
     - host: {{ .Values.ingress.host }}
       http:
         paths:
+          # Ngoại lệ của route "/api": /api/images do frontend xử lý,
+          # nên phải khai báo riêng trước route /api để không bị chuyển vào backend.
+          - path: /api/images
+            pathType: Prefix
+            backend:
+              service: { name: frontend-stable, port: { number: {{ .Values.frontend.port }} } }
           # Đặt "/api" TRƯỚC "/" — Ingress dùng first-match, "/" (Prefix) sẽ
           # nuốt luôn "/api" nếu khai sau, khiến traffic API bị route nhầm
           # vào frontend.
