@@ -29,6 +29,7 @@ metadata:
     alb.ingress.kubernetes.io/ssl-redirect: '443'
     {{- else }}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
