@@ -28,7 +28,7 @@ image:
   # dùng chung 1 tag, lần chỉ đổi backend sẽ khiến frontend bị trỏ sang 1
   # tag chưa từng được push lên Harbor -> ImagePullBackOff.
   backendTag: "f57d93b8a1148e33c0be3152cc3b16b4ab707e78"
-  frontendTag: "957f69f3f3d600bfd3588d3d6a5157f1cb3c029e"
+  frontendTag: "c4e476761e1d0fc474f2029d26ac7130894029cd"
   pullPolicy: IfNotPresent
   # Tên Secret kiểu kubernetes.io/dockerconfigjson để pull image private từ Harbor.
   pullSecretName: harbor-pull-secret
