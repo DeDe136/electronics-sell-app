@@ -24,6 +24,7 @@ async function getProducts(params: SearchParams) {
       minPrice: params.minPrice,
       maxPrice: params.maxPrice,
     });
+    //
     // Log ngay TẠI ĐÂY (bên trong getProducts), không phải trong HomePage
     // bên dưới — vì HomePage destructure kết quả thành "{ items, meta }"
     // ngay lúc nhận về (xem "Promise.all" trong HomePage), field
