@@ -95,6 +95,11 @@ kind: Service
 metadata:
   name: frontend-stable
   namespace: {{ .Values.global.namespace }}
+  annotations:
+    # Dùng đúng route ping nhẹ có sẵn
+    # (frontend/app/api/ping/route.ts) thay vì "/" (phải render cả trang),
+    # giảm tải không cần thiết cho health check định kỳ.
+    alb.ingress.kubernetes.io/healthcheck-path: /api/ping
 spec:
   selector: { app: frontend }
   ports: [{ port: {{ .Values.frontend.port }}, targetPort: {{ .Values.frontend.port }} }]
