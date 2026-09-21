@@ -46,16 +46,19 @@ const nextConfig = {
   // backend. Fallback về NEXT_PUBLIC_API_URL để vẫn chạy khi dev không qua
   // Docker (chạy trực tiếp trên máy, lúc đó cả 2 đều là localhost thật).
   async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${
-          process.env.INTERNAL_API_URL ||
-          process.env.NEXT_PUBLIC_API_URL ||
-          'http://localhost:3001/api'
-        }/:path*`,
-      },
-    ];
+    return {
+      // Chạy SAU KHI đã kiểm tra các file và API nội bộ của Next.js
+      afterFiles: [
+        {
+          source: '/api/:path*',
+          destination: `${
+            process.env.INTERNAL_API_URL ||
+            process.env.NEXT_PUBLIC_API_URL ||
+            'http://localhost:3001/api/v1'
+          }/:path*`,
+        },
+      ],
+    };
   },
 };
 
