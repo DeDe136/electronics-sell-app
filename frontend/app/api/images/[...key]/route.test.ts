@@ -49,14 +49,19 @@ function buildS3Response(overrides: {
 
 describe('GET /api/images/[...key]', () => {
   const ORIGINAL_ENV = { ...process.env };
+  let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV, AWS_S3_BUCKET: 'test-bucket' };
     mockSend.mockReset();
+    // console.error thật sẽ làm bẩn output test — mock đi nhưng vẫn giữ
+    // spy để assert nội dung ở các test riêng cho phần log lỗi mới thêm.
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     process.env = { ...ORIGINAL_ENV };
+    consoleErrorSpy.mockRestore();
   });
 
   it('khởi tạo S3Client KHÔNG truyền "credentials" tường minh (để SDK tự lấy qua IRSA)', () => {
@@ -223,6 +228,35 @@ describe('GET /api/images/[...key]', () => {
     expect(body).toEqual({ message: 'Không lấy được ảnh từ S3.' });
     // Đảm bảo message lỗi AWS thật KHÔNG bị lộ ra response.
     expect(JSON.stringify(body)).not.toContain('AccessDenied');
+  });
+
+  it('log lỗi thật ra console.error (kèm key và bucket) để debug phía server, dù không trả về client', async () => {
+    const err = new Error('AccessDenied: not authorized');
+    mockSend.mockRejectedValue(err);
+
+    await GET(undefined, buildCtx(['secret.png']));
+
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    const [message, loggedErr] = consoleErrorSpy.mock.calls[0];
+    expect(message).toContain('[/api/images]');
+    expect(message).toContain('secret.png');
+    expect(message).toContain('test-bucket');
+    expect(loggedErr).toBe(err);
+  });
+
+  it('KHÔNG gọi console.error khi request thành công', async () => {
+    mockSend.mockResolvedValue(buildS3Response({}));
+
+    await GET(undefined, buildCtx(['ok.png']));
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('KHÔNG gọi console.error khi trả 400/500 do thiếu cấu hình/key (chưa kịp gọi S3, không phải lỗi trong nhánh catch)', async () => {
+    delete process.env.AWS_S3_BUCKET;
+    await GET(undefined, buildCtx(['a.png']));
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
   it('trả về 404 (không phân biệt 403 vs 404 của AWS) khi key không tồn tại (NoSuchKey)', async () => {
