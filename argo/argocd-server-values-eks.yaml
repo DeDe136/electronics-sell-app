@@ -16,7 +16,11 @@ server:
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
-      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      # __CERT_ARN__ được scripts/install-eks-tools.sh thay bằng ARN thật
+      # lúc chạy (sed vào file tạm).
+      alb.ingress.kubernetes.io/certificate-arn: __CERT_ARN__
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
       # PHẢI trùng chính xác giá trị group.name ở
       # helm/electronics-shop-eks/templates/ingress.yaml,
       # argo/argo-rollouts-values-eks.yaml,

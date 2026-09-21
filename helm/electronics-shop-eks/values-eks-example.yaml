@@ -54,6 +54,8 @@ serviceAccount:
 # đã tạo, ví dụ "techshop.dynv6.net".
 ingress:
   host: "app.techshop-tde.dynv6.net"
+  alb:
+    certificateArn: "arn:aws:acm:ap-southeast-1:REPLACE_ME_ACCOUNT_ID:certificate/REPLACE_ME"
 
 backend:
   env:

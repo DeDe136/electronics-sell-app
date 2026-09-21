@@ -110,6 +110,8 @@ ingress:
     # "ip" bắt buộc khi node dùng VPC CNI (mặc định EKS) — ALB gọi thẳng
     # IP pod thay vì NodePort, tránh thêm 1 lớp hop qua kube-proxy.
     targetType: ip
+    # Để trống = chỉ chạy HTTP.
+    certificateArn: ""
 
 secrets:
   # Giá trị mặc định CHỈ để test — bắt buộc đổi trước khi dùng thật.

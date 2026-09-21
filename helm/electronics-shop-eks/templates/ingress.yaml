@@ -22,10 +22,13 @@ metadata:
     # MỖI Ingress 1 ALB riêng (tốn thêm chi phí, và không test được đúng
     # cảnh 1 ALB route nhiều Host).
     alb.ingress.kubernetes.io/group.name: techshop-shared
-    # Bỏ comment khi đã có ACM certificate để bật HTTPS:
-    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
-    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:...
-    # alb.ingress.kubernetes.io/ssl-redirect: '443'
+    {{- if .Values.ingress.alb.certificateArn }}
+    # HTTPS bật khi .Values.ingress.alb.certificateArn có giá trị.
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.alb.certificateArn }}
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    {{- else }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:

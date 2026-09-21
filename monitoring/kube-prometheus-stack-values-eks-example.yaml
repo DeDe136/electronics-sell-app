@@ -68,7 +68,11 @@ prometheus:
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
-      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      # __CERT_ARN__ được scripts/install-eks-tools.sh thay bằng ARN thật
+      # lúc chạy (sed vào file tạm).
+      alb.ingress.kubernetes.io/certificate-arn: __CERT_ARN__
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
       # PHẢI trùng chính xác group.name ở 3 file Ingress còn lại (xem
       # argo/argocd-server-values-eks.yaml) — gộp chung 1 ALB.
       alb.ingress.kubernetes.io/group.name: techshop-shared
@@ -109,7 +113,11 @@ alertmanager:
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
-      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      # __CERT_ARN__ được scripts/install-eks-tools.sh thay bằng ARN thật
+      # lúc chạy (sed vào file tạm).
+      alb.ingress.kubernetes.io/certificate-arn: __CERT_ARN__
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
       alb.ingress.kubernetes.io/group.name: techshop-shared
   config:
     global:
@@ -150,7 +158,11 @@ grafana:
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
-      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      # __CERT_ARN__ được scripts/install-eks-tools.sh thay bằng ARN thật
+      # lúc chạy (sed vào file tạm).
+      alb.ingress.kubernetes.io/certificate-arn: __CERT_ARN__
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
       alb.ingress.kubernetes.io/group.name: techshop-shared
       # Grafana mặc định redirect "/" -> "/login" (302) khi chưa đăng nhập
       # — cùng lý do như Prometheus. "/api/health" là endpoint chính thức
