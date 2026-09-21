@@ -51,7 +51,8 @@ backend:
   env:
     nodeEnv: production
     jwtExpiresIn: 7d
-    frontendUrl: "http://app.techshop-tde.dynv6.net"   # đổi theo domain thật + ingress.host bên dưới
+    # Nếu không dùng ACM certificate thì phải chuyển đổi sang HTTP.
+    frontendUrl: "https://app.techshop-tde.dynv6.net"   # đổi theo domain thật + ingress.host bên dưới
     storageProvider: aws   # code check "=== 'minio'" mới đi nhánh MinIO, còn lại luôn là nhánh AWS S3
 
 frontend:
@@ -64,7 +65,8 @@ frontend:
     # URL public mà TRÌNH DUYỆT gọi tới backend — phải khớp với ingress host bên dưới.
     # LƯU Ý: giá trị này bị "đóng cứng" lúc build image (xem frontend.Dockerfile),
     # nên nếu đổi domain phải build lại image, sửa ở đây KHÔNG có tác dụng runtime.
-    nextPublicApiUrl: "http://app.techshop-tde.dynv6.net/api/v1"
+    # Nếu không dùng ACM certificate thì phải chuyển đổi sang HTTP.
+    nextPublicApiUrl: "https://app.techshop-tde.dynv6.net/api/v1"
 
 # RDS Postgres (thay cho StatefulSet postgres của chart local). Không có
 # field password ở đây — password lấy qua AWS Secrets Manager lúc runtime
