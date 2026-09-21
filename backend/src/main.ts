@@ -32,7 +32,6 @@ async function bootstrap() {
     }),
   );
 
-  //
   // Swagger docs
   //
   // Trước đây điều kiện này chỉ dựa vào NODE_ENV !== 'production', nhưng

@@ -89,7 +89,11 @@ async function handler(
         'Cache-Control': 'public, max-age=86400',
       },
     });
-  } catch {
+  } catch (err) {
+    console.error(
+      `[/api/images] Lỗi lấy key "${key}" từ bucket "${bucket}":`,
+      err,
+    );
     // Không phân biệt lỗi 403 (không có quyền)/404 (không tồn tại) chi tiết
     // cho client — tránh lộ thông tin về việc key có tồn tại hay không.
     return NextResponse.json(
