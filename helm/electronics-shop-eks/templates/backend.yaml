@@ -201,6 +201,11 @@ kind: Service
 metadata:
   name: backend-stable
   namespace: {{ .Values.global.namespace }}
+  annotations:
+    # Chỉ Service này được Ingress trỏ tới — annotation
+    # đặt ở Service để override đúng path health check của riêng Target
+    # Group này.
+    alb.ingress.kubernetes.io/healthcheck-path: /api/v1/health
 spec:
   selector: { app: backend }
   ports: [{ port: {{ .Values.backend.port }}, targetPort: {{ .Values.backend.port }} }]

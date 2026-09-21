@@ -47,15 +47,26 @@ const nextConfig = {
   // Docker (chạy trực tiếp trên máy, lúc đó cả 2 đều là localhost thật).
   async rewrites() {
     return {
-      // Chạy SAU KHI đã kiểm tra các file và API nội bộ của Next.js
+      // "afterFiles" chạy TRƯỚC khi Next.js xét dynamic route (route
+      // có [...key] thuộc loại này) — route "/api/images/[...key]" KHÔNG
+      // được tính là "file" để né rewrite này, nên dù đặt "afterFiles" vẫn
+      // bị rewrite "cướp" mất, chuyển nhầm sang backend (backend không có
+      // route "/api/v1/images/*", trả 404 "Cannot GET"). Thêm regex loại
+      // trừ "images" ngay trong path-to-regexp của "source" — CHỈ path này
+      // né được rewrite, mọi "/api/*" khác vẫn proxy sang backend như cũ.
+      // Loại trừ CẢ "images" (route proxy S3) LẪN "ping" (route health
+      // check riêng của frontend, xem app/api/ping/route.ts — gắn làm
+      // healthcheck-path cho Target Group frontend trong — thiếu "ping" ở đây thì health check
+      // frontend cũng bị forward nhầm sang backend (không có route đó),
+      // ALB sẽ coi frontend Unhealthy.
       afterFiles: [
         {
-          source: '/api/:path*',
+          source: '/api/:path((?!images|ping).*)',
           destination: `${
             process.env.INTERNAL_API_URL ||
             process.env.NEXT_PUBLIC_API_URL ||
             'http://localhost:3001/api/v1'
-          }/:path*`,
+          }/:path`,
         },
       ],
     };
