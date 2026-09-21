@@ -70,17 +70,21 @@ spec:
 
         ingress:
           host: "app.techshop-tde.dynv6.net"
+          alb:
+            certificateArn: "arn:aws:acm:ap-southeast-1:REPLACE_ME_ACCOUNT_ID:certificate/REPLACE_ME"
 
         backend:
           env:
-            frontendUrl: "http://app.techshop-tde.dynv6.net"
+            # Nếu không sử dụng ACM certificate thì phải chuyển đổi sang HTTP.
+            frontendUrl: "https://app.techshop-tde.dynv6.net"
 
         frontend:
           env:
             # Chỉ mang tính ghi chú — giá trị này đã đóng cứng lúc build
             # Docker image (ARG NEXT_PUBLIC_API_URL), sửa ở đây KHÔNG tự
             # động áp dụng vào image đã build sẵn.
-            nextPublicApiUrl: "http://app.techshop-tde.dynv6.net/api/v1"
+            # Nếu không sử dụng ACM certificate thì phải chuyển đổi sang HTTP.
+            nextPublicApiUrl: "https://app.techshop-tde.dynv6.net/api/v1"
 
   destination:
     server: https://kubernetes.default.svc

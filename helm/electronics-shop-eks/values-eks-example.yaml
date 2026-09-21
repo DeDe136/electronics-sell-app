@@ -54,17 +54,21 @@ serviceAccount:
 # đã tạo, ví dụ "techshop.dynv6.net".
 ingress:
   host: "app.techshop-tde.dynv6.net"
+  alb:
+    certificateArn: "arn:aws:acm:ap-southeast-1:REPLACE_ME_ACCOUNT_ID:certificate/REPLACE_ME"
 
 backend:
   env:
     # PHẢI khớp chính xác "ingress.host" ở trên (thêm scheme http:// hoặc
     # https:// tuỳ ALB đã có ACM certificate hay chưa).
-    frontendUrl: "http://app.techshop-tde.dynv6.net"
+    # Nếu không dùng ACM certificate thì phải chuyển đổi sang HTTP.
+    frontendUrl: "https://app.techshop-tde.dynv6.net"
 
 frontend:
   env:
     # Chỉ mang tính GHI CHÚ — giá trị này đã bị đóng cứng lúc build Docker
     # image (ARG NEXT_PUBLIC_API_URL), sửa ở đây KHÔNG tự động áp dụng vào
     # image đã build sẵn. Đổi thật sự phải build lại image với đúng
-    # --build-arg NEXT_PUBLIC_API_URL=http://app.techshop-tde.dynv6.net/api/v1
-    nextPublicApiUrl: "http://app.techshop-tde.dynv6.net/api/v1"
+    # --build-arg NEXT_PUBLIC_API_URL=https://app.techshop-tde.dynv6.net/api/v1
+    # Nếu không dùng ACM certificate thì phải chuyển đổi sang HTTP.
+    nextPublicApiUrl: "https://app.techshop-tde.dynv6.net/api/v1"

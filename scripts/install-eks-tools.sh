@@ -11,7 +11,7 @@
 #
 # CỐ Ý KHÔNG tạo IAM Policy/Role bằng AWS CLI trong script này — 2 role dưới
 # đây (ALB Controller, EBS CSI Driver) PHẢI tạo tay qua console TRƯỚC,
-# vì sau này khi đưa Terraform vào, các tài nguyên IAM này sẽ do Terraform
+# vì khi đưa Terraform vào, các tài nguyên IAM này sẽ do Terraform
 # quản lý — tạo bằng CLI rải rác trong script ngay từ bây giờ sẽ gây xung
 # đột state với Terraform sau này (Terraform không biết resource đã tồn tại
 # ngoài ý nó, dễ dính lỗi "already exists" hoặc phải import tay).
@@ -55,7 +55,32 @@ read -r -p "ARN role IAM của EBS CSI Driver (techshop-ebs-csi-role): " EBS_CSI
 while [ -z "$EBS_CSI_ROLE_ARN" ]; do
   read -r -p "ARN role EBS CSI Driver (bắt buộc, không được để trống): " EBS_CSI_ROLE_ARN
 done
+
+read -r -p "ARN chứng chỉ ACM cho HTTPS (để trống nếu chưa có, sẽ chạy tạm HTTP): " CERT_ARN
 # ────────────────────────────────────────────────────────────────────────
+
+# ── Helper: render 1 file values có chứa placeholder __CERT_ARN__ ra file
+# tạm với ARN thật đã thay vào — dùng "-f <file-tạm>" thay vì sửa trực tiếp
+# file gốc trong repo (giữ file gốc sạch, không dính giá trị thật, để trống
+# CERT_ARN thì âm thầm bỏ annotation certificate-arn/HTTPS, chạy HTTP như cũ).
+render_values_with_cert_arn() {
+  local src_file="$1"
+  local tmp_file
+  tmp_file=$(mktemp /tmp/eks-values-XXXXXX.yaml)
+  if [ -n "$CERT_ARN" ]; then
+    sed "s|__CERT_ARN__|$CERT_ARN|g" "$src_file" > "$tmp_file"
+  else
+    # Không có ARN: bỏ 3 dòng HTTPS-only (certificate-arn, ssl-redirect,
+    # listen-ports bản có HTTPS) để helm không dán "__CERT_ARN__" y nguyên
+    # vào annotation thật (ALB sẽ lỗi vì đó không phải ARN hợp lệ).
+    sed \
+      -e '/__CERT_ARN__/d' \
+      -e '/ssl-redirect/d' \
+      -e "s|'\[{\"HTTP\": 80}, {\"HTTPS\": 443}\]'|'[{\"HTTP\": 80}]'|" \
+      "$src_file" > "$tmp_file"
+  fi
+  echo "$tmp_file"
+}
 
 echo "=== 0. Thêm các Helm repo cần dùng ==="
 helm repo add eks https://aws.github.io/eks-charts
@@ -155,9 +180,10 @@ else
   unset GMAIL_APP_PASSWORD
 fi
 
+MONITORING_VALUES=$(render_values_with_cert_arn monitoring/kube-prometheus-stack-values-eks.yaml)
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
-  -f monitoring/kube-prometheus-stack-values-eks.yaml
+  -f "$MONITORING_VALUES"
 
 echo ""
 echo "=== 4. Cài KEDA (CRD ScaledObject dùng trong chart electronics-shop-eks) ==="
@@ -172,9 +198,10 @@ helm upgrade --install keda kedacore/keda \
 echo ""
 echo "=== 5. Cài Argo Rollouts (controller + CRD Rollout) ==="
 create_namespace_if_missing argo-rollouts
+ROLLOUTS_VALUES=$(render_values_with_cert_arn argo/argo-rollouts-values-eks.yaml)
 helm upgrade --install argo-rollouts argo/argo-rollouts \
   --namespace argo-rollouts \
-  -f argo/argo-rollouts-values-eks.yaml
+  -f "$ROLLOUTS_VALUES"
 
 echo ""
 echo "=== 6. Cài Argo CD (CÀI SAU CÙNG) ==="
@@ -187,7 +214,8 @@ echo "=== 6. Cài Argo CD (CÀI SAU CÙNG) ==="
 # ngay ("no matches for kind Rollout"/"ScaledObject"...), phải Sync lại tay
 # sau khi cài đủ mới hết lỗi. Cài đủ 5 mục ở trên trước sẽ tránh hẳn lỗi này.
 create_namespace_if_missing argocd
-helm upgrade --install argocd argo/argo-cd -n argocd -f argo/argocd-server-values-eks.yaml
+ARGOCD_VALUES=$(render_values_with_cert_arn argo/argocd-server-values-eks.yaml)
+helm upgrade --install argocd argo/argo-cd -n argocd -f "$ARGOCD_VALUES"
 
 echo ""
 echo "=================================================================="
@@ -211,6 +239,10 @@ echo ""
 echo "=== 7. Apply Argo CD Application + repo secret vào cluster ==="
 kubectl apply -f argo/argocd-repo-secret.yaml
 kubectl apply -f argo/argocd-application-eks.yaml
+
+echo ""
+echo "=== Dọn file tạm ==="
+rm -f "$MONITORING_VALUES" "$ROLLOUTS_VALUES" "$ARGOCD_VALUES"
 
 echo ""
 echo "=== XONG. Kiểm tra nhanh ==="
