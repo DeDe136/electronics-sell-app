@@ -1,13 +1,14 @@
 #!/bin/bash
 # Cài đặt các tool nền tảng lên cụm EKS: AWS Load Balancer Controller, EBS CSI
-# Driver, kube-prometheus-stack, KEDA, Argo Rollouts, ArgoCD (ArgoCD cài SAU
-# CÙNG).
+# Driver, kube-prometheus-stack, KEDA, Argo Rollouts, Traefik, ArgoCD (ArgoCD
+# cài SAU CÙNG).
 #
 # Chart helm/electronics-shop-eks khai báo Ingress (className: alb — cần AWS
 # LB Controller), Rollout (CRD của Argo Rollouts), ScaledObject (CRD của
-# KEDA), lấy metrics từ Prometheus (kube-prometheus-stack) — thiếu bất kỳ
-# tool nào trong 6 tool này, app sẽ báo lỗi thiếu CRD/StorageClass hoặc pod
-# đứng yên không chạy được.
+# KEDA), IngressRoute/TraefikService (CRD của Traefik, dùng để chia % traffic
+# canary — xem traefik/traefik-values-eks.yaml), lấy metrics từ Prometheus
+# (kube-prometheus-stack) — thiếu bất kỳ tool nào trong 7 tool này, app sẽ báo
+# lỗi thiếu CRD/StorageClass hoặc pod đứng yên không chạy được.
 #
 # CỐ Ý KHÔNG tạo IAM Policy/Role bằng AWS CLI trong script này — 2 role dưới
 # đây (ALB Controller, EBS CSI Driver) PHẢI tạo tay qua console TRƯỚC,
@@ -88,6 +89,7 @@ helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-d
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add kedacore https://kedacore.github.io/charts
 helm repo add argo https://argoproj.github.io/argo-helm
+helm repo add traefik https://traefik.github.io/charts
 helm repo update
 
 # ── Helper: tạo namespace nếu chưa có (idempotent, chạy lại script không lỗi) ──
@@ -204,15 +206,48 @@ helm upgrade --install argo-rollouts argo/argo-rollouts \
   -f "$ROLLOUTS_VALUES"
 
 echo ""
-echo "=== 6. Cài Argo CD (CÀI SAU CÙNG) ==="
+echo "=== 6. Cài Traefik (Ingress Controller thật, khôi phục canary chia % traffic) ==="
+# Đặt NGAY SAU Argo Rollouts (mục 5), vì 2 tool này cùng phục vụ chung 1
+# tính năng: Rollout (Argo Rollouts) chỉ điều khiển ĐƯỢC % traffic
+# canary/stable thật khi có CRD "TraefikService" của Traefik tồn tại sẵn
+# trong cluster để nó ghi weight vào (trafficRouting.traefik trong
+# helm/electronics-shop-eks/templates/backend-traffic.yaml,
+# frontend-traffic.yaml) — thiếu Traefik, Rollout vẫn tạo được nhưng bước
+# setWeight sẽ lỗi "no matches for kind TraefikService", y hệt lỗi thiếu CRD.
+# Vẫn PHẢI cài trước Argo CD lý do: Argo CD sync app chính vào cluster, app đó cần
+# CRD IngressRoute/TraefikService đã tồn tại từ trước.
+#
+# Không dùng render_values_with_cert_arn() ở đây như các mục trên — file
+# traefik/traefik-values-eks.yaml KHÔNG chứa placeholder "__CERT_ARN__" (xem
+# comment "CÁCH DÙNG" đầu file đó): annotation ACM cho NLB của Traefik cố ý
+# truyền thẳng qua "--set" lúc gọi helm bên dưới, không viết cứng vào file
+# values — nên chỉ cần rẽ nhánh có/không có CERT_ARN, không cần tạo file tạm.
+create_namespace_if_missing traefik
+if [ -n "$CERT_ARN" ]; then
+  helm upgrade --install traefik traefik/traefik \
+    --namespace traefik \
+    -f traefik/traefik-values-eks.yaml \
+    --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-cert"="$CERT_ARN"
+else
+  # Không có ARN: bỏ hẳn annotation ssl-cert khi gọi helm — NLB chỉ forward
+  # HTTP thuần ở cổng "web" (80); cổng "websecure" (443) vẫn mở theo
+  # traefik-values-eks.yaml nhưng không có TLS thật cho tới khi có ARN.
+  helm upgrade --install traefik traefik/traefik \
+    --namespace traefik \
+    -f traefik/traefik-values-eks.yaml
+fi
+
+echo ""
+echo "=== 7. Cài Argo CD (CÀI SAU CÙNG) ==="
 # ArgoCD cố ý cài SAU CÙNG, không phải đầu script: Application của ArgoCD
 # (mục apply ở dưới) sync thẳng chart electronics-shop-eks vào cluster —
-# chart này có object thuộc CRD của Argo Rollouts (Rollout) và KEDA
-# (ScaledObject), và Ingress cần AWS LB Controller đã chạy để tạo ALB. Nếu
-# cài ArgoCD trước rồi apply Application ngay, Argo CD sẽ cố sync các object
-# đó khi CRD/controller tương ứng CHƯA tồn tại trong cluster — sync thất bại
-# ngay ("no matches for kind Rollout"/"ScaledObject"...), phải Sync lại tay
-# sau khi cài đủ mới hết lỗi. Cài đủ 5 mục ở trên trước sẽ tránh hẳn lỗi này.
+# chart này có object thuộc CRD của Argo Rollouts (Rollout), KEDA
+# (ScaledObject) và Traefik (IngressRoute/TraefikService, mục 6 ở trên), và
+# Ingress cần AWS LB Controller đã chạy để tạo ALB. Nếu cài ArgoCD trước rồi
+# apply Application ngay, Argo CD sẽ cố sync các object đó khi CRD/controller
+# tương ứng CHƯA tồn tại trong cluster — sync thất bại ngay ("no matches for
+# kind Rollout"/"ScaledObject"/"TraefikService"...), phải Sync lại tay sau
+# khi cài đủ mới hết lỗi. Cài đủ 6 mục ở trên trước sẽ tránh hẳn lỗi này.
 create_namespace_if_missing argocd
 ARGOCD_VALUES=$(render_values_with_cert_arn argo/argocd-server-values-eks.yaml)
 helm upgrade --install argocd argo/argo-cd -n argocd -f "$ARGOCD_VALUES"
@@ -236,7 +271,7 @@ echo "=================================================================="
 read -r -p "Điền xong 2 file trên rồi, nhấn Enter để tiếp tục... " _
 
 echo ""
-echo "=== 7. Apply Argo CD Application + repo secret vào cluster ==="
+echo "=== 8. Apply Argo CD Application + repo secret vào cluster ==="
 kubectl apply -f argo/argocd-repo-secret.yaml
 kubectl apply -f argo/argocd-application-eks.yaml
 
@@ -252,6 +287,7 @@ echo "kubectl get storageclass gp3"
 echo "kubectl get pods -n monitoring"
 echo "kubectl get pods -n keda"
 echo "kubectl get pods -n argo-rollouts"
+echo "kubectl get pods -n traefik"
 echo "kubectl get pods -n argocd"
 echo ""
 echo "App được Argo CD tự động deploy qua Application vừa apply — KHÔNG cần"
