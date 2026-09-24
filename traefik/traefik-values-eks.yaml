@@ -56,8 +56,11 @@ ports:
     exposedPort: 443
     protocol: TCP
 
-# entryPoint mặc định IngressRoute dùng là "web" (xem
-# helm/electronics-shop-eks/templates/backend-traffic.yaml,
-# frontend-traffic.yaml: "entryPoints: [web]") — cổng "websecure" ở trên
-# thực chất cũng forward vào cùng 1 entrypoint nội bộ, không cần đổi gì
-# thêm ở IngressRoute.
+# entryPoint "web" (80) và "websecure" (443) ở trên là 2 entrypoint RIÊNG
+# BIỆT — Traefik KHÔNG tự gộp chung làm một. IngressRoute của app chính
+# (helm/electronics-shop-eks/templates/backend-traffic.yaml,
+# frontend-traffic.yaml) phải khai CẢ HAI trong "spec.entryPoints" thì mới
+# nhận được traffic từ cả HTTP (cổng 80, entrypoint "web") lẫn HTTPS thật qua
+# NLB (cổng 443, NLB giải mã TLS rồi forward vào entrypoint "websecure") —
+# thiếu "websecure" thì mọi request HTTPS sẽ bị Traefik trả 404 do không có
+# router nào khớp entrypoint đó, dù route/service khai đúng 100%.
