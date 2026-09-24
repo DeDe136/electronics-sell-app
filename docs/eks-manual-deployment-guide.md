@@ -4,7 +4,14 @@ Tài liệu này hướng dẫn dựng toàn bộ hạ tầng EKS từ đầu b�
 Console, để hiểu rõ cơ chế hoạt động của từng thành phần trước khi tự động
 hoá bằng Terraform ở giai đoạn sau. Áp dụng cho chart
 `helm/electronics-shop-eks` (bản Postgres/MinIO đã chuyển sang RDS/S3, dùng
-Argo Rollouts + KEDA + kube-prometheus-stack).
+Argo Rollouts + Traefik + KEDA + kube-prometheus-stack).
+
+**Lưu ý về Traefik**: app chính (`electronics-shop`) dùng Traefik
+(IngressRoute/TraefikService) đứng sau 1 **NLB** riêng để canary chia % traffic
+thật cho Argo Rollouts — KHÔNG dùng chung ALB Ingress Controller với 5 domain
+giám sát/quản trị còn lại (argocd, grafana, prometheus, alertmanager,
+rollouts). Xem `traefik/traefik-values-eks.yaml` để hiểu lý do, và Phần 21 để
+biết domain `app` trỏ DNS về đâu (khác 5 domain kia).
 
 **Trước khi bắt đầu:**
 - Đã có tài khoản AWS, đã cài `aws cli` + `kubectl` + `helm` trên máy và aws cli đã được cấu hình (aws configure) với IAM user/role có toàn quyền thao tác với các dịch vụ hoặc tài nguyên trên AWS.
@@ -509,7 +516,7 @@ tự dừng đúng 2 lúc cần ta thao tác tay rồi tự tiếp tục:
    email Alertmanager, rồi script hỏi thêm Gmail App Password — điền xong
    nhấn Enter, script tự cài kube-prometheus-stack (**Ingress của Grafana/
    Prometheus/Alertmanager bật ngay tại bước này — ALB đã được AWS tạo ra từ đây**).
-4. Tự cài KEDA, Argo Rollouts.
+4. Tự cài KEDA, Argo Rollouts, Traefik.
 5. **Dừng lần 2**: yêu cầu copy `argocd-application-eks.example.yaml` →
    `argocd-application-eks.yaml`, điền đủ giá trị AWS thật vào
    `valuesObject` (`rds.host`, `secretsManager.dbSecretArn`, `s3.bucket`,
@@ -546,32 +553,49 @@ chính xác từng key đó.
 
 ## Phần 21 — Tạo DNS cho 6 domain (ArgoCD, Grafana, App, Prometheus, Alertmanager, Rollouts)
 
-Vì Phần 19 đã cài xong mọi thứ (kube-prometheus-stack + Argo CD Application
-đều đã tự apply), ALB đã tồn tại sẵn — chỉ cần lấy DNS Name và tạo CNAME,
-**không cần apply gì thêm**:
+Vì Phần 19 đã cài xong mọi thứ (kube-prometheus-stack + Traefik + Argo CD
+Application đều đã tự apply), cả ALB lẫn NLB đã tồn tại sẵn — chỉ cần lấy DNS
+Name của **đúng loại Load Balancer cho từng domain** và tạo CNAME, **không
+cần apply gì thêm**:
 
-1. Lấy DNS Name của ALB:
+**QUAN TRỌNG**: domain `app` KHÔNG dùng chung Load Balancer với 5 domain còn
+lại — `app` trỏ vào Service của Traefik (đứng sau **NLB**, xem
+`traefik/traefik-values-eks.yaml`), trong khi `argocd`/`grafana`/
+`prometheus`/`alertmanager`/`rollouts` vẫn trỏ vào **ALB** do AWS Load
+Balancer Controller tạo ra như cũ (Ingress thường). Lấy nhầm DNS Name của ALB
+rồi trỏ CNAME `app` vào đó sẽ khiến domain `app` không hoạt động, vì Ingress
+của app giờ đã đổi sang IngressRoute do Traefik quản lý, không còn thuộc ALB
+Controller nữa.
+
+1. Lấy DNS Name của **NLB** (dùng riêng cho `app`):
+   ```bash
+   kubectl get svc traefik -n traefik
+   ```
+   (cột `EXTERNAL-IP` chính là DNS Name của NLB; hoặc **EC2 → Load
+   Balancers** trên console, tìm NLB có tag gắn với Service `traefik` trong
+   namespace `traefik`)
+2. Lấy DNS Name của **ALB** (dùng chung cho 5 domain còn lại):
    ```bash
    kubectl get ingress -A
    ```
    (hoặc **EC2 → Load Balancers** trên console, tìm ALB tên
    `k8s-techshopshared-...`, cột **DNS name**)
-2. Vào dynv6 → zone `techshop-tde.dynv6.net` → tạo lần lượt 6 **CNAME**,
-   **Data = đúng DNS Name của ALB + dấu chấm `.` ở cuối**:
+3. Vào dynv6 → zone `techshop-tde.dynv6.net` → tạo lần lượt 6 **CNAME**,
+   **Data = đúng DNS Name tương ứng + dấu chấm `.` ở cuối**:
 
 | Name | Type | Data |
 |---|---|---|
-| `app` | CNAME | `<DNS Name của ALB>.` |
+| `app` | CNAME | `<DNS Name của NLB (traefik)>.` |
 | `argocd` | CNAME | `<DNS Name của ALB>.` |
 | `grafana` | CNAME | `<DNS Name của ALB>.` |
 | `prometheus` | CNAME | `<DNS Name của ALB>.` |
 | `alertmanager` | CNAME | `<DNS Name của ALB>.` |
 | `rollouts` | CNAME | `<DNS Name của ALB>.` |
 
-3. Đợi vài phút, verify bằng `nslookup app.techshop-tde.dynv6.net` — kết
-   quả `canonical name` phải dừng đúng ở `...elb.amazonaws.com.`, không dính
-   thêm đuôi zone phía sau (nếu dính thêm đuôi, nghĩa là quên dấu chấm ở
-   bước 2).
+4. Đợi vài phút, verify bằng `nslookup app.techshop-tde.dynv6.net` — kết
+   quả `canonical name` phải dừng đúng ở `...elb.amazonaws.com.` (NLB cũng ra
+   domain dạng này), không dính thêm đuôi zone phía sau (nếu dính thêm đuôi,
+   nghĩa là quên dấu chấm ở bước 3).
 
 ---
 
@@ -651,8 +675,12 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9
 kubectl argo rollouts dashboard -n electronics-shop
 ```
 
-Chỉ giữ lại Ingress public cho đúng `app.techshop-tde.dynv6.net` (frontend +
-`/api` backend) — đây là thứ duy nhất người dùng thật cần truy cập.
+Chỉ giữ lại `app.techshop-tde.dynv6.net` (frontend + `/api` backend) public
+ra internet — đây là thứ duy nhất người dùng thật cần truy cập. Lưu ý domain
+này KHÔNG tắt/bật theo cùng cơ chế `ingress.enabled` như 5 domain ALB ở
+trên — nó chạy qua **IngressRoute (Traefik) + NLB riêng** (xem Phần 21), nên
+không nằm trong 4 bước tắt Ingress phía trên và không cần (cũng không nên)
+đụng vào cấu hình Traefik ở bước này.
 
 ---
 
@@ -664,7 +692,8 @@ Chỉ giữ lại Ingress public cho đúng `app.techshop-tde.dynv6.net` (fronte
 | `helm install` báo `cannot re-use a name that is still in use` khi chạy lại script sau khi bị timeout | `helm install` không idempotent — chạy lại lần 2 với release đã tồn tại sẽ lỗi | Luôn dùng `helm upgrade --install` thay vì `helm install` |
 | ALB Target Group báo Unhealthy cho Prometheus/Grafana/Argo Rollouts Dashboard, dù pod vẫn `Running` | 3 dịch vụ này tự redirect `/` sang path khác (302) — ALB mặc định chỉ coi HTTP 200 là Healthy | Set `alb.ingress.kubernetes.io/healthcheck-path` đúng endpoint riêng (`/-/healthy` cho Prometheus, `/api/health` cho Grafana) hoặc `success-codes: '200,302'` nếu không có endpoint riêng |
 | Browser báo `DNS_PROBE_FINISHED_NXDOMAIN` dù đã tạo đúng CNAME trỏ DNS Name của ALB | Thiếu dấu chấm `.` ở cuối giá trị CNAME — DNS hiểu là tên tương đối, tự nối thêm tên zone vào sau (`...elb.amazonaws.com.techshop-tde.dynv6.net`, không tồn tại) | Thêm dấu chấm `.` vào cuối giá trị CNAME |
-| ArgoCD Application sync lỗi `no matches for kind "Rollout"`/`"ScaledObject"` | Cài ArgoCD trước, CRD của Argo Rollouts/KEDA chưa tồn tại lúc Application cố sync | Cài đủ AWS LB Controller, EBS CSI, kube-prometheus-stack, KEDA, Argo Rollouts **trước**, cài ArgoCD **sau cùng** |
+| ArgoCD Application sync lỗi `no matches for kind "Rollout"`/`"ScaledObject"`/`"TraefikService"` | Cài ArgoCD trước, CRD của Argo Rollouts/KEDA/Traefik chưa tồn tại lúc Application cố sync | Cài đủ AWS LB Controller, EBS CSI, kube-prometheus-stack, KEDA, Argo Rollouts, Traefik **trước**, cài ArgoCD **sau cùng** (xem thứ tự trong `scripts/install-eks-tools.sh`) |
+| Rollout không chuyển traffic canary sang bản mới dù step `setWeight` đã chạy, hoặc `rollouts` dashboard báo weight đúng nhưng thực tế 100% traffic vẫn vào bản cũ | (1) Chưa cài Traefik nên CRD `TraefikService` không tồn tại, Rollout không có gì để ghi weight vào; hoặc (2) đã bật `automated.selfHeal: true` trong Argo CD Application nhưng thiếu khối `ignoreDifferences` cho `TraefikService` — Self Heal liên tục kéo weight về giá trị cũ trong Git | (1) Cài Traefik trước khi Sync app (Phần 19); (2) đảm bảo `argocd-application-eks.yaml` có đủ khối `ignoreDifferences` cho `group: traefik.io` và `group: traefik.containo.us`, `kind: TraefikService`, path `/spec/weighted/services/*/weight` |
 | Rollout báo lỗi cấu hình liên quan `dynamicStableScale` | `dynamicStableScale: true` chỉ hợp lệ khi có khai báo `trafficRouting` đi kèm — bỏ trafficRouting mà quên bỏ luôn dòng này | Comment lại `dynamicStableScale` khi không dùng `trafficRouting` |
 | Backend log `ECONNREFUSED` liên tục khi kết nối DB | `ConfigModule` với `load` async bị race condition — `TypeOrmModule` đọc giá trị config trước khi Promise gọi Secrets Manager resolve xong, `DB_HOST` rơi về fallback `'localhost'` | Gọi Secrets Manager **trực tiếp trong `useFactory`** của `TypeOrmModule.forRootAsync` (Nest đảm bảo await xong trước khi dùng), không qua `configuration.ts` |
 | Backend log `no pg_hba.conf entry for host ... no encryption` | RDS PostgreSQL mặc định bắt buộc SSL (`rds.force_ssl=1`), code kết nối không bật SSL | Thêm `ssl: { ca: <RDS CA bundle>, rejectUnauthorized: true }` vào cấu hình TypeORM khi dùng Secrets Manager |

@@ -151,3 +151,26 @@ spec:
       name: frontend-canary
       jsonPointers:
         - /spec/selector
+
+    # -- TraefikService: LUÔN GIỮ khi chart electronics-shop-eks dùng
+    # trafficRouting.traefik cho Argo Rollouts (xem
+    # templates/backend-traffic.yaml, frontend-traffic.yaml — cần Traefik đã
+    # cài, xem traefik/traefik-values-eks.yaml). Khi Rollout chạy canary (setWeight),
+    # Argo Rollouts controller ghi thẳng % traffic vào
+    # "spec.weighted.services[].weight" của object TraefikService NGAY TRÊN
+    # CLUSTER (không đi qua Git) mỗi lần chuyển bước — giống hệt lý do phải
+    # ignore "/spec/replicas" của HPA ở trên. Nếu KHÔNG ignore, Argo CD Self
+    # Heal sẽ coi thay đổi weight đó là "lệch khỏi Git" (Git luôn khai weight
+    # ban đầu, ví dụ stable 100/canary 0) và tự động kéo weight về lại giá
+    # trị cũ trong Git ngay giữa chừng canary — vô hiệu hoá hoàn toàn tính
+    # năng chia % traffic của Rollout, canary "chạy" nhưng traffic không bao
+    # giờ thực sự rẽ sang bản mới.
+    - group: traefik.io
+      kind: TraefikService
+      jsonPointers:
+        - /spec/weighted/services/*/weight
+    # Cẩn thận cấu hình cho cả apiGroup cũ nếu hệ thống của bạn vẫn dùng song song
+    - group: traefik.containo.us
+      kind: TraefikService
+      jsonPointers:
+        - /spec/weighted/services/*/weight

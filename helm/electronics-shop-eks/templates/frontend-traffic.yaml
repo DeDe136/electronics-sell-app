@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: TraefikService
+metadata:
+  name: frontend-traefik
+  namespace: {{ .Values.global.namespace }}
+spec:
+  weighted:
+    services:
+      - name: frontend-stable
+        port: {{ .Values.frontend.port }}
+      - name: frontend-canary
+        port: {{ .Values.frontend.port }}
+    # KHÔNG khai "weight" — Argo Rollouts tự set lúc chạy canary.
+---
+# PathPrefix(`/`) match MỌI path, kể cả "/api/*" — nhưng Traefik tự ưu tiên
+# rule có path càng dài/cụ thể càng cao (không cần khai "priority" bằng
+# tay), nên IngressRoute "backend-canary-route" (Host + PathPrefix(`/api`))
+# trong templates/backend-traffic.yaml vẫn luôn thắng route này cho các
+# request /api/*. Route này chỉ thực sự nhận phần còn lại (trang web, asset
+# tĩnh, và cả /api/images + /api/ping — 2 route NỘI BỘ của chính Next.js,
+# không phải API thật của backend, nên đúng là phải rơi vào đây chứ không
+# phải backend-canary-route).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: frontend-canary-route
+  namespace: {{ .Values.global.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    # Ngoại lệ của route "/api": /api/images do frontend xử lý, nên phải khai
+    # riêng route /api/images để không bị chuyển vào backend.
+    - match: Host(`{{ .Values.ingress.host }}`) && PathPrefix(`/api/images`)
+      kind: Rule
+      services:
+        - name: frontend-traefik
+          kind: TraefikService
+    - match: Host(`{{ .Values.ingress.host }}`) && PathPrefix(`/`)
+      kind: Rule
+      services:
+        - name: frontend-traefik
+          kind: TraefikService
+{{- end }}

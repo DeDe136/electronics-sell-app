@@ -39,22 +39,15 @@ spec:
       #   pod_canary = ceil(0.33 x 5) = ceil(1.65) = 2
       #   pod_stable = ceil(0.67 x 5) = ceil(3.35) = 4  (giảm 1 Pod so với 5)
       #
-      # (KHÁC bản Traefik/k3s) Đã bỏ hẳn "trafficRouting.traefik" — CRD
-      # "TraefikService" không tồn tại trên EKS nếu không tự cài thêm
-      # Traefik. Không có trafficRouting nghĩa là Ingress ALB LUÔN trỏ
-      # 100% traffic vào "backend-stable" (xem templates/ingress.yaml),
-      # KHÔNG tự động chia % như bản cũ — Argo Rollouts vẫn chạy đúng các
-      # bước "steps" bên dưới (scale dần ReplicaSet mới lên, test được qua
-      # Service "backend-canary" trực tiếp), nhưng traffic thật từ Ingress
-      # chưa được chia theo %, chỉ chuyển hẳn sang bản mới lúc "promote"
-      # xong. Muốn có lại đúng hành vi chia % traffic, cần làm thêm bước
-      # riêng: Argo Rollouts trafficRouting.alb + TargetGroupBinding (AWS
-      # Load Balancer Controller) — chưa nằm trong phạm vi thay đổi lần này.
-      # dynamicStableScale CHỈ hợp lệ khi có khai báo "trafficRouting"
-      # đi kèm — vì nó điều chỉnh tỉ lệ pod stable/canary DỰA THEO % traffic
-      # đang được router chia, không có traffic router thì không có gì để
-      # "dynamic" theo, bật lại lúc nâng cấp chart để dùng trafficRouting.alb sau này
-      # dynamicStableScale: true
+      # (ĐỔI SANG TRAEFIK) Traefik giờ chạy thật trong cluster
+      # (xem traefik/traefik-values-eks.yaml + scripts/install-eks-tools.sh),
+      # CRD "TraefikService" đã tồn tại — khôi phục lại trafficRouting y hệt
+      # bản local K3s, traffic browser thật giờ được chia % đúng theo từng
+      # bước "steps" bên dưới, không còn phải đợi "promote" mới chuyển hẳn.
+      dynamicStableScale: true
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: backend-traefik
       steps:
         - setWeight: 33
         # Dừng vô thời hạn, chờ ta tự "promote" bằng tay:
@@ -202,7 +195,7 @@ metadata:
   name: backend-stable
   namespace: {{ .Values.global.namespace }}
   annotations:
-    # Chỉ Service này được Ingress trỏ tới — annotation
+    # Service này được Ingress trỏ tới — annotation
     # đặt ở Service để override đúng path health check của riêng Target
     # Group này.
     alb.ingress.kubernetes.io/healthcheck-path: /api/v1/health
@@ -218,6 +211,8 @@ kind: Service
 metadata:
   name: backend-canary
   namespace: {{ .Values.global.namespace }}
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /api/v1/health
 spec:
   selector: { app: backend }
   ports: [{ port: {{ .Values.backend.port }}, targetPort: {{ .Values.backend.port }} }]
