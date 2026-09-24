@@ -8,6 +8,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
+  //
   // Global prefix
   //
   // Loại riêng "metrics" ra khỏi prefix "api/v1" — Prometheus mặc định
