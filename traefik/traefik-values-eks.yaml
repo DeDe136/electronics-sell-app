@@ -1,0 +1,63 @@
+# traefik/traefik-values-eks.yaml
+#
+# Cài Traefik (Ingress Controller chạy dạng pod trong cluster, giống hệt k3s
+# local) đứng sau 1 NLB — thay cho việc app chính dùng thẳng ALB Ingress
+# Controller. Lý do đổi: ALB Ingress (networking.k8s.io/v1 Ingress) chỉ trỏ
+# cố định 1 Service, không có khái niệm chia % traffic — nên trước đó phải
+# bỏ hẳn "trafficRouting.traefik" của Argo Rollouts khi chuyển app lên EKS.
+# Cài Traefik thật trong cluster có lại đầy đủ CRD "IngressRoute"/
+# "TraefikService" như bản local, khôi phục được canary chia % traffic thật
+# (xem helm/electronics-shop-eks/templates/backend-traffic.yaml,
+# frontend-traffic.yaml).
+#
+# CHỈ áp dụng cho app chính (electronics-shop) — ArgoCD/Argo Rollouts
+# Dashboard/kube-prometheus-stack GIỮ NGUYÊN dùng ALB như cũ (đơn giản hơn,
+# và các Ingress đó đằng nào cũng tắt hẳn sau khi test xong — xem Phần 25
+# trong docs/eks-manual-deployment-guide.md).
+#
+# CÁCH DÙNG (ARN chứng chỉ ACM được TRUYỀN QUA --set lúc chạy helm, KHÔNG
+# viết cứng vào file này — xem scripts/install-eks-tools.sh):
+#   helm upgrade --install traefik traefik/traefik \
+#     --namespace traefik --create-namespace \
+#     -f traefik/traefik-values-eks.yaml \
+#     --set service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-cert"="$CERT_ARN"
+
+service:
+  type: LoadBalancer
+  annotations:
+    # NLB (không phải ALB) — "external" + "nlb-target-type: ip" là cách
+    # khai báo chuẩn để AWS Load Balancer Controller tạo ra NLB thay vì
+    # Classic ELB mặc định, target thẳng IP của pod Traefik (không qua NodePort/kube-proxy).
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    # NLB tự giải mã TLS bằng chứng chỉ ACM (annotation "aws-load-balancer-
+    # ssl-cert" truyền qua --set lúc chạy helm, xem comment CÁCH DÙNG ở
+    # trên) rồi forward traffic đã giải mã (HTTP thuần) vào đúng cổng
+    # "websecure" bên dưới — Traefik nhận traffic đã giải mã sẵn, không cần
+    # tự làm TLS termination nữa.
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: websecure
+
+ports:
+  web:
+    # Cổng HTTP thường (port 80 ngoài NLB) — không bắt buộc, giữ lại để
+    # test nhanh bằng HTTP nếu cần, không có TLS.
+    port: 80
+    expose:
+      default: true
+  websecure:
+    # Cổng NLB nhận traffic HTTPS thật (port 443 ngoài NLB, đã giải mã TLS
+    # tại NLB nhờ annotation "aws-load-balancer-ssl-cert" ở trên) — Traefik
+    # xử lý như HTTP thuần ở cổng nội bộ này, KHÔNG tự bật TLS lần 2 (tránh
+    # double-encrypt không cần thiết trong nội bộ VPC).
+    port: 443
+    expose:
+      default: true
+    exposedPort: 443
+    protocol: TCP
+
+# entryPoint mặc định IngressRoute dùng là "web" (xem
+# helm/electronics-shop-eks/templates/backend-traffic.yaml,
+# frontend-traffic.yaml: "entryPoints: [web]") — cổng "websecure" ở trên
+# thực chất cũng forward vào cùng 1 entrypoint nội bộ, không cần đổi gì
+# thêm ở IngressRoute.

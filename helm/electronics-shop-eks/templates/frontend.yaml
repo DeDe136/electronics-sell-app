@@ -22,6 +22,10 @@ spec:
     canary:
       stableService: frontend-stable
       canaryService: frontend-canary
+      dynamicStableScale: true
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: frontend-traefik
       # Giống backend — xem giải thích công thức + ví dụ số, và lý do bỏ
       # hẳn "trafficRouting.traefik" (CRD không tồn tại trên EKS), trong
       # templates/backend.yaml.
@@ -55,15 +59,26 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: [{ name: http, containerPort: {{ .Values.frontend.port }} }]
           env:
-            # (KHÁC bản Traefik/k3s) Không còn Traefik để hairpin qua nữa —
-            # gọi thẳng Service nội bộ "backend-stable" (DNS trong cluster,
-            # xem templates/backend.yaml). Vì đây là gọi thẳng Service, KHÔNG
-            # đi qua Ingress/ALB, nên không cần trò "ghi đè Host header" như
-            # bản cũ nữa — bỏ luôn INTERNAL_API_HOST_HEADER (code trong
-            # frontend/lib/api.ts vẫn tương thích ngược: chỉ ghi đè header khi
-            # biến này tồn tại, không set thì bỏ qua, không lỗi gì).
+            # Gọi vào chính TRAEFIK thay vì
+            # gọi thẳng Service "backend-stable" — để traffic SSR đi qua
+            # đúng IngressRoute -> TraefikService, được chia weight
+            # stable/canary y hệt traffic browser thật, thay vì luôn cố
+            # định vào bản stable. "traefik.traefik" = Service nội bộ của
+            # Traefik (namespace "traefik", release name "traefik" — xem
+            # traefik/traefik-values-eks.yaml + scripts/install-eks-tools.sh;
+            # xác nhận đúng tên/namespace bằng lệnh
+            # "kubectl get svc -n traefik" trước khi dùng nếu đổi khác).
             - name: INTERNAL_API_URL
-              value: "http://backend-stable.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.backend.port }}/api/v1"
+              value: "http://traefik.traefik/api/v1"
+            # IngressRoute route theo điều kiện Host(...) — khi gọi thẳng
+            # vào Service nội bộ của Traefik (không qua DNS public), header
+            # Host mặc định sẽ là "traefik.traefik" (suy ra từ URL trên),
+            # KHÔNG khớp rule "Host(`{{ .Values.ingress.host }}`)" trong
+            # IngressRoute, khiến Traefik trả 404. Biến này được code trong
+            # frontend/lib/api.ts đọc để tự ghi đè header "Host" đúng domain,
+            # giúp request "giả vờ" như đến từ đúng domain public.
+            - name: INTERNAL_API_HOST_HEADER
+              value: {{ .Values.ingress.host | quote }}
             - name: AWS_REGION
               value: {{ .Values.s3.region | quote }}
             - name: AWS_S3_BUCKET
@@ -109,6 +124,8 @@ kind: Service
 metadata:
   name: frontend-canary
   namespace: {{ .Values.global.namespace }}
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /api/ping
 spec:
   selector: { app: frontend }
   ports: [{ port: {{ .Values.frontend.port }}, targetPort: {{ .Values.frontend.port }} }]
