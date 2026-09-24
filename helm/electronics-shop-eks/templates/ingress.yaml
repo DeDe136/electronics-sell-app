@@ -13,7 +13,6 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.alb.scheme }}
     alb.ingress.kubernetes.io/target-type: {{ .Values.ingress.alb.targetType }}
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
     # Gộp chung 1 ALB với ArgoCD/Argo Rollouts Dashboard/Prometheus/
     # Alertmanager/Grafana (xem argo/argocd-server-values-eks.yaml,
     # argo/argo-rollouts-values-eks.yaml,

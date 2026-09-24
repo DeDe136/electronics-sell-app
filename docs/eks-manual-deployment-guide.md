@@ -652,3 +652,22 @@ kubectl argo rollouts dashboard -n electronics-shop
 
 Chỉ giữ lại Ingress public cho đúng `app.techshop-tde.dynv6.net` (frontend +
 `/api` backend) — đây là thứ duy nhất người dùng thật cần truy cập.
+
+---
+
+## Bảng tra cứu nhanh — các lỗi đã gặp
+ 
+| Triệu chứng | Nguyên nhân thật | Cách sửa |
+|---|---|---|
+| Pod `Pending`, `0/2 nodes are available: 2 Too many pods` | **Không phải thiếu CPU/RAM** — EKS giới hạn số pod/node theo số IP mà ENI cấp được (t3.medium mặc định chỉ 17 pod/node) | Bật `ENABLE_PREFIX_DELEGATION: true` cho add-on VPC CNI (Phần 3) |
+| `helm install` báo `cannot re-use a name that is still in use` khi chạy lại script sau khi bị timeout | `helm install` không idempotent — chạy lại lần 2 với release đã tồn tại sẽ lỗi | Luôn dùng `helm upgrade --install` thay vì `helm install` |
+| ALB Target Group báo Unhealthy cho Prometheus/Grafana/Argo Rollouts Dashboard, dù pod vẫn `Running` | 3 dịch vụ này tự redirect `/` sang path khác (302) — ALB mặc định chỉ coi HTTP 200 là Healthy | Set `alb.ingress.kubernetes.io/healthcheck-path` đúng endpoint riêng (`/-/healthy` cho Prometheus, `/api/health` cho Grafana) hoặc `success-codes: '200,302'` nếu không có endpoint riêng |
+| Browser báo `DNS_PROBE_FINISHED_NXDOMAIN` dù đã tạo đúng CNAME trỏ DNS Name của ALB | Thiếu dấu chấm `.` ở cuối giá trị CNAME — DNS hiểu là tên tương đối, tự nối thêm tên zone vào sau (`...elb.amazonaws.com.techshop-tde.dynv6.net`, không tồn tại) | Thêm dấu chấm `.` vào cuối giá trị CNAME |
+| ArgoCD Application sync lỗi `no matches for kind "Rollout"`/`"ScaledObject"` | Cài ArgoCD trước, CRD của Argo Rollouts/KEDA chưa tồn tại lúc Application cố sync | Cài đủ AWS LB Controller, EBS CSI, kube-prometheus-stack, KEDA, Argo Rollouts **trước**, cài ArgoCD **sau cùng** |
+| Rollout báo lỗi cấu hình liên quan `dynamicStableScale` | `dynamicStableScale: true` chỉ hợp lệ khi có khai báo `trafficRouting` đi kèm — bỏ trafficRouting mà quên bỏ luôn dòng này | Comment lại `dynamicStableScale` khi không dùng `trafficRouting` |
+| Backend log `ECONNREFUSED` liên tục khi kết nối DB | `ConfigModule` với `load` async bị race condition — `TypeOrmModule` đọc giá trị config trước khi Promise gọi Secrets Manager resolve xong, `DB_HOST` rơi về fallback `'localhost'` | Gọi Secrets Manager **trực tiếp trong `useFactory`** của `TypeOrmModule.forRootAsync` (Nest đảm bảo await xong trước khi dùng), không qua `configuration.ts` |
+| Backend log `no pg_hba.conf entry for host ... no encryption` | RDS PostgreSQL mặc định bắt buộc SSL (`rds.force_ssl=1`), code kết nối không bật SSL | Thêm `ssl: { ca: <RDS CA bundle>, rejectUnauthorized: true }` vào cấu hình TypeORM khi dùng Secrets Manager |
+| `StorageService` log `❌ Không thể kết nối AWS S3: UnknownError`, dù tên bucket/region đúng trên console | IAM Policy gõ nhầm tên bucket khác với bucket thật đang dùng — implicit deny hiển thị lỗi mù mờ (`UnknownError`) thay vì `AccessDenied` rõ ràng | Đối chiếu kỹ lại `Resource` trong policy đúng khớp tên bucket thật |
+| Next.js Image báo `isn't a valid image for /api/images/... received null` | **2 nguyên nhân riêng biệt cần loại trừ lần lượt**: (1) Ingress route `/api` (Prefix) khớp luôn cả `/api/images/...`, forward nhầm sang backend (backend không có route này, trả 404) — kiểm tra bằng cách xem log pod, nếu **không có log gì** dù lỗi vẫn xảy ra thì đúng nguyên nhân này; (2) Next.js Image Optimization tự fetch lại chính nó qua ALB bị chặn (hairpin NAT) | (1) Đặt rule `/api/images` **trước** rule `/api` trong Ingress, và loại trừ `images`/`ping` khỏi rewrite proxy trong `next.config.js`; (2) Thêm `unoptimized={isApiImageProxyUrl(url)}` vào các `<Image>` render ảnh từ route proxy |
+| `next.config.js` rewrite `afterFiles` vẫn "cướp" mất request dù đặt đúng thứ tự | `afterFiles` chạy **trước** khi Next.js xét dynamic route (route có `[...key]`) — route đó không được tính là "file" để né rewrite | Thêm regex loại trừ ngay trong `source`: `/api/:path((?!images\|ping).*)` |
+| Avatar mặc định lúc `register()` vẫn ra URL MinIO dù đã đổi `STORAGE_PROVIDER=aws` | Code gọi thẳng `process.env.MINIO_*`, bỏ qua hẳn `StorageService` (nơi đã có logic switch minio/aws đúng) | Inject `StorageService` vào `AuthService`, dùng `buildPublicUrl()` thay vì tự viết logic riêng lần nữa |
