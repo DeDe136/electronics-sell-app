@@ -70,6 +70,7 @@ Ghi lại ARN của cả 2 role.
 
 1. **EKS → Clusters → Create cluster → Custom configuration**.
 2. **Configure cluster**:
+   - EKS Auto Mode: Off
    - Name: `techshop-cluster`
    - Kubernetes version: mới nhất được hỗ trợ
    - Cluster service role: `techshop-eks-cluster-role`
