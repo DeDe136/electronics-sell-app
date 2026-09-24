@@ -26,8 +26,15 @@ metadata:
   name: backend-canary-route
   namespace: {{ .Values.global.namespace }}
 spec:
+  # "web" (80) VÀ "websecure" (443) là 2 entrypoint RIÊNG BIỆT của Traefik
+  # (xem traefik/traefik-values-eks.yaml) — không tự gộp làm 1. NLB giải mã
+  # TLS rồi forward traffic HTTPS thật (cổng 443 ngoài NLB) vào đúng
+  # entrypoint "websecure" bên trong Traefik, KHÔNG phải "web". Thiếu
+  # "websecure" ở đây, mọi request qua HTTPS (tức qua NLB cổng 443) sẽ không
+  # khớp router nào, Traefik trả 404 dù route/service ở dưới hoàn toàn đúng.
   entryPoints:
     - web
+    - websecure
   routes:
     - match: Host(`{{ .Values.ingress.host }}`) && PathPrefix(`/api`)
       kind: Rule
