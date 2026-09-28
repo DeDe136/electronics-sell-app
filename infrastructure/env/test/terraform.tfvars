@@ -1,7 +1,5 @@
 # ── Môi trường TEST ────────────────────────────────────────────────────
-# ĐỔI 2 giá trị placeholder ở đầu file (email, IP) trước khi apply.
-alarm_email_addresses = ["you@example.com"]  # TODO: email nhận cảnh báo
-admin_ssh_cidrs       = ["<your-public-ip>/32"]  # TODO: IP public của bạn (https://checkip.amazonaws.com)
+# Email nhận cảnh báo và IP SSH KHÔNG nằm ở đây — xem env/test/secrets.tfvars.example.
 
 environment = "test"
 region      = "ap-southeast-1"

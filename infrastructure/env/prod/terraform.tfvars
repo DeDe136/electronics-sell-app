@@ -1,7 +1,5 @@
 # ── Môi trường PROD (tên tài nguyên khớp đúng docs/eks-manual-deployment-guide.md) ──
-# ĐỔI 2 giá trị placeholder ở đầu file (email, IP) trước khi apply.
-alarm_email_addresses = ["you@example.com"]  # TODO: email nhận cảnh báo
-admin_ssh_cidrs       = ["<your-public-ip>/32"]  # TODO: IP public của bạn (https://checkip.amazonaws.com)
+# Email nhận cảnh báo và IP SSH KHÔNG nằm ở đây — xem env/prod/secrets.tfvars.example.
 
 environment = "prod"
 region      = "ap-southeast-1"

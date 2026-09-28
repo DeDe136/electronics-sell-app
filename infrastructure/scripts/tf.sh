@@ -45,7 +45,15 @@ terraform init -reconfigure -input=false \
 
 case "$CMD" in
   plan|apply|destroy|refresh|import|console)
-    exec terraform "$CMD" -var-file="$ENV_DIR/terraform.tfvars" "$@"
+    VAR_FILES=(-var-file="$ENV_DIR/terraform.tfvars")
+
+    # Giá trị cá nhân (email, IP SSH): nạp từ secrets.tfvars khi chạy local.
+    # Trên CI không có file này — truyền qua TF_VAR_alarm_email_addresses / TF_VAR_admin_ssh_cidrs.
+    if [ -f "$ENV_DIR/secrets.tfvars" ]; then
+      VAR_FILES+=(-var-file="$ENV_DIR/secrets.tfvars")
+    fi
+
+    exec terraform "$CMD" "${VAR_FILES[@]}" "$@"
     ;;
   *)
     exec terraform "$CMD" "$@"

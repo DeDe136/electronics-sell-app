@@ -108,6 +108,7 @@ monitoring/kube-prometheus-stack-values-eks.yaml
 
 
 ## ── Terraform (infrastructure/) ──────────────────────────
+infrastructure/env/*/secrets.tfvars
 infrastructure/**/.terraform/
 infrastructure/**/*.tfstate
 infrastructure/**/*.tfstate.*
