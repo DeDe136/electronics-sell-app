@@ -131,4 +131,14 @@ async function bootstrap() {
 
   // (MinIO / S3 được kiểm tra tự động trong StorageService.onModuleInit)
 }
-bootstrap();
+
+bootstrap().catch((err: unknown) => {
+  // Nếu khởi động thất bại (vd: không kết nối được DB, port đã bị chiếm...),
+  // log lỗi rõ ràng rồi thoát với exit code 1 để container/orchestrator
+  // (Docker, Kubernetes) biết app lỗi và tự restart thay vì treo im lặng.
+  new Logger('Bootstrap').error(
+    `❌ Backend khởi động thất bại: ${(err as Error).message}`,
+    (err as Error).stack,
+  );
+  process.exit(1);
+});
