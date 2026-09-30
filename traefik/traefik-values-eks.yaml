@@ -55,6 +55,19 @@ ports:
       default: true
     exposedPort: 443
     protocol: TCP
+    # QUAN TRỌNG: chart gốc của Traefik mặc định "tls.enabled: true" cho
+    # riêng entrypoint "websecure" (xem
+    # https://doc.traefik.io/traefik/setup/kubernetes/ — "On the websecure
+    # entry point TLS is enabled by default") — PHẢI ghi đè "false" tường
+    # minh ở đây. Nếu để mặc định true, Traefik sẽ tự chờ nhận TLS
+    # ClientHello ở cổng này, trong khi NLB (do annotation ssl-cert +
+    # ssl-ports ở trên) đã giải mã và chỉ gửi xuống HTTP THUẦN — 2 bên lệch
+    # giao thức khiến kết nối bị Traefik đóng ngay từ tầng TLS, KHÔNG bao
+    # giờ chạm tới router để so khớp "entryPoints/match" trong IngressRoute,
+    # dù IngressRoute có khai đúng "entryPoints: [web, websecure]` đến đâu.
+    http:
+        tls:
+          enabled: false
 
 # entryPoint "web" (80) và "websecure" (443) ở trên là 2 entrypoint RIÊNG
 # BIỆT — Traefik KHÔNG tự gộp chung làm một. IngressRoute của app chính

@@ -106,3 +106,11 @@ argo/argocd-application-eks.yaml
 monitoring/kube-prometheus-stack-values.yaml
 monitoring/kube-prometheus-stack-values-eks.yaml
 
+
+## ── Terraform (infrastructure/) ──────────────────────────
+infrastructure/env/*/secrets.tfvars
+infrastructure/**/.terraform/
+infrastructure/**/*.tfstate
+infrastructure/**/*.tfstate.*
+infrastructure/**/crash.log
+infrastructure/**/*.auto.tfvars
