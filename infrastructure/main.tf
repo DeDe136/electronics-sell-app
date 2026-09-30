@@ -68,7 +68,7 @@ module "harbor" {
 
   ingress_rules = {
     http = {
-      description = "HTTP (Let's Encrypt can xac minh tu moi noi)"
+      description = "HTTP (Lets Encrypt can xac minh tu moi noi)"
       port        = 80
       cidr_blocks = ["0.0.0.0/0"]
     }
