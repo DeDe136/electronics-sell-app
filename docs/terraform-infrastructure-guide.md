@@ -216,6 +216,11 @@ Nếu để sót ALB/NLB/EBS volume, chúng vẫn giữ ENI/subnet và `destroy`
 ```bash
 kubectl delete application -n argocd --all
 helm uninstall traefik -n traefik
+helm uninstall kube-prometheus-stack -n monitoring     # Prometheus/Grafana/Alertmanager
+
+# đợi tới khi hết pod trong 2 namespace này rồi mới xoá PVC
+kubectl get pods -n traefik -n monitoring -w            # Ctrl+C khi không còn pod nào
+
 kubectl delete ingress -A --all
 kubectl delete pvc -A --all
 # đợi ALB/NLB biến mất trong EC2 → Load Balancers rồi mới sang bước tiếp theo
