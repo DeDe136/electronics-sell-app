@@ -4,29 +4,38 @@
 # Luồng chạy (mỗi bước chỉ chạy khi bước trước đó thành công):
 #
 #   prepare ─┬─> static-checks (terraform fmt + validate)  ─┐
-#            └─> checkov       (quét bảo mật cấu hình)      ─┴─> plan ─> apply
+#            └─> checkov       (quét bảo mật cấu hình)      ─┴─> plan ─┬─> apply   (chờ phê duyệt)
+#                                                                      └─> destroy (chờ phê duyệt)
 #
-#   1) prepare       -> Xác định môi trường đích (dev|test|prod) và có apply hay không.
+#   1) prepare       -> Xác định môi trường đích (dev|test|prod) và chế độ: chỉ plan / apply / destroy.
 #   2) static-checks -> terraform fmt -check + validate. Không cần AWS credentials.
 #   3) checkov       -> Quét bảo mật code Terraform TRƯỚC KHI đụng tới AWS. Có lỗi
-#                       "hard fail" là dừng ngay, plan/apply không chạy. Cấu hình ở
+#                       "hard fail" là dừng ngay, plan/apply/destroy không chạy. Cấu hình ở
 #                       infrastructure/.checkov.yaml (skip / soft-fail có ghi lý do).
-#   4) plan          -> terraform plan (đọc state trên S3), lưu tfplan, comment kết
-#                       quả vào PR, cảnh báo nếu có tài nguyên bị XOÁ / THAY THẾ.
-#   5) apply         -> terraform apply ĐÚNG file tfplan đã duyệt ở bước 4 (không plan
-#                       lại), chỉ chạy khi có thay đổi và sau khi GitHub Environment
-#                       (dev|test|prod) cho phép — prod nên bật "Required reviewers".
+#   4) plan          -> terraform plan (đọc state trên S3, so với hạ tầng THẬT trên AWS), lưu
+#                       tfplan, cảnh báo nếu có tài nguyên bị XOÁ / THAY THẾ. Chế độ destroy thì
+#                       chạy "plan -destroy".
+#   5) apply/destroy -> Thực thi ĐÚNG file tfplan đã duyệt ở bước 4 (không plan lại), chỉ chạy
+#                       khi có thay đổi và sau khi GitHub Environment (dev|test|prod) cho phép —
+#                       prod nên bật "Required reviewers".
 #
 # Khi nào chạy gì:
-#   - pull_request vào main/thanhde (có sửa infrastructure/**) : bước 1-4, KHÔNG apply.
-#   - push vào main (có sửa infrastructure/**)                 : bước 1-5, apply vào
-#                                                                môi trường ở Variable TF_AUTO_ENV.
-#   - workflow_dispatch (bấm tay)                              : chọn môi trường; chỉ plan,
-#                                                                hoặc tick "apply" để apply (chỉ từ nhánh main).
+#   - pull_request vào main/thanhde         : bước 1-4 (chỉ kiểm thử + plan, KHÔNG apply).
+#   - push vào thanhde                      : bước 1-4 (kiểm thử mỗi lần push, KHÔNG apply).
+#   - push vào main                         : bước 1-5, apply vào môi trường ở Variable TF_AUTO_ENV.
+#   - workflow_dispatch (bấm tay)           : chọn môi trường, rồi tick TỐI ĐA MỘT trong hai:
+#                                               * "apply"   -> bước 1-5 (apply), chỉ từ nhánh main
+#                                               * "destroy" -> bước 1-5 (destroy), chỉ từ nhánh main
+#                                             Không tick gì = chỉ plan.
 #
-# CỐ Ý KHÔNG có "terraform destroy" trong pipeline này: theo docs/terraform-infrastructure-guide.md
-# mục 7, trước khi destroy phải gỡ ALB/NLB/EBS do Kubernetes tạo ra, và prod còn phải tắt
-# deletion_protection — những việc đó cần con người làm tay, không nên tự động hoá.
+# KHÔNG lọc theo "paths:" ở push/pull_request: cố ý chạy mỗi lần push để so state với hạ tầng
+# THẬT trên AWS. Nếu ai đó lỡ xoá tay 1 tài nguyên thì plan sẽ thấy lệch (code không đổi nhưng
+# hạ tầng đã khác) và apply đưa hạ tầng về đúng cấu hình khai báo. Commit có "[skip ci]"
+# (vd: commit cập nhật image tag của deploy.yml) vẫn được GitHub bỏ qua như thường.
+#
+# DESTROY CHỈ chạy qua workflow_dispatch (tay), không bao giờ qua push/PR. TRƯỚC KHI bấm destroy
+# phải gỡ tài nguyên do Kubernetes tạo ra (ALB/NLB/EBS) và, với prod, làm thêm vài bước trên
+# AWS Console — xem docs/terraform-ci-github-actions-guide.md mục 6.
 #
 # Cần khai báo trước (chi tiết: docs/terraform-ci-github-actions-guide.md):
 #   Secrets  (Settings > Secrets and variables > Actions > Secrets):
@@ -37,7 +46,8 @@
 #     TF_AUTO_ENV            = môi trường tự động plan/apply cho PR + push (mặc định: prod)
 #     TF_VERSION             = phiên bản Terraform, nên ghim đúng bản đang dùng ở local
 #                              (mặc định: "~> 1.10" = bản 1.x mới nhất)
-#   Environments (Settings > Environments): tạo dev, test, prod; prod bật Required reviewers.
+#   Environments (Settings > Environments): tạo dev, test, prod; prod bật Required reviewers
+#   (áp dụng cho cả apply lẫn destroy).
 # =============================================================================
 
 name: Terraform - Infrastructure
@@ -45,14 +55,8 @@ name: Terraform - Infrastructure
 on:
   pull_request:
     branches: [main, thanhde]
-    paths:
-      - "infrastructure/**"
-      - ".github/workflows/terraform.yml"
   push:
-    branches: [main]
-    paths:
-      - "infrastructure/**"
-      - ".github/workflows/terraform.yml"
+    branches: [main, thanhde]
   workflow_dispatch:
     inputs:
       environment:
@@ -61,13 +65,27 @@ on:
         options: [dev, test, prod]
         default: dev
       apply:
-        description: "Apply sau khi plan? (bỏ tick = chỉ plan; apply chỉ được phép từ nhánh main)"
+        description: "Apply sau khi plan? (chỉ tick MỘT trong hai: apply hoặc destroy; chỉ từ nhánh main)"
+        type: boolean
+        default: false
+      destroy:
+        description: "⚠️ DESTROY môi trường này? (chỉ tick MỘT trong hai; phải làm xong các bước tiền đề trong docs mục 6)"
         type: boolean
         default: false
 
 # Mặc định chỉ đọc code; từng job tự xin thêm quyền cần thiết.
 permissions:
   contents: read
+
+# Khoá theo môi trường (không phải theo branch/PR): 2 lần chạy cùng 1 môi
+# trường không được chạy song song (S3 state lock cũng chặn, nhưng fail sớm
+# ở đây rõ ràng hơn là để Terraform tự chờ/timeout). cancel-in-progress LUÔN
+# false — không bao giờ huỷ ngang 1 lần apply/destroy đang chạy dở.
+# Chạy tay thì lấy môi trường từ input; push/PR thì lấy môi trường tự động (TF_AUTO_ENV),
+# nên push-apply vào prod và destroy prod bấm tay cùng chung 1 khoá.
+concurrency:
+  group: terraform-${{ github.event.inputs.environment || vars.TF_AUTO_ENV || 'prod' }}
+  cancel-in-progress: false
 
 env:
   AWS_REGION: ap-southeast-1      # khớp "region" trong infrastructure/env/*/terraform.tfvars
@@ -81,7 +99,7 @@ defaults:
 
 jobs:
   # ===========================================================================
-  # JOB 1: XÁC ĐỊNH MÔI TRƯỜNG ĐÍCH
+  # JOB 1: XÁC ĐỊNH MÔI TRƯỜNG ĐÍCH + CHẾ ĐỘ (plan / apply / destroy)
   # ===========================================================================
   # Giá trị lấy qua biến môi trường (env:) chứ không nội suy ${{ }} thẳng vào script
   # để tránh injection từ input do người dùng nhập.
@@ -91,23 +109,52 @@ jobs:
     outputs:
       env: ${{ steps.resolve.outputs.env }}
       do_apply: ${{ steps.resolve.outputs.do_apply }}
+      do_destroy: ${{ steps.resolve.outputs.do_destroy }}
     steps:
-      - name: Resolve environment & apply flag
+      - name: Resolve environment & mode
         id: resolve
         env:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
           INPUT_ENV: ${{ inputs.environment }}
           INPUT_APPLY: ${{ inputs.apply }}
+          INPUT_DESTROY: ${{ inputs.destroy }}
           # Repository Variable (cùng kiểu với HELM_VALUES_FILE trong deploy.yml): đổi môi
           # trường tự động deploy mà không phải sửa file này. Nên thử pipeline ở "dev"
           # trước khi để "prod".
           AUTO_ENV: ${{ vars.TF_AUTO_ENV || 'prod' }}
         run: |
           case "$EVENT" in
-            workflow_dispatch) ENV_NAME="$INPUT_ENV"; DO_APPLY="$INPUT_APPLY" ;;
-            push)              ENV_NAME="$AUTO_ENV";  DO_APPLY="true" ;;
-            *)                 ENV_NAME="$AUTO_ENV";  DO_APPLY="false" ;;   # pull_request: chỉ plan
+            workflow_dispatch)
+              ENV_NAME="$INPUT_ENV"; DO_APPLY="$INPUT_APPLY"; DO_DESTROY="$INPUT_DESTROY"
+
+              # Mỗi lần Run workflow chỉ được chọn MỘT hành động.
+              if [ "$DO_APPLY" = "true" ] && [ "$DO_DESTROY" = "true" ]; then
+                echo "::error::Chỉ được tick MỘT trong hai: 'apply' hoặc 'destroy' (đang tick cả hai)."
+                exit 1
+              fi
+
+              # Destroy là thao tác không thể hoàn tác -> fail hẳn thay vì lặng lẽ hạ xuống "chỉ plan".
+              if [ "$DO_DESTROY" = "true" ] && [ "$REF" != "refs/heads/main" ]; then
+                echo "::error::Destroy chỉ được phép chạy từ nhánh main (đang ở $REF)."
+                exit 1
+              fi
+
+              # Không bao giờ apply từ nhánh khác main (code chưa được review/merge).
+              if [ "$DO_APPLY" = "true" ] && [ "$REF" != "refs/heads/main" ]; then
+                echo "::warning::Apply chỉ được phép từ nhánh main (đang ở $REF) -> chỉ chạy plan."
+                DO_APPLY="false"
+              fi
+              ;;
+            push)
+              # Push vào main: apply. Push vào nhánh khác (thanhde): chỉ kiểm thử + plan.
+              ENV_NAME="$AUTO_ENV"; DO_DESTROY="false"
+              if [ "$REF" = "refs/heads/main" ]; then DO_APPLY="true"; else DO_APPLY="false"; fi
+              ;;
+            *)
+              # pull_request: chỉ plan. Destroy KHÔNG BAO GIỜ chạy ngoài workflow_dispatch.
+              ENV_NAME="$AUTO_ENV"; DO_APPLY="false"; DO_DESTROY="false"
+              ;;
           esac
 
           case "$ENV_NAME" in
@@ -115,15 +162,10 @@ jobs:
             *) echo "::error::Môi trường không hợp lệ: '$ENV_NAME' (chỉ nhận dev|test|prod)"; exit 1 ;;
           esac
 
-          # Không bao giờ apply từ nhánh khác main (code chưa được review/merge).
-          if [ "$DO_APPLY" = "true" ] && [ "$REF" != "refs/heads/main" ]; then
-            echo "::warning::Apply chỉ được phép từ nhánh main (đang ở $REF) -> chỉ chạy plan."
-            DO_APPLY="false"
-          fi
-
           echo "env=$ENV_NAME" >> "$GITHUB_OUTPUT"
           echo "do_apply=$DO_APPLY" >> "$GITHUB_OUTPUT"
-          echo "### Terraform: môi trường \`$ENV_NAME\` — apply: \`$DO_APPLY\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "do_destroy=$DO_DESTROY" >> "$GITHUB_OUTPUT"
+          echo "### Terraform: môi trường \`$ENV_NAME\` — apply: \`$DO_APPLY\` — destroy: \`$DO_DESTROY\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ===========================================================================
   # JOB 2: FORMAT + VALIDATE (không cần AWS)
@@ -242,7 +284,7 @@ jobs:
           exit 1
 
   # ===========================================================================
-  # JOB 4: TERRAFORM PLAN
+  # JOB 4: TERRAFORM PLAN (hoặc "plan -destroy" khi tick destroy)
   # ===========================================================================
   plan:
     name: 📋 Terraform Plan
@@ -253,11 +295,11 @@ jobs:
     permissions:
       contents: read
       id-token: write          # lấy OIDC token để assume role AWS
-      pull-requests: write     # comment kết quả plan vào PR
     outputs:
       has_changes: ${{ steps.plan.outputs.has_changes }}
     env:
       TARGET_ENV: ${{ needs.prepare.outputs.env }}
+      DO_DESTROY: ${{ needs.prepare.outputs.do_destroy }}
       # Giá trị cá nhân: tf.sh đọc từ env/<env>/secrets.tfvars khi chạy local, còn trên
       # CI thì truyền qua TF_VAR_* (xem comment trong scripts/tf.sh).
       TF_VAR_alarm_email_addresses: ${{ secrets.ALARM_EMAIL_ADDRESSES }}
@@ -297,9 +339,13 @@ jobs:
       - name: Terraform plan
         id: plan
         run: |
+          PLAN_ARGS=(-lock-timeout=10m -detailed-exitcode -out=tfplan)
+          if [ "$DO_DESTROY" = "true" ]; then
+            PLAN_ARGS+=(-destroy)
+          fi
+
           rc=0
-          bash scripts/tf.sh "$TARGET_ENV" plan \
-            -lock-timeout=10m -detailed-exitcode -out=tfplan || rc=$?
+          bash scripts/tf.sh "$TARGET_ENV" plan "${PLAN_ARGS[@]}" || rc=$?
 
           if [ "$rc" -eq 1 ]; then
             echo "::error::terraform plan thất bại"
@@ -313,9 +359,9 @@ jobs:
           fi
 
       # Liệt kê tài nguyên bị XOÁ hoặc THAY THẾ (destroy/recreate) — thứ cần soi kỹ nhất
-      # trước khi duyệt apply, đặc biệt với RDS, EKS, VPC, S3 ở prod.
+      # trước khi duyệt, đặc biệt với RDS, EKS, VPC, S3 ở prod. Kết quả ghi vào Job Summary;
+      # chi tiết đầy đủ của plan nằm ở log của bước "Terraform plan" phía trên.
       - name: Analyse plan
-        id: analyse
         run: |
           terraform show -no-color tfplan > plan.txt
           terraform show -json tfplan > plan.json
@@ -327,23 +373,30 @@ jobs:
           rm -f plan.json
 
           SUMMARY=$(grep -E '^(Plan:|No changes\.)' plan.txt | tail -n 1 || true)
-          echo "summary=${SUMMARY:-Không đọc được dòng tóm tắt}" >> "$GITHUB_OUTPUT"
-          echo "destructive_count=$(wc -l < destructive.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          SUMMARY="${SUMMARY:-Không đọc được dòng tóm tắt}"
 
           {
-            echo "### 📋 Terraform plan — \`$TARGET_ENV\`"
+            if [ "$DO_DESTROY" = "true" ]; then
+              echo "### 💣 Terraform plan -destroy — \`$TARGET_ENV\`"
+            else
+              echo "### 📋 Terraform plan — \`$TARGET_ENV\`"
+            fi
             echo ""
-            echo "**${SUMMARY:-Không đọc được dòng tóm tắt}**"
+            echo "**$SUMMARY**"
             if [ -s destructive.txt ]; then
               echo ""
-              echo "> ⚠️ Có tài nguyên bị **xoá / thay thế**, hãy kiểm tra kỹ trước khi apply:"
+              if [ "$DO_DESTROY" = "true" ]; then
+                echo "> ⚠️ Toàn bộ tài nguyên sau sẽ bị **XOÁ** nếu bạn phê duyệt job destroy:"
+              else
+                echo "> ⚠️ Có tài nguyên bị **xoá / thay thế**, hãy kiểm tra kỹ trước khi apply:"
+              fi
               echo '```'
               cat destructive.txt
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Chỉ lưu tfplan: apply sẽ dùng ĐÚNG file này, đảm bảo thứ được apply chính là thứ đã review.
+      # Chỉ lưu tfplan: apply/destroy sẽ dùng ĐÚNG file này, đảm bảo thứ được thực thi chính là thứ đã review.
       # LƯU Ý: tfplan có thể chứa giá trị biến (email, IP SSH) ở dạng đọc được -> chỉ nên dùng repo private.
       - name: Upload tfplan
         if: steps.plan.outputs.has_changes == 'true'
@@ -354,63 +407,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Comment plan on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        env:
-          PLAN_SUMMARY: ${{ steps.analyse.outputs.summary }}
-          DESTRUCTIVE_COUNT: ${{ steps.analyse.outputs.destructive_count }}
-        with:
-          script: |
-            const fs = require('fs');
-            const env = process.env.TARGET_ENV;
-            const marker = `<!-- terraform-plan:${env} -->`;
-
-            // Giới hạn comment của GitHub là 65536 ký tự -> cắt bớt phần plan chi tiết.
-            let plan = fs.readFileSync('infrastructure/plan.txt', 'utf8');
-            const MAX = 55000;
-            if (plan.length > MAX) {
-              plan = plan.slice(0, MAX) + '\n\n... (đã cắt bớt, xem đầy đủ trong log của job "Terraform Plan")';
-            }
-
-            let warning = '';
-            if (Number(process.env.DESTRUCTIVE_COUNT) > 0) {
-              const list = fs.readFileSync('infrastructure/destructive.txt', 'utf8').trim();
-              warning = `\n> ⚠️ **${process.env.DESTRUCTIVE_COUNT} tài nguyên bị xoá / thay thế:**\n\n\`\`\`\n${list}\n\`\`\`\n`;
-            }
-
-            const body = [
-              marker,
-              `### 📋 Terraform plan — \`${env}\``,
-              `**${process.env.PLAN_SUMMARY}**`,
-              warning,
-              '<details><summary>Chi tiết plan</summary>',
-              '',
-              '```terraform',
-              plan,
-              '```',
-              '</details>',
-              '',
-              `_Commit ${context.sha.slice(0, 7)} · PR chỉ plan, không apply._`,
-            ].join('\n');
-
-            // Cập nhật comment cũ (nếu có) thay vì tạo comment mới mỗi lần push.
-            const { owner, repo } = context.repo;
-            const issue_number = context.issue.number;
-            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
-            const existing = comments.find(c => c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
-            } else {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body });
-            }
-
   # ===========================================================================
-  # JOB 5: TERRAFORM APPLY
+  # JOB 5a: TERRAFORM APPLY
   # ===========================================================================
   # Chỉ chạy khi: (a) push vào main hoặc bấm tay có tick "apply" từ nhánh main,
   # (b) plan có thay đổi thật sự. Job dừng chờ phê duyệt nếu GitHub Environment
-  # tương ứng (dev|test|prod) bật "Required reviewers".
+  # tương ứng (dev|test|prod) bật "Required reviewers". Việc không cho 2 lần chạy
+  # cùng môi trường song song đã do "concurrency" ở cấp workflow (phía trên) đảm nhiệm.
   apply:
     name: 🚀 Terraform Apply
     needs: [prepare, plan]
@@ -423,11 +426,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    # Mỗi môi trường chỉ cho 1 lần apply tại 1 thời điểm và KHÔNG BAO GIỜ huỷ giữa chừng
-    # (huỷ apply đang chạy dễ làm state dở dang). Khác với concurrency của ci.yml.
-    concurrency:
-      group: terraform-apply-${{ needs.prepare.outputs.env }}
-      cancel-in-progress: false
     env:
       TARGET_ENV: ${{ needs.prepare.outputs.env }}
     defaults:
@@ -485,4 +483,79 @@ jobs:
             echo '```'
             terraform output
             echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ===========================================================================
+  # JOB 5b: TERRAFORM DESTROY
+  # ===========================================================================
+  # CHỈ chạy khi bấm tay (workflow_dispatch) + tick "destroy" (đã được job "prepare" kiểm tra:
+  # không tick cùng "apply", chỉ từ nhánh main) và plan -destroy có tài nguyên để xoá.
+  # Không bao giờ chạy qua push / pull_request. Môi trường prod PHẢI được Required reviewers
+  # phê duyệt (cấu hình ở Settings > Environments > prod) giống job apply.
+  #
+  # TIỀN ĐỀ BẮT BUỘC (làm tay trước khi bấm Run workflow, xem docs mục 6):
+  #   - Mọi môi trường: gỡ ALB/NLB/EBS do Kubernetes tạo ra (kubectl/helm), nếu không sẽ treo ở bước xoá VPC.
+  #   - Riêng prod: Empty bucket ảnh, tắt Deletion Protection của RDS, xoá snapshot <name_prefix>-postgres-final.
+  destroy:
+    name: 💣 Terraform Destroy
+    needs: [prepare, plan]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.prepare.outputs.do_destroy == 'true' &&
+      needs.plan.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.prepare.outputs.env }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TARGET_ENV: ${{ needs.prepare.outputs.env }}
+    defaults:
+      run:
+        working-directory: infrastructure
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ vars.TF_VERSION || '~> 1.10' }}
+          terraform_wrapper: false
+
+      # Destroy EKS + RDS Multi-AZ + NAT cũng mất 20-40 phút -> session 2 giờ như job apply.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-duration-seconds: 7200
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download destroy plan from plan job
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ env.TARGET_ENV }}
+          path: infrastructure
+
+      - name: Terraform init
+        run: |
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          terraform init -reconfigure \
+            -backend-config="env/${TARGET_ENV}/backend.hcl" \
+            -backend-config="bucket=techshop-tfstate-${ACCOUNT_ID}"
+
+      # tfplan ở đây được tạo bằng "plan -destroy" nên "apply tfplan" chính là thực thi destroy
+      # đúng danh sách tài nguyên mà người duyệt đã thấy ở Job Summary của job plan.
+      - name: Terraform destroy (saved plan)
+        run: terraform apply -input=false -lock-timeout=10m tfplan
+
+      - name: Add destroy summary
+        run: |
+          {
+            echo "### 💣 Đã destroy môi trường \`$TARGET_ENV\`"
+            echo ""
+            echo "- Bucket lưu state \`techshop-tfstate-<account-id>\` do bootstrap-tfstate.sh tạo nên **không** bị xoá."
+            if [ "$TARGET_ENV" = "prod" ]; then
+              echo "- RDS prod vừa chụp snapshot cuối \`<name_prefix>-postgres-final\`: muốn destroy prod lần sau phải xoá snapshot này trước."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
