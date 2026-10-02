@@ -23,15 +23,17 @@
 #   - pull_request vào main/thanhde         : bước 1-4 (chỉ kiểm thử + plan, KHÔNG apply).
 #   - push vào thanhde                      : bước 1-4 (kiểm thử mỗi lần push, KHÔNG apply).
 #   - push vào main                         : bước 1-5, apply vào môi trường ở Variable TF_AUTO_ENV.
+#   - schedule (hằng ngày, luôn chạy trên main): bước 1-5 như push vào main — quét DRIFT (xem bên dưới).
 #   - workflow_dispatch (bấm tay)           : chọn môi trường, rồi tick TỐI ĐA MỘT trong hai:
 #                                               * "apply"   -> bước 1-5 (apply), chỉ từ nhánh main
 #                                               * "destroy" -> bước 1-5 (destroy), chỉ từ nhánh main
 #                                             Không tick gì = chỉ plan.
 #
-# KHÔNG lọc theo "paths:" ở push/pull_request: cố ý chạy mỗi lần push để so state với hạ tầng
-# THẬT trên AWS. Nếu ai đó lỡ xoá tay 1 tài nguyên thì plan sẽ thấy lệch (code không đổi nhưng
-# hạ tầng đã khác) và apply đưa hạ tầng về đúng cấu hình khai báo. Commit có "[skip ci]"
-# (vd: commit cập nhật image tag của deploy.yml) vẫn được GitHub bỏ qua như thường.
+# push/pull_request chỉ chạy khi có sửa infrastructure/** hoặc chính file này ("paths:"), để
+# commit chỉ sửa code app không tốn runner. Phần "hạ tầng THẬT trên AWS bị lệch so với code"
+# (vd: có người lỡ xoá tay 1 tài nguyên khi code không đổi) do trigger "schedule" đảm nhiệm: mỗi
+# ngày plan 1 lần để so state với AWS thật; nếu lệch thì plan có thay đổi và job apply (prod chờ
+# Required reviewers phê duyệt) đưa hạ tầng về đúng cấu hình khai báo. Không lệch thì apply tự bỏ qua.
 #
 # DESTROY CHỈ chạy qua workflow_dispatch (tay), không bao giờ qua push/PR. TRƯỚC KHI bấm destroy
 # phải gỡ tài nguyên do Kubernetes tạo ra (ALB/NLB/EBS) và, với prod, làm thêm vài bước trên
@@ -43,7 +45,7 @@
 #     ALARM_EMAIL_ADDRESSES  = ["you@example.com"]       (dạng list HCL/JSON -> TF_VAR_alarm_email_addresses)
 #     ADMIN_SSH_CIDRS        = ["1.2.3.4/32"]            (dạng list HCL/JSON -> TF_VAR_admin_ssh_cidrs)
 #   Variables (tab "Variables", đều không bắt buộc):
-#     TF_AUTO_ENV            = môi trường tự động plan/apply cho PR + push (mặc định: prod)
+#     TF_AUTO_ENV            = môi trường tự động plan/apply cho PR + push + schedule (mặc định: prod)
 #     TF_VERSION             = phiên bản Terraform, nên ghim đúng bản đang dùng ở local
 #                              (mặc định: "~> 1.10" = bản 1.x mới nhất)
 #   Environments (Settings > Environments): tạo dev, test, prod; prod bật Required reviewers
@@ -55,8 +57,18 @@ name: Terraform - Infrastructure
 on:
   pull_request:
     branches: [main, thanhde]
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/terraform.yml"
   push:
     branches: [main, thanhde]
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/terraform.yml"
+  schedule:
+    # Quét drift hằng ngày lúc 20:00 UTC (= 03:00 sáng giờ Việt Nam). Schedule luôn chạy trên
+    # nhánh mặc định (main) nên không cần lọc nhánh/paths. Muốn thưa hơn thì đổi cron, vd weekly: "0 20 * * 0".
+    - cron: "0 20 * * *"
   workflow_dispatch:
     inputs:
       environment:
@@ -146,13 +158,13 @@ jobs:
                 DO_APPLY="false"
               fi
               ;;
-            push)
-              # Push vào main: apply. Push vào nhánh khác (thanhde): chỉ kiểm thử + plan.
+            push|schedule)
+              # Push vào main và schedule (luôn ở main): apply. Push vào nhánh khác (thanhde): chỉ kiểm thử + plan.
               ENV_NAME="$AUTO_ENV"; DO_DESTROY="false"
               if [ "$REF" = "refs/heads/main" ]; then DO_APPLY="true"; else DO_APPLY="false"; fi
               ;;
             *)
-              # pull_request: chỉ plan. Destroy KHÔNG BAO GIỜ chạy ngoài workflow_dispatch.
+              # pull_request: chỉ plan. Destroy KHÔNG BAO GIỜ chạy ngoài workflow_dispatch (kể cả schedule).
               ENV_NAME="$AUTO_ENV"; DO_APPLY="false"; DO_DESTROY="false"
               ;;
           esac
