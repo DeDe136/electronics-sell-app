@@ -17,3 +17,9 @@ variable "availability_zones" {
     error_message = "Cần đúng 2 Availability Zone."
   }
 }
+
+variable "flow_log_retention_days" {
+  description = "Số ngày giữ VPC Flow Logs trên CloudWatch Logs."
+  type        = number
+  default     = 14
+}
