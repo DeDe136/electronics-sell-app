@@ -3,9 +3,9 @@
 # -----------------------------------------------------------------------------
 # Luồng chạy (mỗi bước chỉ chạy khi bước trước đó thành công):
 #
-#   prepare ─┬─> static-checks (terraform fmt + validate)  ─┐
-#            └─> checkov       (quét bảo mật cấu hình)      ─┴─> plan ─┬─> apply   (chờ phê duyệt)
-#                                                                      └─> destroy (chờ phê duyệt)
+#  ┌─> prepare ───────────────────────────> checkov ──┐
+# ─┤                                                  ├─> plan ─┬─> apply (chờ phê duyệt)
+#  └─> static-checks (terraform fmt + validate) ──────┘         └─> destroy (chờ phê duyệt)
 #
 #   1) prepare       -> Xác định môi trường đích (dev|test|prod) và chế độ: chỉ plan / apply / destroy.
 #   2) static-checks -> terraform fmt -check + validate. Không cần AWS credentials.
@@ -15,7 +15,7 @@
 #   4) plan          -> terraform plan (đọc state trên S3, so với hạ tầng THẬT trên AWS), lưu
 #                       tfplan, cảnh báo nếu có tài nguyên bị XOÁ / THAY THẾ. Chế độ destroy thì
 #                       chạy "plan -destroy".
-#   5) apply/destroy -> Thực thi ĐÚNG file tfplan đã duyệt ở bước 4 (không plan lại), chỉ chạy
+#   5) apply/destroy -> Thực thi ĐÚNG file tfplan đã duyệt (không plan lại), chỉ chạy
 #                       khi có thay đổi và sau khi GitHub Environment (dev|test|prod) cho phép —
 #                       prod nên bật "Required reviewers".
 #
@@ -23,7 +23,7 @@
 #   - pull_request vào main/thanhde         : bước 1-4 (chỉ kiểm thử + plan, KHÔNG apply).
 #   - push vào thanhde                      : bước 1-4 (kiểm thử mỗi lần push, KHÔNG apply).
 #   - push vào main                         : bước 1-5, apply vào môi trường ở Variable TF_AUTO_ENV.
-#   - schedule (hằng ngày, luôn chạy trên main): bước 1-5 như push vào main — quét DRIFT (xem bên dưới).
+#   - schedule (hằng ngày, luôn chạy trên main): bước 1-5 như push vào main — quét DRIFT.
 #   - workflow_dispatch (bấm tay)           : chọn môi trường, rồi tick TỐI ĐA MỘT trong hai:
 #                                               * "apply"   -> bước 1-5 (apply), chỉ từ nhánh main
 #                                               * "destroy" -> bước 1-5 (destroy), chỉ từ nhánh main
@@ -102,8 +102,10 @@ concurrency:
 env:
   AWS_REGION: ap-southeast-1      # khớp "region" trong infrastructure/env/*/terraform.tfvars
   CHECKOV_VERSION: "3.3.21"       # ghim version để kết quả quét lặp lại được
-  TF_IN_AUTOMATION: "true"        # Terraform bớt gợi ý lệnh "terraform ..." trong output
-  TF_INPUT: "false"               # không bao giờ chờ nhập tay trên CI
+  # 2 biến TF_* dưới đây KHÔNG được tham chiếu bằng tên trong script: chính Terraform CLI tự đọc
+  # chúng từ môi trường mỗi khi chạy (dù là qua scripts/tf.sh hay gọi terraform trực tiếp).
+  TF_IN_AUTOMATION: "true"        # chỉ để output gọn hơn: Terraform bỏ các gợi ý "chạy terraform apply tiếp theo..."
+  TF_INPUT: "false"               # tương đương -input=false cho MỌI lệnh; thiếu biến thì Terraform treo chờ nhập
 
 defaults:
   run:
@@ -131,9 +133,6 @@ jobs:
           INPUT_ENV: ${{ inputs.environment }}
           INPUT_APPLY: ${{ inputs.apply }}
           INPUT_DESTROY: ${{ inputs.destroy }}
-          # Repository Variable (cùng kiểu với HELM_VALUES_FILE trong deploy.yml): đổi môi
-          # trường tự động deploy mà không phải sửa file này. Nên thử pipeline ở "dev"
-          # trước khi để "prod".
           AUTO_ENV: ${{ vars.TF_AUTO_ENV || 'prod' }}
         run: |
           case "$EVENT" in
@@ -198,11 +197,9 @@ jobs:
           terraform_version: ${{ vars.TF_VERSION || '~> 1.10' }}
           terraform_wrapper: false
 
-      # Giống "bash scripts/tf.sh <env> fmt -check" ở local.
       - name: terraform fmt -check
         run: terraform fmt -recursive -check -diff
 
-      # Giống "bash scripts/tf.sh <env> validate": -backend=false nên không đụng S3/state.
       - name: terraform init -backend=false
         run: terraform init -backend=false
 
@@ -313,7 +310,8 @@ jobs:
       TARGET_ENV: ${{ needs.prepare.outputs.env }}
       DO_DESTROY: ${{ needs.prepare.outputs.do_destroy }}
       # Giá trị cá nhân: tf.sh đọc từ env/<env>/secrets.tfvars khi chạy local, còn trên
-      # CI thì truyền qua TF_VAR_* (xem comment trong scripts/tf.sh).
+      # CI thì truyền qua TF_VAR_*. Terraform tự ánh xạ biến môi
+      # trường TF_VAR_<tên> thành variable "<tên>" trong variables.tf, nên không cần -var ở đâu cả.
       TF_VAR_alarm_email_addresses: ${{ secrets.ALARM_EMAIL_ADDRESSES }}
       TF_VAR_admin_ssh_cidrs: ${{ secrets.ADMIN_SSH_CIDRS }}
     defaults:
@@ -456,7 +454,7 @@ jobs:
 
       # Apply EKS + RDS Multi-AZ mất ~25-40 phút nên xin session 2 giờ thay vì mặc định 1 giờ
       # (tránh credentials hết hạn giữa chừng làm state dở dang). Role phải có
-      # --max-session-duration >= 7200, xem docs/terraform-ci-github-actions-guide.md.
+      # --max-session-duration >= 7200.
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -485,9 +483,8 @@ jobs:
       - name: Terraform apply (saved plan)
         run: terraform apply -input=false -lock-timeout=10m tfplan
 
-      # Các output cần cho phần thủ công còn lại (docs/terraform-infrastructure-guide.md mục 6):
+      # Các output cần cho phần thủ công còn lại:
       # acm_validation_records, harbor_public_ip, alb_controller_role_arn...
-      # Repo PUBLIC thì nên xoá bước này để không lộ ARN/IP trong log công khai.
       - name: Show outputs
         run: |
           {
@@ -505,7 +502,7 @@ jobs:
   # Không bao giờ chạy qua push / pull_request. Môi trường prod PHẢI được Required reviewers
   # phê duyệt (cấu hình ở Settings > Environments > prod) giống job apply.
   #
-  # TIỀN ĐỀ BẮT BUỘC (làm tay trước khi bấm Run workflow, xem docs mục 6):
+  # TIỀN ĐỀ BẮT BUỘC (làm tay trước khi bấm Run workflow, xem docs/terraform-ci-github-action-guide.md mục 6):
   #   - Mọi môi trường: gỡ ALB/NLB/EBS do Kubernetes tạo ra (kubectl/helm), nếu không sẽ treo ở bước xoá VPC.
   #   - Riêng prod: Empty bucket ảnh, tắt Deletion Protection của RDS, xoá snapshot <name_prefix>-postgres-final.
   destroy:

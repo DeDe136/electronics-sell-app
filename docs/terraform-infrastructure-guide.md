@@ -219,7 +219,8 @@ helm uninstall traefik -n traefik
 helm uninstall kube-prometheus-stack -n monitoring     # Prometheus/Grafana/Alertmanager
 
 # đợi tới khi hết pod trong 2 namespace này rồi mới xoá PVC
-kubectl get pods -n traefik -n monitoring -w            # Ctrl+C khi không còn pod nào
+kubectl get pods -n traefik
+kubectl get pods -n monitoring
 
 kubectl delete ingress -A --all
 kubectl delete pvc -A --all
@@ -276,6 +277,13 @@ kỹ tên môi trường trước khi gõ `yes`.
  
 Bucket lưu state (`techshop-tfstate-<account-id>`) do `bootstrap-tfstate.sh` tạo và **không** thuộc state của
 Terraform nên `destroy` sẽ không xoá nó. Chỉ xoá bucket này khi đã xoá xong cả 3 môi trường và không còn cần state.
+
+Xóa bucket S3 lưu state (chỉ làm khi chắc chắn không còn môi trường nào cần Terraform nữa):
+
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+aws s3 rb s3://techshop-tfstate-${ACCOUNT_ID} --force
+```
 
 ## 8. Lỗi thường gặp
 
