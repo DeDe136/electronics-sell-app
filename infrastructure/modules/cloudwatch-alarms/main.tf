@@ -44,7 +44,8 @@ locals {
 }
 
 resource "aws_sns_topic" "this" {
-  name = "${var.name_prefix}-eks-control-plane-alarms"
+  name              = "${var.name_prefix}-eks-control-plane-alarms"
+  kms_master_key_id = "alias/aws/sns" # KMS managed key có sẵn, không tốn thêm chi phí tạo CMK
 }
 
 resource "aws_sns_topic_subscription" "email" {
