@@ -125,99 +125,7 @@ Required reviewers của `prod` áp dụng cho **cả apply lẫn destroy**: kh�
 destroy prod chạy ngay sau plan mà không chờ ai duyệt. `dev`/`test` không bắt buộc reviewers, nhưng nếu không bật thì
 destroy dev/test cũng chạy ngay sau plan.
 
-## 4. Triển khai hạ tầng tự động bằng GitHub Actions (lần đầu, môi trường prod)
-
-Mục này hướng dẫn dựng hạ tầng **từ state trống** hoàn toàn bằng pipeline. Môi trường mặc định là `prod` (Variable `TF_AUTO_ENV` mặc định), key state sẽ là
-`electronics-shop/prod/terraform.tfstate`.
-
-### 4.1 Điều kiện cần có
-
-- Đã làm xong mục 2 (role OIDC) và mục 3 (3 secret, Environment `prod` có Required reviewers + chỉ nhánh `main`).
-- Đã ghim Variable `TF_VERSION` đúng bản `terraform version` ở máy bạn (mục 3).
-- 2 key pair `harbor-keypair` và `bastion-host-keypair` **đã tồn tại** trong region `ap-southeast-1`. Thiếu thì plan báo
-  `InvalidKeyPair.NotFound`.
-- `s3_bucket_name` trong `infrastructure/env/prod/terraform.tfvars` chưa bị ai trên thế giới dùng (tên S3 là duy nhất toàn
-  cầu). Trùng tên thì plan vẫn qua, nhưng apply báo `BucketAlreadyExists`, lúc đó đổi tên rồi chạy lại.
-
-### 4.2 Bước 1: tạo bucket S3 lưu state (làm 1 lần, chạy ở máy local)
-
-Bucket lưu state phải có trước khi pipeline chạy, vì job `plan` cần `terraform init` vào backend S3. Chạy bằng Git Bash,
-WSL hoặc Linux (không dùng PowerShell), với AWS CLI đã `aws configure` đúng **account** mà role OIDC ở mục 2 thuộc về:
-
-```bash
-cd infrastructure
-bash scripts/bootstrap-tfstate.sh
-# Xong. State bucket: techshop-tfstate-<account-id>
-```
-
-Script tạo bucket `techshop-tfstate-<account-id>` (bật versioning, mã hoá, chặn public access). Pipeline suy ra đúng tên này
-từ account ID của role đang assume nên **không cần khai báo thêm** ở đâu. Bucket này nằm ngoài state của Terraform nên
-`destroy` không xoá nó. File state của prod sẽ tự được tạo ở lần apply đầu tiên.
-
-### 4.3 Bước 2: push một thay đổi nhỏ để kích hoạt pipeline
-
-Pipeline chỉ chạy khi commit sửa `infrastructure/**` hoặc `.github/workflows/terraform.yml` (cấu hình `paths:`), nên cần một
-commit nhỏ, ví dụ thêm hoặc chỉnh một dòng **comment** trong `infrastructure/main.tf` (hoặc trong `terraform.yml`), rồi push
-lên nhánh `<feature>`:
-
-```bash
-git checkout -b <feature>
-# sửa/thêm 1 dòng comment trong infrastructure/ hoặc .github/workflows/terraform.yml
-git add -A
-git commit -m "chore(infra): trigger the Terraform pipeline for the first time"
-git push origin <feature>
-```
-
-Vào **Actions → Terraform - Infrastructure**, run vừa tạo chạy các job 1–4 (`prepare`, `static-checks`, `checkov`, `plan`)
-trên `prod` và **không apply**. Mở **Job Summary** của job *Terraform Plan* để xem kết quả. Vì state đang trống nên kỳ vọng là
-`Plan: N to add, 0 to change, 0 to destroy` (N lớn: tạo toàn bộ VPC, EKS, RDS, S3, IAM...). Nếu thấy dòng `to destroy` hoặc
-`replace`, hãy dừng lại và kiểm tra trước khi đi tiếp.
-
-| Lỗi gặp ở bước này | Nguyên nhân / cách xử lý |
-|---|---|
-| `init` báo bucket không tồn tại / `AccessDenied` | Chưa làm bước 4.2, hoặc bucket nằm ở account/region khác với role OIDC |
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Trust policy ở mục 2 chưa đúng, xem mục 7 |
-| Job `checkov` fail | Có lỗi hard-fail mới, xem mục 5 |
-| `InvalidKeyPair.NotFound` | Chưa tạo 2 key pair ở mục 4.1 |
-
-### 4.4 Bước 3: tạo PR, merge vào `main` và duyệt apply
-
-1. Tạo Pull Request từ `<feature>` vào `main`. PR cũng chạy các job 1–4 để kiểm tra lại (không apply).
-2. Merge PR. Việc merge tạo một push vào `main` nên pipeline chạy đủ jobs 1–5.
-3. Sau khi `plan` xong, job **Terraform Apply** dừng ở trạng thái *Waiting* vì Environment `prod` có Required reviewers.
-   Mở run đó, bấm **Review deployments**, tick `prod`, rồi **Approve and deploy**.
-4. Job apply chạy đúng file `tfplan` đã review, mất khoảng 25–40 phút (EKS, RDS Multi-AZ). Khi xong, Job Summary hiển thị
-   toàn bộ `terraform output`.
-
-Nếu bạn đã bật *Prevent self-review* cho Environment thì người duyệt phải là người khác, không phải người merge. Nếu chưa bật
-Required reviewers thì apply sẽ chạy ngay sau plan, không chờ ai.
-
-### 4.5 Cách khác: chạy tay bằng `workflow_dispatch` (không cần commit/PR)
-
-Dùng khi muốn apply mà không phải sửa code rồi merge PR. Điều kiện: file `terraform.yml` **đã nằm trên nhánh `main`**
-(nút *Run workflow* chỉ xuất hiện khi file có trên nhánh mặc định, nên lần đầu tiên chưa có file trên `main` thì phải đi theo
-cách 4.3 + 4.4 trước).
-
-1. **Actions → Terraform - Infrastructure → Run workflow.**
-2. **Branch: `main`**, chọn môi trường `prod`.
-3. Tick **`apply`** (không tick `destroy`), bấm **Run workflow**. Không tick gì thì pipeline chỉ plan.
-4. Job apply cũng dừng chờ duyệt ở **Review deployments** như mục 4.4.
-
-### 4.6 Sau khi apply xong
-
-- **Kiểm tra tính nhất quán:** chạy lại một lần *Run workflow* (`prod`, không tick gì). Plan phải là `No changes`.
-- **Làm tiếp các việc thủ công** theo mục 6 của `docs/terraform-infrastructure-guide.md`: tạo CNAME xác thực ACM trên dynv6
-  từ output `acm_validation_records` (apply không chờ xác thực nên chứng chỉ ở trạng thái *Pending validation* cho tới khi bạn
-  tạo CNAME), tạo A record cho Harbor, bấm *Confirm subscription* trong email cảnh báo CloudWatch...
-- **Từ giờ về sau:** sửa code hạ tầng, push lên `<feature>` để xem plan, tạo PR, merge vào `main`, duyệt ở *Review deployments*.
-  Lịch hằng ngày tự quét drift và đề nghị apply nếu hạ tầng thật bị lệch.
-
-### 4.7 Muốn thử trên dev trước (tuỳ chọn)
-
-Chạy tay (4.5) và chọn môi trường `dev` là đủ. Nếu muốn push/PR cũng plan vào `dev`, đặt Variable `TF_AUTO_ENV = dev`
-rồi xoá Variable đó khi chuyển sang `prod`. Nhớ destroy dev khi không dùng (mục 6).
-
-## 5. Checkov
+## 4. Checkov (test ở local trước khi run workflow ở mục 5)
 
 Cấu hình: `infrastructure/.checkov.yaml`. Chạy local từ thư mục gốc repo, giống hệt CI:
 
@@ -257,6 +165,98 @@ Thứ tự gợi ý: các mục đầu rẻ và ít rủi ro nhất. Tất cả 
 | `CKV_AWS_394` | `aws_availability_zones` chưa ghim zone | Lọc theo `zone_ids`/tên cụ thể thay vì `slice(names, 0, 2)` |
 
 Sửa xong 1 mục: xoá ID đó khỏi `soft-fail-on` để từ nay nó thành hard fail, tránh tái phát.
+
+## 5. Triển khai hạ tầng tự động bằng GitHub Actions (lần đầu, môi trường prod)
+
+Mục này hướng dẫn dựng hạ tầng **từ state trống** hoàn toàn bằng pipeline. Môi trường mặc định là `prod` (Variable `TF_AUTO_ENV` mặc định), key state sẽ là
+`electronics-shop/prod/terraform.tfstate`.
+
+### 5.1 Điều kiện cần có
+
+- Đã làm xong mục 2 (role OIDC) và mục 3 (3 secret, Environment `prod` có Required reviewers + chỉ nhánh `main`).
+- Đã ghim Variable `TF_VERSION` đúng bản `terraform version` ở máy bạn (mục 3).
+- 2 key pair `harbor-keypair` và `bastion-host-keypair` **đã tồn tại** trong region `ap-southeast-1`. Thiếu thì plan báo
+  `InvalidKeyPair.NotFound`.
+- `s3_bucket_name` trong `infrastructure/env/prod/terraform.tfvars` chưa bị ai trên thế giới dùng (tên S3 là duy nhất toàn
+  cầu). Trùng tên thì plan vẫn qua, nhưng apply báo `BucketAlreadyExists`, lúc đó đổi tên rồi chạy lại.
+
+### 5.2 Bước 1: tạo bucket S3 lưu state (làm 1 lần, chạy ở máy local)
+
+Bucket lưu state phải có trước khi pipeline chạy, vì job `plan` cần `terraform init` vào backend S3. Chạy bằng Git Bash,
+WSL hoặc Linux (không dùng PowerShell), với AWS CLI đã `aws configure` đúng **account** mà role OIDC ở mục 2 thuộc về:
+
+```bash
+cd infrastructure
+bash scripts/bootstrap-tfstate.sh
+# Xong. State bucket: techshop-tfstate-<account-id>
+```
+
+Script tạo bucket `techshop-tfstate-<account-id>` (bật versioning, mã hoá, chặn public access). Pipeline suy ra đúng tên này
+từ account ID của role đang assume nên **không cần khai báo thêm** ở đâu. Bucket này nằm ngoài state của Terraform nên
+`destroy` không xoá nó. File state của prod sẽ tự được tạo ở lần apply đầu tiên.
+
+### 5.3 Bước 2: push một thay đổi nhỏ để kích hoạt pipeline
+
+Pipeline chỉ chạy khi commit sửa `infrastructure/**` hoặc `.github/workflows/terraform.yml` (cấu hình `paths:`), nên cần một
+commit nhỏ, ví dụ thêm hoặc chỉnh một dòng **comment** trong `infrastructure/main.tf` (hoặc trong `terraform.yml`), rồi push
+lên nhánh `<feature>`:
+
+```bash
+git checkout -b <feature>
+# sửa/thêm 1 dòng comment trong infrastructure/ hoặc .github/workflows/terraform.yml
+git add .
+git commit -m "chore(infra): trigger the Terraform pipeline for the first time"
+git push origin <feature>
+```
+
+Vào **Actions → Terraform - Infrastructure**, run vừa tạo chạy các job 1–4 (`prepare`, `static-checks`, `checkov`, `plan`)
+trên `prod` và **không apply**. Mở **Job Summary** của job *Terraform Plan* để xem kết quả. Vì state đang trống nên kỳ vọng là
+`Plan: N to add, 0 to change, 0 to destroy` (N lớn: tạo toàn bộ VPC, EKS, RDS, S3, IAM...). Nếu thấy dòng `to destroy` hoặc
+`replace`, hãy dừng lại và kiểm tra trước khi đi tiếp.
+
+| Lỗi gặp ở bước này | Nguyên nhân / cách xử lý |
+|---|---|
+| `init` báo bucket không tồn tại / `AccessDenied` | Chưa làm bước 5.2, hoặc bucket nằm ở account/region khác với role OIDC |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Trust policy ở mục 2 chưa đúng, xem mục 7 |
+| Job `checkov` fail | Có lỗi hard-fail mới, xem mục 4 |
+| `InvalidKeyPair.NotFound` | Chưa tạo 2 key pair ở mục 5.1 |
+
+### 5.4 Bước 3: tạo PR, merge vào `main` và duyệt apply
+
+1. Tạo Pull Request từ `<feature>` vào `main`. PR cũng chạy các job 1–4 để kiểm tra lại (không apply).
+2. Merge PR. Việc merge tạo một push vào `main` nên pipeline chạy đủ jobs 1–5.
+3. Sau khi `plan` xong, job **Terraform Apply** dừng ở trạng thái *Waiting* vì Environment `prod` có Required reviewers.
+   Mở run đó, bấm **Review deployments**, tick `prod`, rồi **Approve and deploy**.
+4. Job apply chạy đúng file `tfplan` đã review, mất khoảng 25–40 phút (EKS, RDS Multi-AZ). Khi xong, Job Summary hiển thị
+   toàn bộ `terraform output`.
+
+Nếu bạn đã bật *Prevent self-review* cho Environment thì người duyệt phải là người khác, không phải người merge. Nếu chưa bật
+Required reviewers thì apply sẽ chạy ngay sau plan, không chờ ai.
+
+### 5.5 Cách khác: chạy tay bằng `workflow_dispatch` (không cần commit/PR)
+
+Dùng khi muốn apply mà không phải sửa code rồi merge PR. Điều kiện: file `terraform.yml` **đã nằm trên nhánh `main`**
+(nút *Run workflow* chỉ xuất hiện khi file có trên nhánh mặc định, nên lần đầu tiên chưa có file trên `main` thì phải đi theo
+cách 5.3 + 5.4 trước).
+
+1. **Actions → Terraform - Infrastructure → Run workflow.**
+2. **Branch: `main`**, chọn môi trường `prod`.
+3. Tick **`apply`** (không tick `destroy`), bấm **Run workflow**. Không tick gì thì pipeline chỉ plan.
+4. Job apply cũng dừng chờ duyệt ở **Review deployments** như mục 5.4.
+
+### 5.6 Sau khi apply xong
+
+- **Kiểm tra tính nhất quán:** chạy lại một lần *Run workflow* (`prod`, không tick gì). Plan phải là `No changes`.
+- **Làm tiếp các việc thủ công** theo mục 6 của `docs/terraform-infrastructure-guide.md`: tạo CNAME xác thực ACM trên dynv6
+  từ output `acm_validation_records` (apply không chờ xác thực nên chứng chỉ ở trạng thái *Pending validation* cho tới khi bạn
+  tạo CNAME), tạo A record cho Harbor, bấm *Confirm subscription* trong email cảnh báo CloudWatch...
+- **Từ giờ về sau:** sửa code hạ tầng, push lên `<feature>` để xem plan, tạo PR, merge vào `main`, duyệt ở *Review deployments*.
+  Lịch hằng ngày tự quét drift và đề nghị apply nếu hạ tầng thật bị lệch.
+
+### 5.7 Muốn thử trên dev trước (tuỳ chọn)
+
+Chạy tay (5.5) và chọn môi trường `dev` là đủ. Nếu muốn push/PR cũng plan vào `dev`, đặt Variable `TF_AUTO_ENV = dev`
+rồi xoá Variable đó khi chuyển sang `prod`. Nhớ destroy dev khi không dùng (mục 6).
 
 ## 6. Destroy hạ tầng bằng workflow_dispatch
 
