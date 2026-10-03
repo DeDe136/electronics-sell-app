@@ -15,9 +15,10 @@ locals {
 module "vpc" {
   source = "./modules/vpc"
 
-  name_prefix        = var.name_prefix
-  vpc_cidr           = var.vpc_cidr
-  availability_zones = local.azs
+  name_prefix              = var.name_prefix
+  vpc_cidr                 = var.vpc_cidr
+  availability_zones       = local.azs
+  flow_log_retention_days  = var.vpc_flow_log_retention_days
 }
 
 # ── EKS (cluster + node group + OIDC) ──────────────────────────────────

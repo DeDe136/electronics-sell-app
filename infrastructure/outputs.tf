@@ -104,3 +104,4 @@ output "bastion_public_ip" {
 output "bastion_ssh_command" {
   value = "ssh -i ${var.bastion_key_name}.pem ubuntu@${module.bastion.public_ip}"
 }
+
