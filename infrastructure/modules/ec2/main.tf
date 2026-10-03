@@ -41,8 +41,9 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
 
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.this.id
-  ip_protocol       = "-1"
-  cidr_ipv4         = "0.0.0.0/0"
+  description        = "Allow all outbound traffic"
+  ip_protocol        = "-1"
+  cidr_ipv4          = "0.0.0.0/0"
 }
 
 # ── Instance ───────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ resource "aws_instance" "this" {
   vpc_security_group_ids      = [aws_security_group.this.id]
   key_name                    = var.key_name # key pair ĐÃ CÓ SẴN trên AWS
   associate_public_ip_address = true
+  ebs_optimized                = true
 
   root_block_device {
     volume_type = "gp3"
