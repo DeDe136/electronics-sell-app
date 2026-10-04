@@ -43,9 +43,52 @@ locals {
   }
 }
 
+# ── KMS CMK mã hoá SNS topic ──────────────────────────────────────────────
+# CloudWatch Alarm KHÔNG publish được vào topic mã hoá bằng khoá AWS managed "alias/aws/sns": policy
+# của khoá đó không cho phép cloudwatch.amazonaws.com gọi kms:Decrypt/kms:GenerateDataKey và cũng không
+# sửa được (alarm báo "CloudWatch Alarms does not have authorization to access the SNS topic encryption
+# key" và email không bao giờ được gửi). Vì vậy phải dùng CMK tự quản kèm key policy dưới đây.
+# Checkov: CKV_AWS_109, CKV_AWS_111, CKV_AWS_356 — skip.
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "sns_kms" {
+  # Mẫu chuẩn AWS cho mọi key policy: root của account được toàn quyền, "*" chỉ trỏ tới chính key này.
+  statement {
+    sid     = "EnableIAMUserPermissions"
+    actions = ["kms:*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+    resources = ["*"]
+  }
+
+  # Quyền AWS yêu cầu để CloudWatch alarm publish được vào SNS topic mã hoá bằng CMK.
+  statement {
+    sid     = "AllowCloudWatchAlarmsToUseKey"
+    actions = ["kms:Decrypt", "kms:GenerateDataKey*", "kms:DescribeKey"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    resources = ["*"]
+  }
+}
+
+resource "aws_kms_key" "sns" {
+  description         = "${var.name_prefix} SNS topic cảnh báo EKS control plane (CloudWatch Alarm -> SNS)"
+  enable_key_rotation = true
+  policy              = data.aws_iam_policy_document.sns_kms.json
+}
+
+resource "aws_kms_alias" "sns" {
+  name          = "alias/${var.name_prefix}-sns-alarms"
+  target_key_id = aws_kms_key.sns.key_id
+}
+
 resource "aws_sns_topic" "this" {
   name              = "${var.name_prefix}-eks-control-plane-alarms"
-  kms_master_key_id = "alias/aws/sns" # KMS managed key có sẵn, không tốn thêm chi phí tạo CMK
+  kms_master_key_id = aws_kms_key.sns.arn
 }
 
 resource "aws_sns_topic_subscription" "email" {
