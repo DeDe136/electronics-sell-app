@@ -14,13 +14,13 @@ Tài liệu này mô tả pipeline `.github/workflows/terraform.yml`: tự độ
 
 | Sự kiện | Chạy gì |
 |---|---|
-| Pull request vào `main`/`thanhde` **có sửa `infrastructure/**` hoặc `terraform.yml`** | fmt, validate, Checkov, **plan**. Không apply |
+| Pull request vào `main`/`thanhde` **có sửa `infrastructure/**`, `security/.checkov.yaml` hoặc `terraform.yml`** | fmt, validate, Checkov, **plan**. Không apply |
 | Push vào `thanhde` (cùng điều kiện sửa file như trên) | Như trên (kiểm thử mỗi lần push, không cần tạo PR). Không apply |
 | Push vào `main` (cùng điều kiện sửa file như trên) | Như trên, rồi **apply** vào môi trường `TF_AUTO_ENV` (mặc định `prod`) nếu plan có thay đổi |
 | **Lịch hằng ngày** 20:00 UTC (03:00 sáng giờ Việt Nam), luôn chạy trên `main` | Như push vào `main`: fmt, validate, Checkov, plan, rồi apply nếu có **drift** (xem bên dưới) |
 | Bấm tay (`Actions` → `Terraform - Infrastructure` → `Run workflow`) | Chọn `dev`/`test`/`prod`, rồi tick **tối đa một** trong hai: `apply` hoặc `destroy`. Không tick gì = chỉ plan. Cả `apply` lẫn `destroy` chỉ được chạy từ nhánh `main` |
 
-**Vì sao có `paths:` và `schedule`:** push/PR chỉ chạy khi có sửa `infrastructure/**` hoặc chính file workflow, nên commit chỉ
+**Vì sao có `paths:` và `schedule`:** push/PR chỉ chạy khi có sửa `infrastructure/**`, `security/.checkov.yaml` (cấu hình cổng Checkov) hoặc chính file workflow, nên commit chỉ
 sửa code app không tốn runner. Việc phát hiện **drift** (hạ tầng thật trên AWS lệch so với code, vd: có người lỡ xoá tay một
 tài nguyên trong khi code không đổi) giao cho lịch hằng ngày: `plan` so state với AWS thật, nếu lệch thì job `apply` được kích
 hoạt để đưa hạ tầng về đúng cấu hình khai báo (prod chờ Required reviewers duyệt; không lệch thì apply tự bỏ qua). Đổi tần
@@ -127,44 +127,65 @@ destroy dev/test cũng chạy ngay sau plan.
 
 ## 4. Checkov (test ở local trước khi run workflow ở mục 5)
 
-Cấu hình: `infrastructure/.checkov.yaml`. Chạy local từ thư mục gốc repo, giống hệt CI:
+Danh sách check được bỏ qua nằm ở `security/.checkov.yaml`. Pipeline **không** truyền `--config-file`: nó đọc mọi dòng dạng `  - CKV_...` trong file đó, biến mỗi ID
+thành một tham số `--skip-check`, rồi cộng thêm skip riêng cho dev/test. Lý do: `--skip-check` trên dòng lệnh **thay thế**
+(không gộp) danh sách skip-check trong file cấu hình, nên CI tự dựng danh sách đầy đủ để dùng chung một nguồn mà vẫn thêm
+được skip theo môi trường.
+
+Chạy local giống hệt CI (từ thư mục gốc repo, Git Bash/WSL/Linux):
 
 ```bash
 pip install checkov
-checkov -d infrastructure --config-file infrastructure/.checkov.yaml \
-        --var-file infrastructure/env/prod/terraform.tfvars
+TARGET_ENV=prod    # dev | test | prod
+
+SKIP_IDS=$(grep -oE '^\s*-\s*CKV[A-Z0-9_]+' security/.checkov.yaml | grep -oE 'CKV[A-Z0-9_]+')
+EXTRA_ARGS=()
+for id in $SKIP_IDS; do EXTRA_ARGS+=(--skip-check "$id"); done
+if [ "$TARGET_ENV" != "prod" ]; then EXTRA_ARGS+=(--skip-check CKV_AWS_293); fi
+
+checkov -d infrastructure --framework terraform \
+        --var-file "infrastructure/env/${TARGET_ENV}/terraform.tfvars" \
+        "${EXTRA_ARGS[@]}" --quiet --compact
 ```
 
-Mỗi check Checkov thuộc 1 trong 3 nhóm:
+Với `prod` có thể chạy ngắn hơn bằng `checkov -d infrastructure --config-file security/.checkov.yaml --var-file
+infrastructure/env/prod/terraform.tfvars` vì prod không có skip riêng. Với `dev`/`test` thì phải dùng đoạn đầy đủ ở trên,
+nếu không `CKV_AWS_293` sẽ báo fail.
+
+Mỗi check Checkov thuộc 1 trong 2 nhóm:
 
 | Nhóm | Hành vi | Trong cấu hình hiện tại |
 |---|---|---|
-| Không khai báo trong file | **Hard fail**: chặn pipeline | Mọi check còn lại (SG mở `0.0.0.0/0`, RDS public, S3 không mã hoá, IAM `*:*`...) |
-| `soft-fail-on` | Hiện trong báo cáo/SARIF, **không chặn** | 11 check "nợ kỹ thuật" bên dưới (+ `CKV_AWS_293` chỉ soft-fail ở dev/test) |
-| `skip-check` | Chấp nhận có chủ đích, lý do ghi ngay trong file | 17 check (EKS endpoint public, Harbor/Bastion public IP, ACM wildcard, CMK...) |
+| Không khai báo trong file | **Hard fail**: chặn pipeline | Mọi check còn lại (SG mở `0.0.0.0/0`, RDS public, S3 không mã hoá, IAM `*:*`...), kể cả `CKV_AWS_293` ở prod |
+| `skip-check` | Chấp nhận có chủ đích, lý do ghi ngay trong file | 20 check, xem bảng bên dưới. Dev/test được pipeline tự thêm `CKV_AWS_293` |
 
-Riêng `prod`, CI ép `CKV_AWS_293` (RDS deletion protection) thành hard fail; `dev`/`test` cố ý tắt nên chỉ soft-fail.
+### Các check đang được skip
 
-### Nợ kỹ thuật cần xử lý dần (soft-fail)
-
-Thứ tự gợi ý: các mục đầu rẻ và ít rủi ro nhất. Tất cả đều là thay đổi tại chỗ (không buộc tạo lại tài nguyên) nhưng hãy
-đọc kỹ `plan` trước khi apply ở prod.
-
-| Check | Vấn đề | Hướng sửa |
+| Lý do | Check | Giải thích |
 |---|---|---|
-| `CKV2_AWS_12` | Default Security Group của VPC còn rule mặc định | Thêm `aws_default_security_group` không có rule nào (kiểm tra không có tài nguyên nào đang dùng default SG) |
-| `CKV_AWS_21` | Bucket ảnh chưa bật versioning | Thêm `aws_s3_bucket_versioning` |
-| `CKV_AWS_23` | Egress rule của SG (module `ec2`) thiếu description | Thêm `description` cho `aws_vpc_security_group_egress_rule.all` |
-| `CKV2_AWS_60` | RDS không copy tag sang snapshot | `copy_tags_to_snapshot = true` |
-| `CKV_AWS_129` | RDS không xuất log lên CloudWatch | `enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]` |
-| `CKV2_AWS_30` | RDS chưa bật query logging | Parameter group riêng với `log_min_duration_statement`; đổi parameter group có thể cần reboot (Multi-AZ sẽ failover) |
-| `CKV_AWS_118` | RDS chưa bật Enhanced Monitoring | `monitoring_interval = 60` + IAM role cho monitoring |
-| `CKV2_AWS_41` | Harbor/Bastion chưa có IAM role | Gắn instance profile (vd: SSM) để giảm phụ thuộc SSH |
-| `CKV2_AWS_11` | VPC chưa bật Flow Logs | `aws_flow_log` → CloudWatch Logs/S3 (phát sinh chi phí log) |
-| `CKV_AWS_58` | EKS chưa mã hoá Kubernetes Secrets bằng KMS | `encryption_config` + KMS key. **Không thể tắt lại** sau khi bật |
-| `CKV_AWS_394` | `aws_availability_zones` chưa ghim zone | Lọc theo `zone_ids`/tên cụ thể thay vì `slice(names, 0, 2)` |
+| Kiến trúc mạng | `CKV_AWS_38`, `CKV_AWS_39` | EKS endpoint public + private để `kubectl` truy cập từ ngoài VPC |
+| | `CKV_AWS_130`, `CKV_AWS_88` | Public subnet chứa ALB/NAT/Harbor/Bastion; Harbor và Bastion có public IP, SSH chỉ mở cho `admin_ssh_cidrs` |
+| | `CKV2_AWS_71` | Chứng chỉ ACM wildcard `*.<domain>` dùng chung cho 6 sub-domain |
+| Bucket ảnh sản phẩm | `CKV_AWS_144`, `CKV2_AWS_62`, `CKV_AWS_18` | Cross-region replication, event notification, access logging: chi phí/độ phức tạp không tương xứng |
+| Mã hoá không cần CMK riêng | `CKV_AWS_145`, `CKV_AWS_158`, `CKV_AWS_354` | S3 dùng SSE-S3; log group của VPC Flow Logs và RDS Performance Insights dùng khoá mặc định, tránh phí ~1 USD/khoá/tháng |
+| Cân đối chi phí | `CKV_AWS_338`, `CKV_AWS_126` | Retention log < 1 năm (EKS dev 14d / test 30d / prod 90d, Flow Logs 14d); EC2 detailed monitoring tính phí |
+| Không áp dụng | `CKV_AWS_161` | App đăng nhập RDS bằng master password do Secrets Manager quản lý, không dùng IAM authentication |
+| | `CKV2_AWS_41` | Harbor/Bastion không gọi AWS API nên không cần instance profile |
+| Key policy của KMS CMK (module `eks`, `cloudwatch-alarms`) | `CKV_AWS_109`, `CKV_AWS_111`, `CKV_AWS_356` | Statement `EnableIAMUserPermissions` (`kms:*`, `Resource "*"`) là mẫu chuẩn AWS cho mọi key policy; `"*"` chỉ trỏ tới chính key đó. Checkov hiểu nhầm là IAM policy thường |
+| **TODO** (cần đổi app trước khi bật) | `CKV2_AWS_69` | RDS encryption in transit (`rds.force_ssl = 1`): phải đổi connection string của app sang `sslmode=require` trước khi bật, không bật ngầm qua Checkov |
+| Thông tin, không phải rủi ro bảo mật | `CKV_AWS_394` | Data source lấy danh sách AZ động theo thiết kế (xem `main.tf`) |
 
-Sửa xong 1 mục: xoá ID đó khỏi `soft-fail-on` để từ nay nó thành hard fail, tránh tái phát.
+### Lưu ý khi dùng Checkov
+
+- **`CKV_AWS_293` (RDS deletion protection) không nằm trong file skip.** Prod bị ép: ai đặt `db_deletion_protection = false` trong
+  `env/prod/terraform.tfvars` sẽ làm job `checkov` fail. Dev/test cố ý tắt nên được pipeline tự thêm skip.
+- **Giữ đúng định dạng file `security/.checkov.yaml`:** mỗi check một dòng riêng, đúng dạng `  - CKV_AWS_xx # lý do`. Dòng bắt đầu bằng
+  `#` bị bỏ qua. **Đừng thêm danh sách nào khác chứa ID CKV vào file** (`check:`, `soft-fail-on:`, `hard-fail-on:`...) vì mọi dòng
+  `- CKV...` đều bị coi là skip. Nếu file không còn dòng nào, mọi check đều là hard fail (hướng an toàn).
+- **Muốn skip thêm một check:** thêm vào `security/.checkov.yaml` kèm lý do, đừng sửa lệnh trong workflow.
+- **Đừng dùng `--hard-fail-on` một mình.** Khi chỉ truyền cờ này, Checkov chỉ trả mã thoát 1 cho đúng check được liệt kê, còn mọi
+  lỗi khác trở thành "mềm" (mã thoát 0), tức là cổng chặn của pipeline bị vô hiệu hoá.
+- **Gỡ một check khỏi `skip-check`** (sau khi đã sửa code) để từ nay nó thành hard fail, tránh tái phát.
 
 ## 5. Triển khai hạ tầng tự động bằng GitHub Actions (lần đầu, môi trường prod)
 
@@ -197,7 +218,7 @@ từ account ID của role đang assume nên **không cần khai báo thêm** �
 
 ### 5.3 Bước 2: push một thay đổi nhỏ để kích hoạt pipeline
 
-Pipeline chỉ chạy khi commit sửa `infrastructure/**` hoặc `.github/workflows/terraform.yml` (cấu hình `paths:`), nên cần một
+Pipeline chỉ chạy khi commit sửa `infrastructure/**`, `security/.checkov.yaml` hoặc `.github/workflows/terraform.yml` (cấu hình `paths:`), nên cần một
 commit nhỏ, ví dụ thêm hoặc chỉnh một dòng **comment** trong `infrastructure/main.tf` (hoặc trong `terraform.yml`), rồi push
 lên nhánh `<feature>`:
 
@@ -346,7 +367,7 @@ Sau khi destroy:
    workflow nào (push, PR...) cho các sự kiện sinh ra từ `GITHUB_TOKEN`, trừ `workflow_dispatch` và `repository_dispatch`.
 2. Message commit có `[skip ci]`, GitHub bỏ qua mọi workflow kiểu push/PR cho commit đó (không có cú pháp bỏ qua riêng từng
    workflow, `[skip ci]` áp dụng cho tất cả).
-3. Commit chỉ sửa file values trong `helm/**`, không khớp `paths:` (`infrastructure/**`, `terraform.yml`).
+3. Commit chỉ sửa file values trong `helm/**`, không khớp `paths:` (`infrastructure/**`, `security/.checkov.yaml`, `terraform.yml`).
 
 Nếu sau này `deploy.yml` đổi sang push bằng PAT/GitHub App token (khi đó lý do 1 không còn), lý do 2 và 3 vẫn giữ nguyên
 hành vi. Lịch hằng ngày (`schedule`) không chịu ảnh hưởng của `[skip ci]` vì không phải sự kiện push.
