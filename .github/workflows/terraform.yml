@@ -11,7 +11,7 @@
 #   2) static-checks -> terraform fmt -check + validate. Không cần AWS credentials.
 #   3) checkov       -> Quét bảo mật code Terraform TRƯỚC KHI đụng tới AWS. Có lỗi
 #                       "hard fail" là dừng ngay, plan/apply/destroy không chạy. Cấu hình ở
-#                       infrastructure/.checkov.yaml (skip / soft-fail có ghi lý do).
+#                       security/.checkov.yaml (danh sách skip-check, có ghi lý do).
 #   4) plan          -> terraform plan (đọc state trên S3, so với hạ tầng THẬT trên AWS), lưu
 #                       tfplan, cảnh báo nếu có tài nguyên bị XOÁ / THAY THẾ. Chế độ destroy thì
 #                       chạy "plan -destroy".
@@ -29,8 +29,8 @@
 #                                               * "destroy" -> bước 1-5 (destroy), chỉ từ nhánh main
 #                                             Không tick gì = chỉ plan.
 #
-# push/pull_request chỉ chạy khi có sửa infrastructure/** hoặc chính file này ("paths:"), để
-# commit chỉ sửa code app không tốn runner. Phần "hạ tầng THẬT trên AWS bị lệch so với code"
+# push/pull_request chỉ chạy khi có sửa infrastructure/**, security/.checkov.yaml (cấu hình
+# cổng Checkov) hoặc chính file này ("paths:"), để commit chỉ sửa code app không tốn runner. Phần "hạ tầng THẬT trên AWS bị lệch so với code"
 # (vd: có người lỡ xoá tay 1 tài nguyên khi code không đổi) do trigger "schedule" đảm nhiệm: mỗi
 # ngày plan 1 lần để so state với AWS thật; nếu lệch thì plan có thay đổi và job apply (prod chờ
 # Required reviewers phê duyệt) đưa hạ tầng về đúng cấu hình khai báo. Không lệch thì apply tự bỏ qua.
@@ -59,11 +59,13 @@ on:
     branches: [main, thanhde]
     paths:
       - "infrastructure/**"
+      - "security/.checkov.yaml"
       - ".github/workflows/terraform.yml"
   push:
     branches: [main, thanhde]
     paths:
       - "infrastructure/**"
+      - "security/.checkov.yaml"
       - ".github/workflows/terraform.yml"
   schedule:
     # Quét drift hằng ngày lúc 20:00 UTC (= 03:00 sáng giờ Việt Nam). Schedule luôn chạy trên
@@ -209,8 +211,8 @@ jobs:
   # ===========================================================================
   # JOB 3: CHECKOV — QUÉT BẢO MẬT CẤU HÌNH TERRAFORM TRƯỚC KHI DEPLOY
   # ===========================================================================
-  # Quét kèm tfvars của ĐÚNG môi trường sắp deploy (vd: prod bật deletion_protection,
-  # dev thì không) nên kết quả phản ánh cấu hình thật chứ không phải giá trị mặc định.
+  # Quét kèm tfvars của ĐÚNG môi trường sắp deploy (vd: tên miền ACM, retention log) nên kết
+  # quả phản ánh cấu hình thật chứ không phải giá trị mặc định của biến.
   checkov:
     name: 🛡️ Checkov - Terraform Security Scan
     needs: prepare
@@ -234,23 +236,40 @@ jobs:
 
       # Chạy 1 lần duy nhất, giữ lại mã thoát để upload báo cáo xong mới quyết định pass/fail
       # (cùng ý tưởng "generate SARIF -> upload -> gate" với các job Trivy ở ci.yml).
-      #   - Check không nằm trong .checkov.yaml  => hard fail (chặn pipeline)
-      #   - soft-fail-on                         => hiện trong báo cáo, không chặn
-      #   - skip-check                           => đã chấp nhận có chủ đích
-      # Riêng PROD: ép CKV_AWS_293 (RDS deletion protection) thành hard fail.
+      #   - Check không nằm trong security/.checkov.yaml => hard fail (chặn pipeline)
+      #   - Check có trong danh sách skip-check của file đó  => đã chấp nhận có chủ đích (kèm lý do)
+      #
+      # Vì sao KHÔNG dùng --config-file mà tự dựng --skip-check từ file:
+      #   --skip-check / --soft-fail-ontrên dòng lệnh THAY THẾ (không gộp) danh sách skip-check trong file cấu hình,
+      #   làm các check đã skip lại báo fail, nên cách an toàn để vừa dùng chung 1 danh sách vừa thêm skip riêng cho dev/test là CI tự
+      #   đọc toàn bộ ID rồi truyền hết qua --skip-check.
+      #   CKV_AWS_293 (RDS deletion protection) KHÔNG nằm trong file: prod bị ép kiểm tra, dev/test cố ý
+      #   tắt nên được thêm riêng ở dưới.
+      # Không dùng --hard-fail-on X: khi chỉ dùng cờ này, Checkov chỉ trả mã thoát 1 cho đúng check X,
+      #   mọi lỗi khác thành "mềm" (exit 0) -> cổng chặn bị vô hiệu hoá.
+      # --quiet --compact: chỉ in check FAIL, gọn log và để bước "Add Checkov summary" đếm đúng.
       - name: Run Checkov
         id: scan
         run: |
+          # Đọc danh sách skip-check từ security/.checkov.yaml (mỗi dòng "  - CKV_...")
+          # "|| true": file không có dòng nào thì SKIP_IDS rỗng (mọi check đều hard fail), không làm step lỗi.
+          SKIP_IDS=$(grep -oE '^\s*-\s*CKV[A-Z0-9_]+' security/.checkov.yaml | grep -oE 'CKV[A-Z0-9_]+' || true)
+
           EXTRA_ARGS=()
-          if [ "$TARGET_ENV" = "prod" ]; then
-            EXTRA_ARGS+=(--hard-fail-on CKV_AWS_293)
+          for id in $SKIP_IDS; do
+            EXTRA_ARGS+=(--skip-check "$id")
+          done
+          if [ "$TARGET_ENV" != "prod" ]; then
+            EXTRA_ARGS+=(--skip-check CKV_AWS_293)
           fi
+          echo "Môi trường: $TARGET_ENV — số check được skip: $(( ${#EXTRA_ARGS[@]} / 2 ))"
 
           rc=0
           checkov -d infrastructure \
-            --config-file infrastructure/.checkov.yaml \
+            --framework terraform \
             --var-file "infrastructure/env/${TARGET_ENV}/terraform.tfvars" \
             "${EXTRA_ARGS[@]}" \
+            --quiet --compact \
             -o cli -o sarif --output-file-path checkov-results || rc=$?
 
           echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
@@ -502,7 +521,7 @@ jobs:
   # Không bao giờ chạy qua push / pull_request. Môi trường prod PHẢI được Required reviewers
   # phê duyệt (cấu hình ở Settings > Environments > prod) giống job apply.
   #
-  # TIỀN ĐỀ BẮT BUỘC (làm tay trước khi bấm Run workflow, xem docs/terraform-ci-github-action-guide.md mục 6):
+  # TIỀN ĐỀ BẮT BUỘC (làm tay trước khi bấm Run workflow, xem docs/terraform-ci-github-actions-guide.md mục 6):
   #   - Mọi môi trường: gỡ ALB/NLB/EBS do Kubernetes tạo ra (kubectl/helm), nếu không sẽ treo ở bước xoá VPC.
   #   - Riêng prod: Empty bucket ảnh, tắt Deletion Protection của RDS, xoá snapshot <name_prefix>-postgres-final.
   destroy:
