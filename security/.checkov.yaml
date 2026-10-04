@@ -19,15 +19,12 @@
 #      (vd: mở SG 0.0.0.0/0 cổng 22, RDS public, S3 không mã hoá, IAM "*:*"...)
 #   2) skip-check                     -> chấp nhận có chủ đích (lý do ghi ngay bên cạnh).
 #
-# Các khoá framework/quiet/compact/download-external-modules dưới đây chỉ có tác dụng khi chạy
+# Các khoá framework/quiet/compact dưới đây chỉ có tác dụng khi chạy
 # local với --config-file security/.checkov.yaml (dùng được cho prod vì không có skip riêng).
 # =============================================================================
 
 framework:
   - terraform
-
-# Module nằm trong repo (./modules/*) nên không cần tải module ngoài.
-download-external-modules: false
 
 quiet: true
 compact: true
@@ -65,10 +62,6 @@ skip-check:
   - CKV_AWS_109   # "permissions management without constraints" (kms:*)
   - CKV_AWS_111   # "write access without constraints" (kms:*)
   - CKV_AWS_356   # Resource "*" (trong key policy nghĩa là "chính key này")
-
-  # ── TODO: cần đổi app trước khi bật, không bật ngầm qua Checkov ──
-  - CKV2_AWS_69 # RDS rds.force_ssl: PostgreSQL 15+ mặc định đã =1 nên DB đã bắt buộc SSL; chưa khai
-  # báo tường minh trong parameter group (chỉ để thoả Checkov, không đổi hành vi)
 
   # ── Thông tin, không phải rủi ro bảo mật ──
   - CKV_AWS_394 # Pin danh sách AZ — data source lấy AZ động theo thiết kế (xem main.tf), không ảnh hưởng bảo mật

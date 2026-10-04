@@ -157,7 +157,7 @@ Mỗi check Checkov thuộc 1 trong 2 nhóm:
 | Nhóm | Hành vi | Trong cấu hình hiện tại |
 |---|---|---|
 | Không khai báo trong file | **Hard fail**: chặn pipeline | Mọi check còn lại (SG mở `0.0.0.0/0`, RDS public, S3 không mã hoá, IAM `*:*`...), kể cả `CKV_AWS_293` ở prod |
-| `skip-check` | Chấp nhận có chủ đích, lý do ghi ngay trong file | 20 check, xem bảng bên dưới. Dev/test được pipeline tự thêm `CKV_AWS_293` |
+| `skip-check` | Chấp nhận có chủ đích, lý do ghi ngay trong file | 19 check, xem bảng bên dưới. Dev/test được pipeline tự thêm `CKV_AWS_293` |
 
 ### Các check đang được skip
 
@@ -172,7 +172,6 @@ Mỗi check Checkov thuộc 1 trong 2 nhóm:
 | Không áp dụng | `CKV_AWS_161` | App đăng nhập RDS bằng master password do Secrets Manager quản lý, không dùng IAM authentication |
 | | `CKV2_AWS_41` | Harbor/Bastion không gọi AWS API nên không cần instance profile |
 | Key policy của KMS CMK (module `eks`, `cloudwatch-alarms`) | `CKV_AWS_109`, `CKV_AWS_111`, `CKV_AWS_356` | Statement `EnableIAMUserPermissions` (`kms:*`, `Resource "*"`) là mẫu chuẩn AWS cho mọi key policy; `"*"` chỉ trỏ tới chính key đó. Checkov hiểu nhầm là IAM policy thường |
-| **TODO** (cần đổi app trước khi bật) | `CKV2_AWS_69` | RDS encryption in transit (`rds.force_ssl = 1`): phải đổi connection string của app sang `sslmode=require` trước khi bật, không bật ngầm qua Checkov |
 | Thông tin, không phải rủi ro bảo mật | `CKV_AWS_394` | Data source lấy danh sách AZ động theo thiết kế (xem `main.tf`) |
 
 ### Lưu ý khi dùng Checkov

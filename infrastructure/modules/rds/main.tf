@@ -52,6 +52,16 @@ resource "aws_db_parameter_group" "this" {
     name  = "log_min_duration_statement"
     value = "1000" # log câu query chạy > 1000ms, hữu ích để bắt query chậm
   }
+
+  # Bắt buộc SSL/TLS cho mọi kết nối tới DB (Checkov CKV2_AWS_69). PostgreSQL 15+ mặc định đã =1 nên khai báo
+  # tường minh ở đây không đổi hành vi, chỉ để cấu hình không phụ thuộc giá trị mặc định của AWS.
+  # "pending-reboot" hợp lệ cho cả tham số static lẫn dynamic (nếu để "immediate" mà đây là tham số static thì
+  # RDS từ chối lúc apply); DB được tạo cùng parameter group nên không có gì phải chờ reboot.
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
 }
 
 # ── IAM role cho RDS Enhanced Monitoring (metric chi tiết mỗi 60s) ──────
