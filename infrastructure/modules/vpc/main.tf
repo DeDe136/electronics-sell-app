@@ -166,10 +166,10 @@ resource "aws_iam_role_policy" "flow_log" {
 
 resource "aws_flow_log" "this" {
   vpc_id               = aws_vpc.this.id
-  traffic_type          = "ALL"
+  traffic_type         = "ALL"
   log_destination_type = "cloud-watch-logs"
-  log_destination       = aws_cloudwatch_log_group.flow_log.arn
-  iam_role_arn           = aws_iam_role.flow_log.arn
+  log_destination      = aws_cloudwatch_log_group.flow_log.arn
+  iam_role_arn         = aws_iam_role.flow_log.arn
 
   tags = { Name = "${var.name_prefix}-vpc-flow-log" }
 }
