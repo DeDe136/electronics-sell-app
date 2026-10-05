@@ -65,6 +65,17 @@ prometheus:
     hosts:
       - prometheus.techshop-tde.dynv6.net
     paths: ["/"]
+    # QUAN TRỌNG: sub-chart "prometheus" bên trong kube-prometheus-stack
+    # mặc định dùng "pathType: ImplementationSpecific" nếu không khai gì
+    # (khác hẳn chart Grafana — chart đó mặc định sẵn "Prefix"). Với AWS
+    # Load Balancer Controller, "ImplementationSpecific" + path "/" (không
+    # có "*") bị hiểu là CHỈ khớp CHÍNH XÁC path "/", không khớp path con
+    # nào khác. Prometheus tự redirect "/" -> "/query" (route mặc định của
+    # UI mới) — path "/query" đó không khớp rule, ALB trả 404 "page not
+    # found" dù Prometheus pod chạy hoàn toàn bình thường. Khai "Prefix"
+    # tường minh để "/" khớp luôn mọi path con (/query, /alerts, /graph,
+    # /api/v1/..., các file JS/CSS...).
+    pathType: Prefix
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
@@ -110,6 +121,12 @@ alertmanager:
     hosts:
       - alertmanager.techshop-tde.dynv6.net
     paths: ["/"]
+    # Cùng lý do với "prometheus.ingress.pathType" ở trên — sub-chart
+    # "alertmanager" cũng mặc định "ImplementationSpecific" nếu không khai
+    # gì, khiến ALB chỉ khớp đúng path "/" và chặn hết các request JS/CSS/
+    # API ở path khác -> giao diện tải được HTML rỗng nhưng JS không chạy
+    # -> màn hình trắng xoá. Khai "Prefix" tường minh để sửa.
+    pathType: Prefix
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
