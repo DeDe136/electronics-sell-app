@@ -295,7 +295,7 @@ cách 5.3 + 5.4 trước).
 - **Kiểm tra tính nhất quán:** chạy lại một lần *Run workflow* (`prod`, không tick gì). Plan phải là `No changes`.
 - **Làm tiếp các việc thủ công** theo mục 6 của `docs/terraform-infrastructure-guide.md`: tạo CNAME xác thực ACM trên dynv6
   từ output `acm_validation_records` (apply không chờ xác thực nên chứng chỉ ở trạng thái *Pending validation* cho tới khi bạn
-  tạo CNAME), tạo A record cho Harbor, bấm *Confirm subscription* trong email cảnh báo CloudWatch...
+  tạo CNAME), tạo A record cho Harbor, bấm *Confirm subscription* trong email cảnh báo CloudWatch... **Lưu ý** trước khi dùng `aws eks update-kubeconfig` để kết nối `kubectl` tới cluster EKS, phải lên AWS console vào cluster `techshop-cluster` -> tab Access -> Tại mục `IAM access entries` nhấn **Create** -> Ở bước Configure IAM access entry chọn IAM user mà bạn dùng để cấu hình AWS CLI (aws confiugure) -> Bước Add access policy chọn Policy `AmazonEKSClusterAdminPolicy` với Access scope là `Cluster` -> **Create** để cấp quyền cho IAM user truy cập cluster.
 - **Từ giờ về sau:** sửa code hạ tầng, push lên `<feature>` để xem plan, tạo PR, merge vào `main`, duyệt ở *Review deployments* - đối với repo public.
   Lịch hằng ngày tự quét drift và đề nghị apply nếu hạ tầng thật bị lệch.
 
