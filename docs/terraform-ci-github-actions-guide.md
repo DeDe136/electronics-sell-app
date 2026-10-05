@@ -49,7 +49,7 @@ Pipeline dùng GitHub OIDC để assume IAM role, **không lưu access key dài 
 
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-GH_REPO="<owner>/<repo>"     # vd: thanhde/electronics-sell-app-thanhde
+GH_REPO="<owner>/<repo>"     # vd: DeDe136/electronics-sell-app
 
 # 1) OIDC provider (nếu báo EntityAlreadyExists nghĩa là account đã có, bỏ qua)
 aws iam create-open-id-connect-provider \
@@ -119,11 +119,37 @@ Email nhận cảnh báo vẫn phải bấm *Confirm subscription* trong thư AW
 | `TF_AUTO_ENV` | `prod` | Môi trường mà PR, push (`main`, `thanhde`) và lịch hằng ngày plan tới; push `main` và lịch còn apply tới đây |
 | `TF_VERSION` | `~> 1.10` (1.x mới nhất) | **Nên ghim đúng bản đang dùng ở local** (`terraform version`), ví dụ `1.15.4`. State do bản Terraform mới hơn ghi sẽ không đọc được bằng bản cũ hơn ở máy bạn |
 
-**Settings → Environments:** tạo 3 environment `dev`, `test`, `prod`.
-Với `prod`: bật **Required reviewers** (chọn chính bạn) và **Deployment branches → Selected branches → `main`**.
-Required reviewers của `prod` áp dụng cho **cả apply lẫn destroy**: không bật thì push vào `main` sẽ apply thẳng, và
-destroy prod chạy ngay sau plan mà không chờ ai duyệt. `dev`/`test` không bắt buộc reviewers, nhưng nếu không bật thì
-destroy dev/test cũng chạy ngay sau plan.
+**Settings → Environments:** bấm *New environment*, tạo 3 environment `dev`, `test`, `prod`. Cách cấu hình `prod` phụ thuộc
+vào việc repo là public hay private, vì GitHub giới hạn tính năng theo loại repo và gói đang dùng:
+ 
+| Tính năng | Repo **public** (mọi gói) | Repo **private** (gói Free/Pro/Team) |
+|---|---|---|
+| Tạo environment, environment secrets/variables | Có | Có |
+| Deployment branches and tags | Có | Có |
+| Deployment protection rules (Required reviewers, wait timer) | Có | **Không có**, phải dùng GitHub Enterprise |
+ 
+**Repo public:** vào environment `prod` rồi làm 2 bước:
+ 
+1. Ở mục **Deployment protection rules**, tick **Required reviewers**, nhập chính username của bạn (hoặc một team), bấm
+   **Save protection rules**.
+2. Ở mục **Deployment branches and tags**, chọn **Selected branches and tags** → **Add deployment branch or tag rule** →
+   nhập `main`.
+Required reviewers của `prod` áp dụng cho **cả apply lẫn destroy**: job dừng ở trạng thái *Waiting* cho tới khi người được
+chỉ định duyệt ở *Review deployments* (mục 5.4). `dev`/`test` không bắt buộc reviewers, nhưng nếu không bật thì destroy
+dev/test chạy ngay sau plan.
+ 
+**Repo private:** trang environment **không có** mục *Deployment protection rules*, nên không bật được Required reviewers. Chỉ
+làm được bước 2 ở trên (Selected branches → `main`), đủ để job apply/destroy không chạy được từ nhánh khác `main`. Hệ quả là
+**không có bước duyệt**, các job apply/destroy chạy ngay sau plan:
+ 
+- Push vào `main` apply thẳng vào `TF_AUTO_ENV` (mặc định `prod`).
+- Lịch hằng ngày tự apply nếu phát hiện drift.
+- Destroy (bấm tay) chạy ngay sau plan.
+Vì vậy trên repo private, hãy đọc kỹ plan ở nhánh feature/PR trước khi merge vào `main`, và chỉ tick `destroy` khi chắc chắn.
+ 
+**Khi chuyển repo từ private sang public:** quay lại **Settings → Environments → `prod`** và làm bước 1 ở trên, vì Required
+reviewers chưa từng được bật nên sẽ không tự có. Ngược lại, nếu chuyển public → private thì các protection rule đã cấu hình
+sẽ bị bỏ qua. Trước khi public repo, hãy đọc mục 8: artifact `tfplan` và Job Summary (có ARN/IP) sẽ trở nên công khai.
 
 ## 4. Checkov (test ở local trước khi run workflow ở mục 5)
 
@@ -193,7 +219,7 @@ Mục này hướng dẫn dựng hạ tầng **từ state trống** hoàn toàn 
 
 ### 5.1 Điều kiện cần có
 
-- Đã làm xong mục 2 (role OIDC) và mục 3 (3 secret, Environment `prod` có Required reviewers + chỉ nhánh `main`).
+- Đã làm xong mục 2 (role OIDC) và mục 3 (3 secret, Environment `prod` có Required reviewers - Đối với repo public + chỉ nhánh `main`).
 - Đã ghim Variable `TF_VERSION` đúng bản `terraform version` ở máy bạn (mục 3).
 - 2 key pair `harbor-keypair` và `bastion-host-keypair` **đã tồn tại** trong region `ap-southeast-1`. Thiếu thì plan báo
   `InvalidKeyPair.NotFound`.
@@ -245,7 +271,7 @@ trên `prod` và **không apply**. Mở **Job Summary** của job *Terraform Pla
 
 1. Tạo Pull Request từ `<feature>` vào `main`. PR cũng chạy các job 1–4 để kiểm tra lại (không apply).
 2. Merge PR. Việc merge tạo một push vào `main` nên pipeline chạy đủ jobs 1–5.
-3. Sau khi `plan` xong, job **Terraform Apply** dừng ở trạng thái *Waiting* vì Environment `prod` có Required reviewers.
+3. Sau khi `plan` xong, job **Terraform Apply** dừng ở trạng thái *Waiting* - đối với repo public, vì Environment `prod` có Required reviewers.
    Mở run đó, bấm **Review deployments**, tick `prod`, rồi **Approve and deploy**.
 4. Job apply chạy đúng file `tfplan` đã review, mất khoảng 25–40 phút (EKS, RDS Multi-AZ). Khi xong, Job Summary hiển thị
    toàn bộ `terraform output`.
@@ -262,7 +288,7 @@ cách 5.3 + 5.4 trước).
 1. **Actions → Terraform - Infrastructure → Run workflow.**
 2. **Branch: `main`**, chọn môi trường `prod`.
 3. Tick **`apply`** (không tick `destroy`), bấm **Run workflow**. Không tick gì thì pipeline chỉ plan.
-4. Job apply cũng dừng chờ duyệt ở **Review deployments** như mục 5.4.
+4. Job apply cũng dừng chờ duyệt ở **Review deployments** - đối với repo public như mục 5.4.
 
 ### 5.6 Sau khi apply xong
 
@@ -270,7 +296,7 @@ cách 5.3 + 5.4 trước).
 - **Làm tiếp các việc thủ công** theo mục 6 của `docs/terraform-infrastructure-guide.md`: tạo CNAME xác thực ACM trên dynv6
   từ output `acm_validation_records` (apply không chờ xác thực nên chứng chỉ ở trạng thái *Pending validation* cho tới khi bạn
   tạo CNAME), tạo A record cho Harbor, bấm *Confirm subscription* trong email cảnh báo CloudWatch...
-- **Từ giờ về sau:** sửa code hạ tầng, push lên `<feature>` để xem plan, tạo PR, merge vào `main`, duyệt ở *Review deployments*.
+- **Từ giờ về sau:** sửa code hạ tầng, push lên `<feature>` để xem plan, tạo PR, merge vào `main`, duyệt ở *Review deployments* - đối với repo public.
   Lịch hằng ngày tự quét drift và đề nghị apply nếu hạ tầng thật bị lệch.
 
 ### 5.7 Muốn thử trên dev trước (tuỳ chọn)
@@ -281,7 +307,7 @@ rồi xoá Variable đó khi chuyển sang `prod`. Nhớ destroy dev khi không 
 ## 6. Destroy hạ tầng bằng workflow_dispatch
 
 Destroy là thao tác không thể hoàn tác, nên pipeline **chỉ** cho chạy bằng tay (`Run workflow`), từ nhánh `main`, và phải
-tick `destroy` (không tick cùng `apply`). Môi trường `prod` còn phải được **Required reviewers** phê duyệt.
+tick `destroy` (không tick cùng `apply`). Môi trường `prod` còn phải được **Required reviewers** - đối với repo public phê duyệt.
 **Bắt buộc làm đủ các bước tiền đề dưới đây TRƯỚC khi bấm Run workflow**, nếu không destroy sẽ treo hoặc báo lỗi giữa chừng
 (đã xoá dở một phần tài nguyên).
 
@@ -325,8 +351,7 @@ nên **không cần thực hiện** bước này. Prod thì cả ba đều chặ
 1. `Actions` → `Terraform - Infrastructure` → `Run workflow`, **Branch: `main`**, chọn môi trường, tick **`destroy`**, bỏ tick `apply`.
 2. Job `plan` chạy `plan -destroy`. Mở **Job Summary** của job này, kiểm tra kỹ danh sách tài nguyên sẽ bị xoá và đúng môi
    trường (dòng đầu tiên ghi rõ `plan -destroy — <môi trường>`).
-3. Với `prod` (và `dev`/`test` nếu đã bật reviewers): job `destroy` dừng chờ, người được chỉ định bấm **Review deployments →
-   Approve**. Từ chối thì không có gì bị xoá.
+3. Với `prod` - đối với repo public (và `dev`/`test` nếu đã bật reviewers): job `destroy` dừng chờ, người được chỉ định bấm **Review deployments → Approve**. Từ chối thì không có gì bị xoá.
 4. Job `destroy` thực thi đúng plan đã duyệt (~20–40 phút).
 
 Sau khi destroy:
