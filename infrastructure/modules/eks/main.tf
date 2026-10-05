@@ -55,10 +55,82 @@ resource "aws_iam_role_policy_attachment" "node" {
   policy_arn = each.value
 }
 
+# ── KMS CMK dùng chung: mã hoá Kubernetes Secrets (envelope encryption) và
+# log group control plane. Gộp 1 key cho 2 việc để đỡ tốn thêm CMK (~1 USD/
+# tháng mỗi key).
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "kms_key_policy" {
+  # Statement "EnableIAMUserPermissions" là mẫu chuẩn AWS khuyến nghị cho MỌI KMS key policy.
+  # Resource "*" ở đây chỉ áp dụng cho CHÍNH key này (ngữ nghĩa của key policy), không phải
+  # toàn bộ KMS trong account — không có statement này thì không ai (kể cả root) sửa được key
+  # policy nữa. Checkov: CKV_AWS_111, CKV_AWS_356, CKV_AWS_109 — skip.
+  statement {
+    sid     = "EnableIAMUserPermissions"
+    actions = ["kms:*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+    resources = ["*"]
+  }
+
+  # CloudWatch Logs service PHẢI được cấp quyền riêng trong key policy mới mã
+  # hoá được log group — quyền ở IAM role của cluster (dưới) không đủ.
+  statement {
+    sid     = "AllowCloudWatchLogs"
+    actions = ["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"]
+    principals {
+      type        = "Service"
+      identifiers = ["logs.${data.aws_region.current.region}.amazonaws.com"]
+    }
+    resources = ["*"]
+
+    condition {
+      test     = "ArnEquals"
+      variable = "kms:EncryptionContext:aws:logs:arn"
+      values   = ["arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.cluster_name}/cluster"]
+    }
+  }
+}
+
+data "aws_region" "current" {}
+
+resource "aws_kms_key" "this" {
+  description         = "${var.name_prefix} EKS secrets envelope encryption + log group"
+  enable_key_rotation = true
+  policy              = data.aws_iam_policy_document.kms_key_policy.json
+}
+
+resource "aws_kms_alias" "this" {
+  name          = "alias/${var.name_prefix}-eks"
+  target_key_id = aws_kms_key.this.key_id
+}
+
+# EKS service cần cluster role được quyền dùng CMK để mã hoá/giải mã Secrets
+data "aws_iam_policy_document" "kms_usage" {
+  statement {
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey",
+      "kms:CreateGrant",
+      "kms:Encrypt",
+    ]
+    resources = [aws_kms_key.this.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "cluster_kms" {
+  name   = "${var.name_prefix}-eks-cluster-kms-policy"
+  role   = aws_iam_role.cluster.id
+  policy = data.aws_iam_policy_document.kms_usage.json
+}
+
 # ── Log group: tạo TRƯỚC để Terraform quản lý retention và xoá khi destroy ──
 resource "aws_cloudwatch_log_group" "cluster" {
   name              = "/aws/eks/${var.cluster_name}/cluster"
   retention_in_days = var.log_retention_days
+  kms_key_id        = aws_kms_key.this.arn
 }
 
 # ── Cluster ────────────────────────────────────────────────────────────
@@ -82,6 +154,14 @@ resource "aws_eks_cluster" "this" {
     endpoint_private_access = true
   }
 
+  # Envelope encryption cho Kubernetes Secrets bằng CMK ở trên
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.this.arn
+    }
+    resources = ["secrets"]
+  }
+
   enabled_cluster_log_types = [
     "api",
     "audit",
@@ -92,6 +172,7 @@ resource "aws_eks_cluster" "this" {
 
   depends_on = [
     aws_iam_role_policy_attachment.cluster,
+    aws_iam_role_policy.cluster_kms, # cluster role cần quyền KMS trước khi EKS tạo cluster với encryption_config
     aws_cloudwatch_log_group.cluster,
   ]
 }

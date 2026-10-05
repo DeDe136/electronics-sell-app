@@ -1,0 +1,67 @@
+# =============================================================================
+# .CHECKOV.YAML — Danh sách check Checkov được chấp nhận bỏ qua (skip-check)
+# -----------------------------------------------------------------------------
+#
+# CÁCH PIPELINE DÙNG FILE NÀY (xem job "checkov" trong .github/workflows/terraform.yml):
+#   CI KHÔNG truyền --config-file. Nó đọc mọi dòng dạng "  - CKV..." ở dưới, biến mỗi ID thành một
+#   tham số "--skip-check <ID>" rồi gọi checkov. Lý do: tham số --skip-check trên dòng lệnh THAY THẾ
+#   (không gộp) danh sách skip-check trong file cấu hình, nên CI tự dựng danh sách đầy đủ, đồng thời
+#   cộng thêm skip riêng cho dev/test (CKV_AWS_293: RDS deletion protection).
+#
+# QUY ƯỚC BẮT BUỘC để việc đọc file ở trên đúng:
+#   - Mỗi check nằm trên MỘT dòng riêng, đúng dạng "  - CKV_AWS_xx # lý do" (dòng bắt đầu bằng # bị bỏ qua).
+#   - Đừng thêm danh sách nào khác chứa ID CKV vào file này (vd: check:, soft-fail-on:, hard-fail-on:),
+#     vì mọi dòng "- CKV..." đều bị coi là skip.
+#   - KHÔNG đưa CKV_AWS_293 vào đây: prod phải bị ép kiểm tra deletion protection.
+#
+# Hai nhóm kết quả:
+#   1) Check KHÔNG nằm trong file này -> HARD FAIL: lỗi là CHẶN pipeline.
+#      (vd: mở SG 0.0.0.0/0 cổng 22, RDS public, S3 không mã hoá, IAM "*:*"...)
+#   2) skip-check                     -> chấp nhận có chủ đích (lý do ghi ngay bên cạnh).
+#
+# Các khoá framework/quiet/compact dưới đây chỉ có tác dụng khi chạy
+# local với --config-file security/.checkov.yaml (dùng được cho prod vì không có skip riêng).
+# =============================================================================
+
+framework:
+  - terraform
+
+quiet: true
+compact: true
+
+skip-check:
+  # -- Kiến trúc mạng: cố ý để một số thành phần ở public subnet ---------------
+  - CKV_AWS_38    # EKS endpoint public cho 0.0.0.0/0: cố ý "Public and private" để kubectl/ArgoCD từ ngoài VPC
+  - CKV_AWS_39    # EKS endpoint public bật: như trên
+  - CKV_AWS_130   # Public subnet tự gán public IP: chứa ALB/NAT/Harbor/Bastion (public subnet theo thiết kế)
+  - CKV_AWS_88    # Harbor (registry công khai) & Bastion có public IP; SSH chỉ mở cho admin_ssh_cidrs (validation chặn 0.0.0.0/0)
+  - CKV2_AWS_71   # Chứng chỉ ACM wildcard *.<domain>: cố ý, 6 sub-domain dùng chung 1 cert
+
+  # -- Chi phí/độ phức tạp không tương xứng với bucket ảnh sản phẩm -------------
+  - CKV_AWS_144   # S3 cross-region replication
+  - CKV2_AWS_62   # S3 event notifications
+  - CKV_AWS_18    # S3 access logging
+
+  # -- Mã hoá bằng khoá do AWS quản lý là đủ, không cần thêm CMK (tốn $1/khoá/tháng + quản lý key policy) --
+  - CKV_AWS_145   # S3 dùng SSE-S3 (AES256, luôn bật) thay vì KMS CMK
+  - CKV_AWS_158   # CloudWatch Log Group của VPC Flow Logs không mã hoá bằng CMK (log metadata traffic, không nhạy cảm)
+  - CKV_AWS_354   # RDS Performance Insights không dùng CMK
+
+  # -- Cân đối chi phí ------------------------------------------------------------
+  - CKV_AWS_338   # Retention log >= 1 năm: chọn có chủ đích (EKS dev 14d / test 30d / prod 90d, VPC Flow Logs 14d)
+  - CKV_AWS_126   # EC2 detailed monitoring (1 phút) tính phí; Harbor/Bastion chỉ cần 5 phút
+
+  # -- Không áp dụng cho kiến trúc này -----------------------------------------
+  - CKV_AWS_161   # RDS IAM authentication: app đăng nhập bằng master password quản lý bởi Secrets Manager
+  - CKV2_AWS_41   # IAM role gắn vào EC2 — Harbor/Bastion không gọi AWS API nên không cần instance profile
+
+  # -- Key policy của KMS CMK (module eks, cloudwatch-alarms): statement "EnableIAMUserPermissions" ------------
+  # Mẫu chuẩn AWS khuyến nghị cho mọi key policy: kms:* + Resource "*" cho root account của CHÍNH tài
+  # khoản này. "*" trong key policy chỉ trỏ tới chính key đó. Thiếu statement này thì không ai (kể cả
+  # root) sửa được key policy nữa. Checkov hiểu nhầm policy document này là IAM policy thông thường.
+  - CKV_AWS_109   # "permissions management without constraints" (kms:*)
+  - CKV_AWS_111   # "write access without constraints" (kms:*)
+  - CKV_AWS_356   # Resource "*" (trong key policy nghĩa là "chính key này")
+
+  # ── Thông tin, không phải rủi ro bảo mật ──
+  - CKV_AWS_394 # Pin danh sách AZ — data source lấy AZ động theo thiết kế (xem main.tf), không ảnh hưởng bảo mật

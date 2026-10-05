@@ -35,6 +35,12 @@ variable "vpc_cidr" {
   type        = string
 }
 
+variable "vpc_flow_log_retention_days" {
+  description = "Số ngày giữ VPC Flow Logs trên CloudWatch Logs."
+  type        = number
+  default     = 14
+}
+
 ############################################
 # EKS
 ############################################
