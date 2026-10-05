@@ -52,11 +52,36 @@ on:
     - cron: "0 3 * * 1"
   workflow_dispatch: {}                # Cho phép bấm "Run workflow" thủ công
 
-# Hủy các lần chạy cũ hơn của cùng 1 PR/branch khi có commit mới đẩy lên,
-# tránh tốn tài nguyên CI chạy song song nhiều lần cho cùng 1 nhánh.
+# ──────────────────────────────────────────────────────────────────────────
+# CONCURRENCY — kiểm soát việc chạy song song / huỷ bớt các lần chạy CI
+#
+# Mục tiêu khác nhau cho 2 nhóm ref:
+#
+# 1) Nhánh "main": PHẢI cho chạy song song hoàn toàn, KHÔNG được huỷ hay
+#    xếp hàng bất kỳ lần nào — vì mỗi lần push vào main là 1 lần build/push
+#    image thật lên Harbor (qua deploy.yml). Nếu dùng chung 1 group cho mọi
+#    lần chạy trên main, cơ chế concurrency của GitHub chỉ cho phép tối đa
+#    1 lần ĐANG CHẠY + 1 lần ĐANG CHỜ (pending) trong cùng 1 group — nếu có
+#    lần thứ 3 đến trong khi lần thứ 2 còn đang chờ, lần thứ 2 sẽ bị HUỶ để
+#    nhường chỗ cho lần thứ 3, dù cancel-in-progress = false. Hệ quả: lần
+#    build bị huỷ đó không bao giờ đạt "success" -> workflow_run không kích
+#    hoạt -> deploy.yml bị bỏ lỡ -> thay đổi backend/frontend ở lần đó
+#    KHÔNG BAO GIỜ được build & push image, dù code đã lên main thật.
+#
+#    => Cách khắc phục: gắn thêm "run_id" (duy nhất cho từng lần chạy) vào
+#    group khi là main, để mỗi lần chạy trên main rơi vào 1 group CHỈ CÓ
+#    ĐÚNG NÓ -> không còn ai để tranh giành slot pending -> không bao giờ
+#    bị huỷ hay xếp hàng, chạy độc lập và song song hoàn toàn.
+#
+# 2) Nhánh khác (feature branch) / Pull Request: gom theo
+#    tên nhánh/PR, cancel-in-progress: true. Khi push thêm code mới vào
+#    cùng 1 nhánh/PR trong lúc CI cũ còn đang chạy dở, bản cũ sẽ bị huỷ
+#    ngay lập tức (vì code cũ đã lỗi thời), giúp tiết kiệm runner thay vì
+#    chạy xong 1 kết quả không còn ý nghĩa.
+# ──────────────────────────────────────────────────────────────────────────
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.ref == 'refs/heads/main' && format('ci-main-{0}', github.run_id) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # ===========================================================================
