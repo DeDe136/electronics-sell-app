@@ -549,6 +549,8 @@ dụ `products/iphone17promax/1.jpg`) → **S3 Console → bucket
 `techshop-images-bk` → Upload** → tạo đúng cấu trúc thư mục/tên file khớp
 chính xác từng key đó.
 
+Hoặc, download các ảnh mẫu có sẵn từ Google Drive có đường dẫn được đặt tại `docs/image-assets.txt`.
+
 ---
 
 ## Phần 21 — Tạo DNS cho 6 domain (ArgoCD, Grafana, App, Prometheus, Alertmanager, Rollouts)
