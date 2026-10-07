@@ -2,7 +2,7 @@
 
 ![Node.js](https://img.shields.io/badge/Node.js-20_LTS-339933?style=flat&logo=nodedotjs&logoColor=white)
 ![NestJS](https://img.shields.io/badge/NestJS-10.x-E0234E?style=flat&logo=nestjs&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat&logo=nextdotjs&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat&logo=nextdotjs&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat&logo=typescript&logoColor=white)
 ![MinIO](https://img.shields.io/badge/MinIO-latest-C72E49?style=flat&logo=minio&logoColor=white)
@@ -12,9 +12,9 @@
 > **Modular Monolith** — dễ tách thành Microservices khi cần scale.  
 > *Ứng dụng thương mại điện tử bán đồ điện tử, đánh giá trên WSL2 Ubuntu 22.04*
 >
-> Có 2 cách chạy project: cài **native** từng service theo hướng dẫn ở mục 5–7 bên dưới, hoặc
-> chạy **toàn bộ stack qua Docker Compose** (`docker compose -f docker/docker-compose.yml up -d --build`)
-> — xem chi tiết ở mục 10.
+> Có 4 cách chạy/triển khai project: cài **native** từng service theo hướng dẫn ở mục 5–7 bên dưới;
+> chạy **toàn bộ stack qua Docker Compose** (`docker compose -f docker/docker-compose.yml up -d --build`);
+> chạy trên **K3s + Helm** ở máy local; hoặc triển khai lên **AWS EKS** (thủ công hoặc bằng Terraform).
 
 ---
 
@@ -30,21 +30,44 @@
 8. [API Reference](#8-api-reference)
 9. [Biến môi trường](#9-biến-môi-trường)
 10. [DevSecOps](#10-devsecops)
-11. [Lộ trình tách Microservices](#11-lộ-trình-tách-microservices)
-12. [Troubleshooting](#12-troubleshooting)
+11. [Hướng dẫn khởi tạo CI-CD pipeline](#11-hướng-dẫn-khởi-tạo-ci-cd-pipeline)
+12. [Lộ trình tách Microservices](#12-lộ-trình-tách-microservices)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
 ## 1. Tổng quan kiến trúc
 
 ```
-Browser (Next.js 14 App Router)
+Browser (Next.js 15 App Router)
         │  HTTP / REST
         ▼
-NestJS API  ──►  PostgreSQL 16  (TypeORM, auto-sync dev)
+NestJS API  ──►  PostgreSQL  (TypeORM; local/Compose: 16, AWS RDS: 18)
         │
-        └──────►  MinIO / AWS S3  (ảnh sản phẩm, avatar)
+        └──────►  MinIO (local) / AWS S3 ở EKS  (ảnh sản phẩm, avatar)
 ```
+
+Khi triển khai lên **AWS EKS**, luồng chạy thật như sau:
+
+```
+Người dùng ─► DNS (dynv6) ─► NLB (giải mã TLS bằng chứng chỉ ACM)
+                                    │
+                                    ▼
+                    Traefik  (IngressRoute / TraefikService — chia % traffic canary)
+                      │                                   │
+                      ▼                                   ▼
+        frontend (Argo Rollout, Next.js)        backend (Argo Rollout, NestJS)
+                      │ /api/images/*                     │
+                      ▼                                   ├─► RDS PostgreSQL 18 Multi-AZ
+              S3 (bucket private,                         │     (mật khẩu ở Secrets Manager, lấy qua IRSA)
+               đọc qua IRSA)                              └─► S3 (upload/xóa ảnh, qua IRSA)
+```
+
+Phần vận hành đi kèm (không nằm trong luồng request): **Harbor** (registry chứa image), **Argo CD** (GitOps đồng bộ
+Helm chart), **Argo Rollouts** (canary), **KEDA** (autoscaling), **kube-prometheus-stack** (Prometheus + Grafana +
+Alertmanager), **GitHub Actions** (CI/CD, Terraform). Sơ đồ hạ tầng AWS:
+
+![AWS Architecture](docs/diagrams/AWS%20Architecture/AWS%20Architecture.png)
 
 **Modular Monolith** nghĩa là:
 - Mỗi business domain (`auth`, `catalog`, `cart`...) là một **NestJS Module hoàn toàn độc lập** — có controller, service, entity, DTO riêng.
@@ -61,59 +84,127 @@ NestJS API  ──►  PostgreSQL 16  (TypeORM, auto-sync dev)
 | MinIO API      | 9000  | http://localhost:9000            |
 | MinIO Console  | 9001  | http://localhost:9001            |
 | PostgreSQL     | 5432  | localhost:5432                   |
+| Backend metrics | 3001 | http://localhost:3001/metrics (ngoài prefix `api/v1`) |
 
 ---
 
 ## 2. Cây thư mục chi tiết
 
 ```
-electronics-shop/
+electronics-sell-app/
 │
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml              # [Placeholder] CI: lint → test → build Docker image
-│       └── deploy.yml          # [Placeholder] CD: deploy lên staging/production
+│       ├── ci.yml              # ✅ CI (7 job): phát hiện service đổi → lint + test backend/frontend → gitleaks
+│       │                       # → SonarQube → Trivy fs → build thử image + Trivy image
+│       ├── deploy.yml          # ✅ CD: chạy sau khi CI pass trên main → build → Trivy gate → push image lên
+│       │                       # Harbor (tag SHA + latest) → cập nhật backendTag/frontendTag trong Helm values
+│       └── terraform.yml       # ✅ IaC: fmt/validate → Checkov → plan → apply/destroy cho infrastructure/
 │
 ├── docker/
-│   ├── backend.Dockerfile      # ✅ Multi-stage build NestJS → production image (đã triển khai)
-│   ├── frontend.Dockerfile     # ✅ Multi-stage build Next.js standalone output (đã triển khai)
-│   └── docker-compose.yml      # ✅ Full stack: backend + frontend + postgres + minio (đã triển khai)
+│   ├── backend.Dockerfile      # ✅ Multi-stage build NestJS → production image (user non-root, dumb-init)
+│   ├── frontend.Dockerfile     # ✅ Multi-stage build Next.js standalone output
+│   ├── backend.Dockerfile.dockerignore / frontend.Dockerfile.dockerignore  # .dockerignore riêng cho từng Dockerfile
+│   ├── docker-compose.yml      # ✅ Full stack: backend + frontend + postgres + minio (+ minio-init tạo bucket)
+│   └── harbor/
+│       └── harbor-setup.md     # Hướng dẫn dựng Harbor private registry (Let's Encrypt hoặc self-signed)
 │
 ├── scripts/
-│   ├── migrate.sh              # [Placeholder] Chạy TypeORM migrations (production)
-│   └── seed.sh                 # Seed dữ liệu mẫu vào database (chạy được)
+│   ├── seed.sh                 # Seed dữ liệu mẫu vào database (chạy được)
+│   ├── seed-rds-via-bastion.sh # Seed RDS từ máy host thông qua bastion EC2
+│   ├── setup-harbor-ec2.sh     # Cài Harbor lên EC2 từ xa (chạy từ máy host qua SSH)
+│   ├── install-eks-tools.sh    # Cài tool nền tảng lên EKS: ALB Controller, EBS CSI, kube-prometheus-stack,
+│   │                           # KEDA, Argo Rollouts, Traefik, ArgoCD
+│   └── migrate.sh              # [Placeholder] Chạy TypeORM migrations (production)
 │
 ├── security/
-│   ├── .trivyignore            # Danh sách CVE bỏ qua khi scan Docker image bằng Trivy
-│   └── owasp-zap.conf          # Config OWASP ZAP automated security scan
+│   ├── .checkov.yaml           # Danh sách check Checkov được skip (kèm lý do); check khác = hard fail
+│   └── .trivyignore            # [Placeholder] Danh sách CVE bỏ qua khi scan bằng Trivy (hiện chưa có CVE nào)
 │
 ├── sonar-project.properties    # Config SonarQube/SonarCloud scanner (quét chung backend + frontend)
+├── .gitleaks.toml              # Config GitLeaks (allowlist file mẫu .env.example...)
+├── .gitattributes              # Chuẩn hóa line ending (LF) + đánh dấu file binary
+├── .gitignore                  # Ignore node_modules, .env, dist, .next, *.tfstate, secrets.tfvars...
 │
-├── .gitignore                  # Ignore node_modules, .env, dist, .next, minio-data...
+├── infrastructure/             # ════════ Terraform — hạ tầng AWS ════════
+│   ├── main.tf                 # Root module: ghép các module con
+│   ├── variables.tf / outputs.tf / provider.tf / versions.tf
+│   ├── backend.tf              # S3 backend (partial config, truyền phần còn lại lúc init)
+│   ├── modules/
+│   │   ├── vpc/                # VPC, 2 public + 2 private subnet, IGW, NAT gateway (mỗi AZ 1 cái), flow log
+│   │   ├── eks/                # Cluster (mã hóa KMS), node group, OIDC provider, add-on, access entry
+│   │   ├── rds/                # RDS PostgreSQL Multi-AZ, mật khẩu master do Secrets Manager quản lý
+│   │   ├── s3/                 # Bucket ảnh (private, versioning, mã hóa, lifecycle)
+│   │   ├── acm/                # Chứng chỉ wildcard (DNS validation)
+│   │   ├── ec2/                # EC2 Ubuntu 24.04 + Security Group (dùng cho Harbor và Bastion)
+│   │   ├── cloudwatch-alarms/  # Metric filter + alarm trên log control plane, SNS email
+│   │   └── iam-irsa/           # IAM policy + role IRSA: backend, frontend, ALB controller, EBS CSI
+│   ├── env/{dev,test,prod}/    # terraform.tfvars, backend.hcl, secrets.tfvars.example cho từng môi trường
+│   └── scripts/
+│       ├── bootstrap-tfstate.sh  # Tạo S3 bucket lưu Terraform state (chạy 1 lần)
+│       └── tf.sh                 # Wrapper chạy Terraform theo môi trường (tự init đúng backend + var-file)
+│
+├── helm/                       # 5 Helm chart — tiến hóa dần theo từng guide (xem mục 11)
+│   ├── electronics-shop/             # Deployment + HPA + Postgres/MinIO StatefulSet + Ingress Traefik (K3s)
+│   ├── electronics-shop-rollout/     # Argo Rollouts canary (TraefikService/IngressRoute)
+│   ├── electronics-shop-monitoring/  # + PodMonitor, Grafana dashboard-as-code, PrometheusRule (cảnh báo)
+│   ├── electronics-shop-keda/        # Thay HPA bằng KEDA ScaledObject (cpu + memory + Prometheus)
+│   └── electronics-shop-eks/         # Bản EKS: dùng RDS/S3 thay Postgres/MinIO, ServiceAccount IRSA
+│
+├── argo/                       # Argo CD / Argo Rollouts
+│   ├── argocd-application.example.yaml / argocd-application-eks.example.yaml   # mẫu Application
+│   ├── argocd-repo-secret.example.yaml                                         # mẫu credential repo private
+│   ├── argocd-server-values.yaml / argocd-server-values-eks.yaml               # values chart argo-cd (Ingress UI)
+│   └── argo-rollouts-values.yaml / argo-rollouts-values-eks.yaml               # values chart argo-rollouts (Dashboard)
+│
+├── keda/
+│   └── keda-values.yaml        # Values cài KEDA
+├── monitoring/
+│   ├── kube-prometheus-stack-values-example.yaml       # Mẫu values cho K3s local
+│   └── kube-prometheus-stack-values-eks-example.yaml   # Mẫu values cho EKS
+├── traefik/
+│   └── traefik-values-eks.yaml # Traefik đứng sau NLB trên EKS (phục vụ canary chia % traffic)
+│
+├── docs/                       # Tài liệu hướng dẫn
+│   ├── k3s-n-helm-local-deployment-guide.md
+│   ├── argocd-rolling-update-guide.md
+│   ├── argo-rollouts-canary-guide.md
+│   ├── prometheus-grafana-alertmanager-monitoring-guide.md
+│   ├── keda-autoscaling-guide.md
+│   ├── eks-manual-deployment-guide.md
+│   ├── terraform-infrastructure-guide.md
+│   ├── terraform-ci-github-actions-guide.md
+│   ├── diagrams/               # Sơ đồ AWS Architecture và CI-CD pipeline (PNG)
+│   └── image-assets.txt        # Link Google Drive chứa ảnh sản phẩm của app
 │
 ├── backend/                    # ════════ NestJS API ════════
 │   ├── src/
 │   │   ├── main.ts             # Entrypoint: bootstrap app, cấu hình CORS, ValidationPipe,
-│   │   │                       # global prefix /api/v1, Swagger (bật/tắt qua ENABLE_SWAGGER,
-│   │   │                       # mặc định chỉ bật khi NODE_ENV !== 'production')
-│   │   ├── app.module.ts       # Root module: load ConfigModule, TypeOrmModule,
-│   │   │                       # import tất cả feature modules, đăng ký HealthController
-│   │   ├── health.controller.ts # GET /api/v1/health — health check đơn giản (status + timestamp),
-│   │   │                        # dùng bởi Docker healthcheck / frontend health-check route
+│   │   │                       # global prefix /api/v1 (trừ /metrics), Swagger (bật/tắt qua
+│   │   │                       # ENABLE_SWAGGER, mặc định chỉ bật khi NODE_ENV !== 'production')
+│   │   ├── app.module.ts       # Root module: load ConfigModule, TypeOrmModule (async — lấy DB credentials
+│   │   │                       # từ env hoặc Secrets Manager, SSL khi dùng RDS), import tất cả
+│   │   │                       # feature modules (kể cả MetricsModule), đăng ký HealthController
+│   │   ├── health.controller.ts # GET /api/v1/health — health check đơn giản (status + timestamp + version),
+│   │   │                        # dùng bởi probe của Kubernetes / frontend health-check route
 │   │   ├── types/
 │   │   │   └── express.d.ts    # Mở rộng type Express.Request (đính kèm user từ JWT)
 │   │   │
 │   │   ├── config/
-│   │   │   └── configuration.ts  # Load & type-safe toàn bộ biến môi trường từ .env
-│   │   │                         # (port, database, jwt, storage.aws, storage.minio)
+│   │   │   ├── configuration.ts  # Load & type-safe toàn bộ biến môi trường từ .env
+│   │   │   │                     # (port, database, jwt, storage.aws, storage.minio)
+│   │   │   └── secrets-manager.ts  # Lấy username/password DB từ AWS Secrets Manager (secret master
+│   │   │                           # của RDS, qua IRSA) khi DB_CREDENTIALS_SOURCE=secrets-manager
 │   │   │
 │   │   ├── common/               # Shared dùng toàn app
 │   │   │   ├── decorators/
 │   │   │   │   └── roles.decorator.ts  # @Roles('admin') — gắn metadata role vào route
 │   │   │   │                           # @CurrentUser() — inject user từ JWT payload
-│   │   │   └── guards/
-│   │   │       ├── jwt-auth.guard.ts   # Guard xác thực Bearer token JWT
-│   │   │       └── roles.guard.ts      # Guard phân quyền: kiểm tra role từ @Roles()
+│   │   │   ├── guards/
+│   │   │   │   ├── jwt-auth.guard.ts   # Guard xác thực Bearer token JWT
+│   │   │   │   └── roles.guard.ts      # Guard phân quyền: kiểm tra role từ @Roles()
+│   │   │   └── constants/
+│   │   │       └── upload.constants.ts # Giới hạn upload ảnh dùng chung: tối đa 5MB, chỉ jpg/png/webp
 │   │   │
 │   │   ├── database/
 │   │   │   └── seeds/                  # ── Seed dữ liệu mẫu (đã hoàn chỉnh) ──
@@ -131,12 +222,20 @@ electronics-shop/
 │   │   │
 │   │   └── modules/              # ── Business Modules ──
 │   │       │
+│   │       ├── metrics/          # Shared (Global) — metrics Prometheus cho backend
+│   │       │   ├── metrics.module.ts          # Đăng ký MetricsController + HttpMetricsInterceptor (toàn cục)
+│   │       │   ├── metrics.controller.ts      # GET /metrics (ngoài prefix api/v1, ẩn khỏi Swagger)
+│   │       │   ├── metrics.service.ts         # Registry prom-client riêng + metric mặc định Node.js,
+│   │       │   │                              # http_request_duration_seconds, http_requests_total
+│   │       │   └── http-metrics.interceptor.ts  # Đo mọi request, label route dùng pattern (không dùng URL thật)
+│   │       │
 │   │       ├── storage/          # Shared service — upload/xóa file S3 hoặc MinIO
 │   │       │   ├── storage.module.ts   # Export StorageService (global) cho các module khác
 │   │       │   └── storage.service.ts  # uploadFile, uploadFiles, deleteFile,
 │   │       │                           # getPresignedUploadUrl (client direct upload),
-│   │       │                           # getSignedReadUrl (private file access)
-│   │       │                           # Dùng AWS SDK v3 — switch S3/MinIO qua STORAGE_PROVIDER
+│   │       │                           # getSignedReadUrl (private file access), buildPublicUrl
+│   │       │                           # Dùng AWS SDK v3 — switch S3/MinIO qua STORAGE_PROVIDER;
+│   │       │                           # nhánh S3 trả path /api/images/<key> (bucket private, IRSA)
 │   │       │
 │   │       ├── auth/             # Xác thực: đăng ký, đăng nhập, JWT
 │   │       │   ├── auth.module.ts      # Import PassportModule, JwtModule, UserModule
@@ -254,11 +353,14 @@ electronics-shop/
 │   │                                        # available = quantity - reserved,
 │   │                                        # lowStockThreshold (cảnh báo)
 │   │
+│   ├── certs/
+│   │   └── global-bundle.pem  # CA bundle của AWS RDS — xác thực SSL khi kết nối RDS (copy vào Docker image)
 │   ├── .env.example    # Template biến môi trường (commit được, không chứa secret)
-│   ├── package.json    # NestJS 10, TypeORM 0.3, AWS SDK v3, bcryptjs, passport-jwt...
+│   ├── .eslintrc.js / .prettierrc  # ESLint + Prettier (CI lint với --max-warnings=0)
+│   ├── package.json    # NestJS 10, TypeORM 0.3, AWS SDK v3, prom-client, bcryptjs, passport-jwt...
 │   └── tsconfig.json   # TypeScript config cho NestJS
 │
-└── frontend/           # ════════ Next.js 14 App Router ════════
+└── frontend/           # ════════ Next.js 15 App Router ════════
     ├── app/
     │   ├── layout.tsx          # Root layout: load font, render Navbar + Footer,
     │   │                       # wrap QueryClientProvider + Toaster
@@ -297,11 +399,17 @@ electronics-shop/
     │   ├── profile/
     │   │   └── page.tsx        # 👤 Trang cá nhân: tab Thông tin / Đơn hàng,
     │   │                       # edit inline, avatar upload, lịch sử đơn hàng, đăng xuất
-    │   └── api/
-    │       └── health-check/
-    │           └── route.ts    # Route handler server-side: gọi GET /health của backend
-    │                           # (qua INTERNAL_API_URL trong Docker, fallback
-    │                           # NEXT_PUBLIC_API_URL khi chạy local) để kiểm tra kết nối
+    │   └── api/                # Route handler chạy server-side (có test `route.test.ts` cạnh mỗi route)
+    │       ├── health-check/
+    │       │   └── route.ts    # Gọi GET /health của backend (qua INTERNAL_API_URL trong Docker,
+    │       │                   # fallback NEXT_PUBLIC_API_URL khi chạy local) để kiểm tra kết nối
+    │       ├── ping/
+    │       │   └── route.ts    # Probe readiness/liveness cho Pod frontend — không gọi backend
+    │       ├── metrics/
+    │       │   └── route.ts    # Endpoint metrics cho Prometheus scrape
+    │       └── images/
+    │           └── [...key]/
+    │               └── route.ts  # Proxy đọc ảnh từ S3 private (AWS SDK + IRSA)
     │
     ├── components/
     │   ├── layout/
@@ -325,28 +433,38 @@ electronics-shop/
     │   │                       # Interceptors: tự gắn Authorization header từ localStorage,
     │   │                       # tự logout khi nhận 401; export catalogApi, cartApi,
     │   │                       # authApi, userApi, orderApi, paymentMethodApi
-    │   ├── api.test.ts         # Unit test cho lib/api.ts
+    │   ├── api.test.ts         # Unit test cho lib/api.ts (+ api.env.test.ts: test biến môi trường URL)
+    │   ├── image.ts            # isApiImageProxyUrl(): nhận diện ảnh dạng /api/images/... để tắt
+    │   │                       # Next Image optimization cho riêng loại ảnh này
+    │   ├── metrics.ts          # Registry prom-client của frontend (label app="frontend"),
+    │   │                       # Histogram http_request_duration_seconds + Counter http_requests_total
+    │   ├── with-metrics.ts     # withMetrics(): HOF bọc route handler để đo duration + đếm request
+    │   ├── otel-metrics-processor.ts  # SpanProcessor: ghi duration trang SSR vào registry Prometheus
     │   └── hooks/
     │       ├── useCart.ts      # Zustand store: items[], subtotal, itemCount,
     │       │                   # fetchCart (sync với server), addItem, updateQuantity,
     │       │                   # removeItem — dùng xuyên suốt toàn app
     │       └── useCart.test.ts # Unit test cho useCart store
     │
+    ├── instrumentation.ts      # Next.js instrumentation hook: khởi tạo prom-client + OpenTelemetry
+    │                           # lúc server khởi động (+ instrumentation.test.ts)
     ├── .env.local.example      # Template env frontend (NEXT_PUBLIC_API_URL)
+    ├── .eslintrc.json          # Cấu hình ESLint (next lint)
     ├── jest.config.js          # Cấu hình Jest + jsdom cho unit test frontend
     ├── jest.setup.js           # Setup file cho Testing Library (jest-dom matchers)
     ├── next.config.js          # output: 'standalone' (tối ưu cho Docker); cho phép load ảnh
-    │                           # từ MinIO (localhost:9000 hoặc minio:9000 trong Docker) và S3;
-    │                           # rewrite proxy /api/* → backend (dùng INTERNAL_API_URL trong
-    │                           # Docker, fallback NEXT_PUBLIC_API_URL khi chạy local)
+    │                           # từ MinIO (localhost:9000 hoặc minio:9000 trong Docker), S3
+    │                           # (*.amazonaws.com) và placehold.co; rewrite proxy /api/* → backend
+    │                           # (dùng INTERNAL_API_URL trong Docker, fallback NEXT_PUBLIC_API_URL
+    │                           # khi chạy local), TRỪ /api/images và /api/ping do frontend tự xử lý
     ├── tailwind.config.js      # Tailwind CSS config (content paths, theme extend)
     ├── postcss.config.js       # PostCSS config cho Tailwind
     └── tsconfig.json           # TypeScript config cho Next.js
 ```
 
-> **Testing:** Cả backend (Jest, file `*.spec.ts` cạnh mỗi service) lẫn frontend
-> (Jest + React Testing Library, file `*.test.ts(x)`) đều có sẵn unit test.
-> Chạy bằng `npm test` (hoặc `npm run test:cov` để lấy coverage) trong từng thư mục.
+> **Testing:** Cả backend (Jest, 17 file `*.spec.ts` cạnh service/controller/guard/config) lẫn frontend
+> (Jest + React Testing Library, 16 file `*.test.ts(x)`) đều có sẵn unit test.
+> Chạy bằng `npm test` (hoặc `npm run test:cov` để lấy coverage) trong từng thư mục — CI cũng chạy đúng 2 lệnh lint + `test:cov` này.
 
 ---
 
@@ -409,17 +527,19 @@ Giỏ hàng lưu trong DB (không dùng localStorage/session) — hỗ trợ đ�
 
 ### 📋 Order Module
 Hỗ trợ 2 luồng đặt hàng:
-- **Từ giỏ hàng** (`POST /orders`) — chạy trong **database transaction**:
-  1. Tạo `Order` record với mã đơn hàng tự sinh
-  2. Snapshot từng `OrderItem` (tên SP, đơn giá tại thời điểm đặt)
-  3. Xóa các item đã đặt khỏi giỏ hàng
-  4. Rollback toàn bộ nếu bất kỳ bước nào lỗi
-- **Mua ngay** (`POST /orders/buy-now`) — tạo đơn trực tiếp từ 1 sản phẩm/variant, không cần
-  qua giỏ hàng
+- **Từ giỏ hàng** (`POST /orders`) — người dùng chọn các item muốn đặt (`items: [{ cartItemId, quantity }]`,
+  có thể chỉ đặt một phần số lượng trong giỏ), chạy trong **database transaction**:
+  1. Tạo `Order` record với mã đơn hàng tự sinh (phí vận chuyển cố định 30.000đ)
+  2. Snapshot từng `OrderItem` (tên SP, ảnh, nhãn variant, đơn giá tại thời điểm đặt)
+  3. Tạo `Payment` theo phương thức đã chọn (COD → `success` ngay, các phương thức khác → `pending`)
+  4. Cập nhật giỏ hàng: đặt hết số lượng thì xóa item, đặt một phần thì giảm số lượng còn lại
+  5. Rollback toàn bộ nếu bất kỳ bước nào lỗi
+- **Mua ngay** (`POST /orders/buy-now`) — `items: [{ productId, variantId?, quantity }]`, tạo đơn trực tiếp từ
+  sản phẩm/variant, không cần qua giỏ hàng
 
-Khách hàng có thể tự hủy đơn qua `PATCH /orders/:id/cancel` (khi đơn còn ở trạng thái cho phép
-hủy). Admin quản lý toàn bộ đơn hàng qua `GET /orders/admin/all`, cập nhật trạng thái qua
-`PATCH /orders/admin/:id/status`, và xóa đơn qua `DELETE /orders/admin/:id`.
+Khách hàng chỉ tự hủy được đơn khi đang ở trạng thái `pending` (`PATCH /orders/:id/cancel`). Admin quản lý toàn bộ
+đơn hàng qua `GET /orders/admin/all`, cập nhật trạng thái qua `PATCH /orders/admin/:id/status`, và chỉ xóa được
+đơn đã `cancelled` hoặc `refunded` (`DELETE /orders/admin/:id`).
 
 `status` của đơn hàng: `pending` → `confirmed` → `shipping` → `delivered`, hoặc `cancelled` /
 `refunded`.
@@ -453,10 +573,34 @@ getPresignedUploadUrl(key, type)    → string  (client upload trực tiếp lê
 getSignedReadUrl(key)               → string  (truy cập file private có TTL)
 ```
 
+- **MinIO** (`STORAGE_PROVIDER=minio`): `url` là URL tuyệt đối `<MINIO_ENDPOINT>/<bucket>/<key>` (bucket đặt
+  quyền anonymous download).
+- **AWS S3** (mọi giá trị khác): bucket **private** (Block Public Access bật), `url` trả về là path nội bộ
+  `/api/images/<key>` — frontend đọc S3 hộ trình duyệt. Trên EKS **không** truyền access key: SDK tự
+  lấy credentials tạm thời qua **IRSA**.
+
 ### ❤️ Health Controller (Shared)
-`GET /api/v1/health` — health check đơn giản, trả về `{ status: 'ok', timestamp }`. Không cần
-đăng nhập. Dùng bởi Docker healthcheck và route `frontend/app/api/health-check/route.ts` để
-kiểm tra backend đã kết nối được chưa.
+`GET /api/v1/health` — health check đơn giản, trả về `{ status: 'ok', timestamp, version }`. Không cần
+đăng nhập. Dùng bởi route `frontend/app/api/health-check/route.ts` và readiness/liveness probe của backend trên
+Kubernetes (Helm chart).
+
+### 📈 Metrics Module (Shared)
+`GET /metrics` (nằm **ngoài** prefix `api/v1`, ẩn khỏi Swagger) trả về metrics định dạng Prometheus bằng `prom-client`:
+- Metric mặc định của Node.js (heap, event loop lag, GC, file descriptor...).
+- 2 metric HTTP do `HttpMetricsInterceptor` tự ghi cho mọi request: `http_request_duration_seconds` (histogram) và
+  `http_requests_total` (counter), label `method`, `route`, `status_code`. Label `route` dùng **pattern**
+  (`/catalog/products/:id`) thay vì URL thật để số time-series không tăng vô hạn theo số bản ghi.
+- Mọi metric đều có label `app="backend"`. Prometheus thu thập qua PodMonitor (xem mục 11, bước 6).
+
+### ⚙️ Cấu hình dùng chung (DB credentials, upload)
+- **Database:** mặc định đọc `DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_NAME`. Khi `DB_CREDENTIALS_SOURCE=secrets-manager`
+  (dùng trên EKS), backend lấy username/password từ secret master của RDS qua `DB_SECRET_ARN`
+  (`config/secrets-manager.ts`, credentials AWS lấy qua IRSA) và kết nối SSL, xác thực bằng CA bundle
+  `backend/certs/global-bundle.pem`.
+- **Schema:** TypeORM chỉ tự `synchronize` (tạo/cập nhật bảng) khi `NODE_ENV !== 'production'`. `scripts/migrate.sh`
+  vẫn là placeholder (chưa có migration thật), nên khi chạy với `NODE_ENV=production` cần tự đảm bảo schema đã tồn tại.
+- **Upload ảnh** (avatar, ảnh sản phẩm): tối đa 5MB, chỉ nhận `jpg/jpeg/png/webp`
+  (`common/constants/upload.constants.ts`); mỗi lần tạo/sửa sản phẩm nhận tối đa 10 ảnh.
 
 ---
 
@@ -513,6 +657,25 @@ kiểm tra backend đã kết nối được chưa.
 - Danh sách đơn hàng với badge màu theo trạng thái
 - Nút đăng xuất (xóa token khỏi localStorage)
 
+### Route handler phía server (`app/api/*`)
+
+| Route | Mô tả |
+|---|---|
+| `/api/health-check` | Gọi `GET /health` của backend (qua `INTERNAL_API_URL`) để kiểm tra kết nối |
+| `/api/ping` | Trả `{ status: 'ok' }` — dùng làm readiness/liveness probe của Pod frontend, **không** gọi backend nên không tạo traffic giả |
+| `/api/metrics` | Metrics Prometheus của frontend (`prom-client`) |
+| `/api/images/[...key]` | Proxy đọc ảnh từ **S3 private** bằng AWS SDK (credentials qua IRSA). Chỉ được gọi khi backend chạy với `STORAGE_PROVIDER` khác `minio` |
+
+Các request `/api/*` còn lại được `next.config.js` rewrite sang backend. Ảnh có URL dạng `/api/images/...`
+được render với `unoptimized` (`lib/image.ts`), vì Next Image Optimizer sẽ phải tự gọi lại chính nó qua load
+balancer trên EKS và bị lỗi.
+
+### Observability (metrics)
+- `instrumentation.ts` chạy 1 lần lúc server khởi động: khởi tạo registry `prom-client` và đăng ký OpenTelemetry
+  (`@vercel/otel`) để đo thời gian render trang SSR.
+- `lib/with-metrics.ts` bọc các route handler để đo duration + đếm request, dùng chung tên metric với backend
+  (`http_request_duration_seconds`, `http_requests_total`), khác nhau ở label `app="frontend"`.
+
 ---
 
 ## 5. Yêu cầu hệ thống
@@ -521,9 +684,12 @@ kiểm tra backend đã kết nối được chưa.
 |---|---|---|
 | Node.js | 20 LTS | Dùng nvm để quản lý version |
 | npm | 10+ | Đi kèm Node.js 20 |
-| PostgreSQL | 16 | Chạy native hoặc Docker |
+| PostgreSQL | 16 | Chạy native hoặc Docker (RDS trên AWS dùng bản 18) |
 | MinIO | Latest | Chạy native (hướng dẫn bên dưới) |
 | Git | 2.x | |
+| Docker + Docker Compose | Mới nhất | *Tùy chọn* — chạy stack bằng Compose, build image (mục 11, bước 1) |
+| kubectl, Helm, K3s | Mới nhất | *Tùy chọn* — chạy trên Kubernetes local (mục 11, bước 3–7) |
+| AWS CLI, Terraform | Terraform ≥ 1.10 | *Tùy chọn* — triển khai lên AWS EKS (mục 11, bước 8–10) |
 
 > **WSL2 (Windows):** Hướng dẫn này được viết và kiểm tra trên **WSL2 Ubuntu 22.04**. Tất cả lệnh dùng trong terminal WSL2. Không dùng PowerShell hay CMD.
 
@@ -721,6 +887,15 @@ mc anonymous get local/electronics-shop
 ```
 
 > **Lưu ý:** MinIO Console web UI (http://localhost:9001) hiện tại không hỗ trợ thao tác đặt bucket policy trực tiếp. Phải dùng `mc` CLI như hướng dẫn trên.
+
+**Upload ảnh khớp đúng key trong seed**
+
+Mở `backend/src/database/seeds/product.seed.ts`, đối chiếu từng `key` (ví
+dụ `products/iphone17promax/1.jpg`) → **MinIO Console → bucket
+`electronics-shop` → Upload** → tạo đúng cấu trúc thư mục/tên file khớp
+chính xác từng key đó.
+
+Hoặc, download các ảnh mẫu có sẵn từ Google Drive có đường dẫn được đặt tại `docs/image-assets.txt`, rồi upload lên bucket `electronics-shop` tại MinIO Console.
 
 **Chạy MinIO ở background (tuỳ chọn):**
 ```bash
@@ -987,6 +1162,7 @@ Content-Type: application/json
     "district": "Quan 1",
     "city": "TP Ho Chi Minh"
   },
+  "items": [{ "cartItemId": "uuid", "quantity": 1 }],
   "paymentMethod": "cod",
   "note": "Giao giờ hành chính"
 }
@@ -1006,9 +1182,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "productId": "uuid",
-  "variantId": "uuid",
-  "quantity": 1,
+  "items": [{ "productId": "uuid", "variantId": "uuid", "quantity": 1 }],
   "shippingAddress": { "...": "giống POST /orders" },
   "paymentMethod": "cod"
 }
@@ -1034,7 +1208,7 @@ PUT /api/v1/inventory/:productId     # Cập nhật: { "quantity": 100, "lowStoc
 ### Health check
 
 ```http
-GET /api/v1/health     # → { "status": "ok", "timestamp": "..." } — không cần đăng nhập
+GET /api/v1/health     # → { "status": "ok", "timestamp": "...", "version": "..." } — không cần đăng nhập
 ```
 
 ---
@@ -1079,18 +1253,58 @@ GET /api/v1/health     # → { "status": "ok", "timestamp": "..." } — không c
 
 ## 10. DevSecOps
 
-### Files đã hoàn chỉnh
+Toàn bộ pipeline chạy bằng GitHub Actions (`.github/workflows/`). Cách dựng pipeline từng bước từ đầu xem
+[mục 11](#11-hướng-dẫn-khởi-tạo-ci-cd-pipeline).
+
+### GitHub Actions workflows
+
+| Workflow | Trạng thái | Kích hoạt | Mô tả |
+|---|---|---|---|
+| `.github/workflows/ci.yml` | ✅ Hoàn chỉnh | push/PR vào `main`, `thanhde`; lịch thứ 2 hằng tuần 03:00 UTC; chạy tay | CI cho app, gồm 7 job (bên dưới) |
+| `.github/workflows/deploy.yml` | ✅ Hoàn chỉnh | Tự chạy sau khi workflow `CI` thành công trên `main` / chạy tay | Build image → Trivy gate → push lên Harbor → cập nhật tag trong Helm values để Argo CD đồng bộ |
+| `.github/workflows/terraform.yml` | ✅ Hoàn chỉnh | PR/push có sửa `infrastructure/**`; lịch hằng ngày 20:00 UTC (quét drift) / chạy tay | `fmt`/`validate` → Checkov → `plan` → `apply`/`destroy` (chờ phê duyệt), đăng nhập AWS bằng OIDC, môi trường `dev`/`test`/`prod` |
+
+**Các job của `ci.yml`:**
+
+1. `changes` — xác định backend/frontend nào có thay đổi (path filter), tạo ma trận build dùng chung cho các job sau
+   và cho `deploy.yml`.
+2. `backend-lint-test` — ESLint (`--max-warnings=0`) + Jest kèm coverage.
+3. `frontend-lint-test` — `next lint` + Jest kèm coverage.
+4. `gitleaks` — quét secret bị lộ trong code/lịch sử Git (cấu hình `.gitleaks.toml`).
+5. `sonarqube` — SAST + đọc coverage LCOV, kiểm tra Quality Gate; chỉ chạy với PR vào `main` hoặc push `main`,
+   chờ 2 job lint/test ở trên.
+6. `trivy-fs` — quét CVE trong dependency/lockfile của repo (mức `CRITICAL`, `HIGH`): đẩy kết quả SARIF lên tab
+   Security và **chặn pipeline** nếu còn lỗ hổng chưa được bỏ qua trong `security/.trivyignore`.
+7. `docker-build-check` — build thử image của service có thay đổi (không push; bỏ qua khi push vào `main` vì
+   `deploy.yml` sẽ build lại) rồi quét Trivy image, chặn pipeline nếu có `CRITICAL`/`HIGH`.
+
+**Các bước của `deploy.yml`:** build image backend/frontend (frontend nhận `NEXT_PUBLIC_API_URL` qua build arg) →
+quét Trivy (gate) → push lên Harbor với tag là SHA commit và `latest` → sửa `backendTag`/`frontendTag` trong file
+Helm values (đường dẫn lấy từ biến `HELM_VALUES_FILE`) rồi commit lại với `[skip ci]` → Argo CD phát hiện thay
+đổi trên Git và tự rollout phiên bản mới.
+
+### Cấu hình bảo mật & chất lượng
 
 | File | Trạng thái | Mô tả |
 |---|---|---|
-| `scripts/seed.sh` | ✅ Hoàn chỉnh | Seed dữ liệu mẫu vào database |
-| `security/.trivyignore` | ✅ Hoàn chỉnh | Danh sách CVE bỏ qua khi scan Docker image bằng Trivy |
-| `security/owasp-zap.conf` | ✅ Hoàn chỉnh | Config OWASP ZAP automated penetration testing |
-| `sonar-project.properties` | ✅ Hoàn chỉnh | Config SonarQube/SonarCloud — quét chung backend + frontend, đọc coverage LCOV từ Jest |
-| `docker/backend.Dockerfile` | ✅ Hoàn chỉnh | Multi-stage build NestJS: build stage (đầy đủ devDependencies) → stage cài lại production dependencies → image cuối chỉ chứa `dist` + `node_modules` production |
+| `.gitleaks.toml` | ✅ Hoàn chỉnh | Cấu hình GitLeaks, allowlist các file mẫu (`.env.example`...) |
+| `security/.checkov.yaml` | ✅ Hoàn chỉnh | Danh sách check Checkov được bỏ qua kèm lý do cho `infrastructure/`; check còn lại không đạt thì pipeline fail |
+| `sonar-project.properties` | ✅ Hoàn chỉnh | Cấu hình SonarQube/SonarCloud — quét chung backend + frontend, đọc coverage LCOV từ Jest |
+| `security/.trivyignore` | 🔲 Placeholder | Danh sách CVE bỏ qua khi quét Trivy — hiện chưa có CVE nào được bỏ qua |
+
+### Docker & scripts
+
+| File | Trạng thái | Mô tả |
+|---|---|---|
+| `docker/backend.Dockerfile` | ✅ Hoàn chỉnh | Multi-stage build NestJS: build stage (đủ devDependencies) → cài lại production dependencies → image cuối chỉ chứa `dist` + `node_modules` production, kèm CA bundle RDS, chạy bằng user non-root |
 | `docker/frontend.Dockerfile` | ✅ Hoàn chỉnh | Multi-stage build Next.js `output: 'standalone'`; nhận `NEXT_PUBLIC_API_URL` qua build arg |
-| `docker/docker-compose.yml` | ✅ Hoàn chỉnh | Compose full stack: `postgres` (16-alpine) + `minio` + `minio-init` (tự tạo bucket & set public) + `backend` + `frontend`, đều có healthcheck/`depends_on` hợp lý |
-| `.github/workflows/ci.yml` | ✅ Hoàn chỉnh | 5 job chạy song song: `backend-lint-test`, `frontend-lint-test` (ESLint + Jest), `gitleaks` (quét secret rò rỉ), `sonarqube` (SAST, chờ 2 job lint/test), `trivy-fs` (quét CVE + misconfiguration) |
+| `docker/docker-compose.yml` | ✅ Hoàn chỉnh | Compose full stack: `postgres` (16-alpine) + `minio` + `minio-init` (tự tạo bucket & set public) + `backend` + `frontend` |
+| `scripts/seed.sh` | ✅ Hoàn chỉnh | Seed dữ liệu mẫu vào database |
+| `scripts/seed-rds-via-bastion.sh` | ✅ Hoàn chỉnh | Seed dữ liệu vào RDS (nằm trong private subnet) thông qua bastion EC2 |
+| `scripts/setup-harbor-ec2.sh` | ✅ Hoàn chỉnh | Cài Harbor lên EC2 từ xa |
+| `scripts/install-eks-tools.sh` | ✅ Hoàn chỉnh | Cài các tool nền tảng lên EKS (ALB Controller, EBS CSI, Traefik, Argo CD, Argo Rollouts, KEDA, kube-prometheus-stack) |
+| `infrastructure/scripts/bootstrap-tfstate.sh`, `infrastructure/scripts/tf.sh` | ✅ Hoàn chỉnh | Tạo S3 bucket lưu Terraform state; wrapper chạy Terraform theo từng môi trường |
+| `scripts/migrate.sh` | 🔲 Placeholder | Chạy TypeORM migrations (production — không dùng synchronize) |
 
 > Chạy Docker Compose từ thư mục gốc project:
 > ```bash
@@ -1099,16 +1313,123 @@ GET /api/v1/health     # → { "status": "ok", "timestamp": "..." } — không c
 > (Context build là thư mục gốc `..` vì các Dockerfile COPY theo path `backend/...`
 > và `frontend/...` để tận dụng cache layer hiệu quả hơn.)
 
-### Files placeholder (chưa triển khai)
+---
 
-| File | Mục đích |
-|---|---|
-| `.github/workflows/deploy.yml` | CD: tự động deploy lên staging/production (build & push image, deploy ECS/EC2/VPS, chạy migration, health check, notify Slack) |
-| `scripts/migrate.sh` | Chạy TypeORM migrations (production — không dùng synchronize) |
+## 11. Hướng dẫn khởi tạo CI-CD pipeline
+
+Pipeline của project được dựng dần theo **10 bước**, mỗi bước có một file hướng dẫn riêng và bước sau dựa trên kết quả của
+bước trước. Hãy làm đúng thứ tự dưới đây: từ chạy app bằng Docker Compose ở local, dựng registry Harbor, đưa lên K3s
+local với GitOps/canary/giám sát/autoscaling, rồi triển khai lên AWS EKS thủ công và cuối cùng tự động hóa toàn bộ hạ
+tầng bằng Terraform + GitHub Actions.
+
+![CI-CD pipeline](docs/diagrams/CI-CD%20pipeline/CI-CD%20pipeline.png)
+
+| Bước | Tài liệu | Làm gì | Chạy ở đâu |
+|---|---|---|---|
+| 1 | Docker Compose (`docker/`) | Chạy cả stack app bằng container | Máy local |
+| 2 | `docker/harbor/harbor-setup.md` | Dựng Harbor registry | Server Linux riêng |
+| 3 | `docs/k3s-n-helm-local-deployment-guide.md` | Deploy app lên K3s bằng Helm | K3s local |
+| 4 | `docs/argocd-rolling-update-guide.md` | GitOps với Argo CD + rolling update | K3s local |
+| 5 | `docs/argo-rollouts-canary-guide.md` | Canary deployment | K3s local |
+| 6 | `docs/prometheus-grafana-alertmanager-monitoring-guide.md` | Giám sát + cảnh báo | K3s local |
+| 7 | `docs/keda-autoscaling-guide.md` | Autoscaling theo metric | K3s local |
+| 8 | `docs/eks-manual-deployment-guide.md` | Dựng hạ tầng EKS bằng tay | AWS |
+| 9 | `docs/terraform-infrastructure-guide.md` | Tự động hóa hạ tầng AWS bằng Terraform | AWS |
+| 10 | `docs/terraform-ci-github-actions-guide.md` | CI/CD cho Terraform | GitHub Actions + AWS |
+
+### Bước 1 — Chạy app bằng Docker Compose ở local
+
+- **File:** `docker/docker-compose.yml`, `docker/backend.Dockerfile`, `docker/frontend.Dockerfile`.
+- **Nội dung:** build image cho backend/frontend và chạy toàn bộ stack (PostgreSQL 16, MinIO + job tự tạo bucket,
+  backend, frontend) bằng một lệnh `docker compose -f docker/docker-compose.yml up -d --build` từ thư mục gốc. Khi seed dữ
+  liệu mẫu cho bản chạy Compose, đặt `SEED_MEDIA_BASE_URL`=http://minio:9000/electronics-shop trỏ đúng MinIO host mà pod Frontend truy cập được.
+- **Mục đích:** chắc chắn app build được và chạy đúng trong container trước khi đưa vào pipeline — các Dockerfile này chính
+  là thứ `ci.yml` và `deploy.yml` sẽ build sau này.
+
+### Bước 2 — Dựng Harbor registry
+
+- **File:** [`docker/harbor/harbor-setup.md`](docker/harbor/harbor-setup.md).
+- **Nội dung:** chuẩn bị server Linux riêng, cài Docker, tải và cấu hình Harbor (HTTPS bằng Let's Encrypt nếu có domain,
+  hoặc self-signed cert nếu chỉ có IP), tạo Project và **Robot Account** để push/pull, cấu hình Docker client tin cert,
+  thử `docker push`/`pull`, rồi lấy các giá trị để khai báo GitHub Secrets (`HARBOR_*`). Có thêm phần gỡ cert và bảo
+  trì Harbor.
+- **Mục đích:** có nơi lưu image để `deploy.yml` đẩy lên và K3s/EKS kéo về.
+
+### Bước 3 — Dựng K3s local và deploy bằng Helm
+
+- **File:** [`docs/k3s-n-helm-local-deployment-guide.md`](docs/k3s-n-helm-local-deployment-guide.md)
+- **Nội dung:** cài K3s trên WSL2 và Helm, cho K3s tin CA self-signed của Harbor để kéo được image, deploy chart
+  `helm/electronics-shop` (backend/frontend Deployment + HPA, PostgreSQL và MinIO dạng StatefulSet, Ingress Traefik),
+  trỏ domain local, seed dữ liệu và kiểm tra app. Có ghi lại các lỗi thực tế đã gặp và checklist những điểm cần đổi khi
+  chuyển sang EKS.
+- **Mục đích:** có app chạy trên Kubernetes; chart này là nền để các bước sau nâng cấp dần.
+
+### Bước 4 — Argo CD và Rolling Update
+
+- **File:** [`docs/argocd-rolling-update-guide.md`](docs/argocd-rolling-update-guide.md)
+- **Nội dung:** cài Argo CD vào K3s, đăng nhập UI, kết nối repo Git private, tạo `Application` trỏ vào chart Helm (qua
+  UI hoặc `kubectl apply` các file mẫu trong `argo/`), bật auto-sync. Sau đó demo rolling update bằng dữ liệu thật: đẩy
+  code → `ci.yml` + `deploy.yml` build/push image mới và sửa tag trong Helm values → Argo CD tự đồng bộ.
+- **Mục đích:** hoàn thiện vòng CD theo GitOps — Git là nguồn sự thật, cluster tự cập nhật theo Git.
+
+### Bước 5 — Argo Rollouts và Canary Deployment
+
+- **File:** [`docs/argo-rollouts-canary-guide.md`](docs/argo-rollouts-canary-guide.md)
+- **Nội dung:** cài Argo Rollouts (+ Dashboard) và dùng chính Traefik có sẵn trong K3s làm traffic router (không cần
+  plugin ngoài). Chuyển backend/frontend từ `Deployment` sang `Rollout` ở chart `helm/electronics-shop-rollout`, chia
+  traffic theo từng bước (có điểm dừng chờ promote), đổi biến `HELM_VALUES_FILE` để `deploy.yml` ghi tag đúng chart, trỏ
+  Argo CD Application sang chart mới và thử promote/abort canary.
+- **Mục đích:** phát hành phiên bản mới an toàn — chỉ một phần traffic đi vào bản mới trước khi chuyển hết.
+
+### Bước 6 — Prometheus, Grafana, Alertmanager
+
+- **File:** [`docs/prometheus-grafana-alertmanager-monitoring-guide.md`](docs/prometheus-grafana-alertmanager-monitoring-guide.md)
+- **Nội dung:** cài `kube-prometheus-stack` (Prometheus + Grafana + Alertmanager), cấu hình Alertmanager gửi cảnh báo qua
+  email, rồi dùng chart `helm/electronics-shop-monitoring` để thu thập metric từ backend/frontend (endpoint `/metrics`,
+  `/api/metrics`) qua `PodMonitor`, nạp Grafana dashboard tự động từ Git (**dashboard-as-code**, qua ConfigMap) và định
+  nghĩa luật cảnh báo.
+- **Mục đích:** quan sát được app đang chạy ra sao; metric `http_requests_total` ở bước này là đầu vào của bước 7.
+
+### Bước 7 — KEDA autoscaling
+
+- **File:** [`docs/keda-autoscaling-guide.md`](docs/keda-autoscaling-guide.md)
+- **Nội dung:** cài KEDA (`keda/keda-values.yaml`) và chuyển autoscaling từ HPA (chỉ CPU/RAM) sang `ScaledObject` ở chart
+  `helm/electronics-shop-keda`, với 3 trigger: CPU, memory và request rate lấy từ Prometheus. Có phần test scale
+  lên/xuống bằng tải giả lập.
+- **Mục đích:** scale theo tải nghiệp vụ thật thay vì chỉ theo tài nguyên.
+
+### Bước 8 — Triển khai lên AWS EKS (thao tác tay)
+
+- **File:** [`docs/eks-manual-deployment-guide.md`](docs/eks-manual-deployment-guide.md)
+- **Nội dung:** dựng toàn bộ hạ tầng từ đầu bằng AWS Console để hiểu từng thành phần: VPC/subnet, IAM, EKS cluster và node
+  group, RDS PostgreSQL (mật khẩu do Secrets Manager quản lý), S3, OIDC/IRSA, EC2 cho Harbor và Bastion, domain miễn phí
+  (dynv6) + chứng chỉ ACM. Sau đó cài các tool nền tảng (`scripts/install-eks-tools.sh`: ALB Controller, EBS CSI, Traefik,
+  Argo CD, Argo Rollouts, KEDA, kube-prometheus-stack), cấu hình GitHub, deploy chart `helm/electronics-shop-eks`
+  (dùng RDS/S3 thay Postgres/MinIO), seed RDS qua bastion (`scripts/seed-rds-via-bastion.sh`), trỏ DNS và kiểm tra.
+- **Mục đích:** đưa toàn bộ những gì đã làm ở K3s lên môi trường cloud thật.
+
+### Bước 9 — Tự động hóa hạ tầng bằng Terraform
+
+- **File:** [`docs/terraform-infrastructure-guide.md`](docs/terraform-infrastructure-guide.md)
+- **Nội dung:** dùng thư mục `infrastructure/` để tạo lại bằng code phần hạ tầng AWS (VPC, IAM,
+  EKS, RDS, S3, OIDC/IRSA, node group, EC2 Harbor + Bastion, ACM, CloudWatch alarms). Giải thích cấu trúc module, 3 môi
+  trường `dev`/`test`/`prod`, lưu state trên S3 (`scripts/bootstrap-tfstate.sh`), chạy bằng `scripts/tf.sh`, phần nào
+  vẫn phải làm tay, cách `destroy`, lỗi thường gặp và lưu ý chi phí.
+- **Mục đích:** dựng/hủy hạ tầng lặp lại được bằng lệnh, thay cho click console.
+
+### Bước 10 — CI/CD cho hạ tầng bằng GitHub Actions
+
+- **File:** [`docs/terraform-ci-github-actions-guide.md`](docs/terraform-ci-github-actions-guide.md)
+- **Nội dung:** mô tả workflow `.github/workflows/terraform.yml`: luồng `fmt` → `validate` → Checkov → `plan` →
+  `apply`/`destroy` (chờ phê duyệt), khi nào chạy gì (PR, push, lịch quét drift hằng ngày, chạy tay), đăng nhập AWS
+  bằng OIDC thay vì access key, các Secrets/Variables/Environments cần tạo trên GitHub, cách chạy `apply` lần đầu, và
+  các lỗi thường gặp.
+- **Mục đích:** mọi thay đổi hạ tầng đều được kiểm tra bảo mật và duyệt trước khi áp dụng — hoàn tất pipeline cho cả app
+  (`ci.yml`, `deploy.yml`) lẫn hạ tầng (`terraform.yml`). Chi tiết từng workflow xem [mục 10](#10-devsecops).
 
 ---
 
-## 11. Lộ trình tách Microservices
+## 12. Lộ trình tách Microservices
 
 Khi traffic tăng, mỗi module đã chuẩn để tách thành service độc lập:
 
@@ -1133,7 +1454,7 @@ Bước 4 — Mỗi service có DB riêng (Database per Service pattern)
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### ❌ `peer authentication failed for user "postgres"`
 Lỗi khi chạy `psql -U postgres` trực tiếp trên WSL2/Linux.
@@ -1234,4 +1555,4 @@ bash scripts/seed.sh
 
 ---
 
-*Made with ❤️ — TechShop Boilerplate v1.0 | Stack: NestJS 10 · Next.js 14 · PostgreSQL 16 · MinIO*
+*Made with ❤️ — TechShop Boilerplate v1.0 | Stack: NestJS 10 · Next.js 15 · PostgreSQL 16 · MinIO*
