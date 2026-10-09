@@ -12,7 +12,7 @@
 > **Modular Monolith** — dễ tách thành Microservices khi cần scale.  
 > *Ứng dụng thương mại điện tử bán đồ điện tử, đánh giá trên WSL2 Ubuntu 22.04*
 >
-> Có 4 cách chạy/triển khai project: cài **native** từng service theo hướng dẫn ở mục 5–7 bên dưới;
+> Có 4 cách chạy/triển khai project: cài **native** từng service theo hướng dẫn ở mục 4–6 bên dưới;
 > chạy **toàn bộ stack qua Docker Compose** (`docker compose -f docker/docker-compose.yml up -d --build`);
 > chạy trên **K3s + Helm** ở máy local; hoặc triển khai lên **AWS EKS** (thủ công hoặc bằng Terraform).
 
@@ -21,18 +21,17 @@
 ## 📋 Mục lục
 
 1. [Tổng quan kiến trúc](#1-tổng-quan-kiến-trúc)
-2. [Cây thư mục chi tiết](#2-cây-thư-mục-chi-tiết)
-3. [Mô tả từng module Backend](#3-mô-tả-từng-module-backend)
-4. [Mô tả Frontend](#4-mô-tả-frontend)
-5. [Yêu cầu hệ thống](#5-yêu-cầu-hệ-thống)
-6. [Cài đặt môi trường](#6-cài-đặt-môi-trường)
-7. [Hướng dẫn chạy local](#7-hướng-dẫn-chạy-local)
-8. [API Reference](#8-api-reference)
-9. [Biến môi trường](#9-biến-môi-trường)
-10. [DevSecOps](#10-devsecops)
-11. [Hướng dẫn khởi tạo CI-CD pipeline](#11-hướng-dẫn-khởi-tạo-ci-cd-pipeline)
-12. [Lộ trình tách Microservices](#12-lộ-trình-tách-microservices)
-13. [Troubleshooting](#13-troubleshooting)
+2. [Mô tả từng module Backend](#2-mô-tả-từng-module-backend)
+3. [Mô tả Frontend](#3-mô-tả-frontend)
+4. [Yêu cầu hệ thống](#4-yêu-cầu-hệ-thống)
+5. [Cài đặt môi trường](#5-cài-đặt-môi-trường)
+6. [Hướng dẫn chạy local](#6-hướng-dẫn-chạy-local)
+7. [API Reference](#7-api-reference)
+8. [Biến môi trường](#8-biến-môi-trường)
+9. [DevSecOps](#9-devsecops)
+10. [Hướng dẫn khởi tạo CI-CD pipeline](#10-hướng-dẫn-khởi-tạo-ci-cd-pipeline)
+11. [Lộ trình tách Microservices](#11-lộ-trình-tách-microservices)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -88,387 +87,7 @@ Alertmanager), **GitHub Actions** (CI/CD, Terraform). Sơ đồ hạ tầng AWS:
 
 ---
 
-## 2. Cây thư mục chi tiết
-
-```
-electronics-sell-app/
-│
-├── .github/
-│   └── workflows/
-│       ├── ci.yml              # ✅ CI (7 job): phát hiện service đổi → lint + test backend/frontend → gitleaks
-│       │                       # → SonarQube → Trivy fs → build thử image + Trivy image
-│       ├── deploy.yml          # ✅ CD: chạy sau khi CI pass trên main → build → Trivy gate → push image lên
-│       │                       # Harbor (tag SHA + latest) → cập nhật backendTag/frontendTag trong Helm values
-│       └── terraform.yml       # ✅ IaC: fmt/validate → Checkov → plan → apply/destroy cho infrastructure/
-│
-├── docker/
-│   ├── backend.Dockerfile      # ✅ Multi-stage build NestJS → production image (user non-root, dumb-init)
-│   ├── frontend.Dockerfile     # ✅ Multi-stage build Next.js standalone output
-│   ├── backend.Dockerfile.dockerignore / frontend.Dockerfile.dockerignore  # .dockerignore riêng cho từng Dockerfile
-│   ├── docker-compose.yml      # ✅ Full stack: backend + frontend + postgres + minio (+ minio-init tạo bucket)
-│   └── harbor/
-│       └── harbor-setup.md     # Hướng dẫn dựng Harbor private registry (Let's Encrypt hoặc self-signed)
-│
-├── scripts/
-│   ├── seed.sh                 # Seed dữ liệu mẫu vào database (chạy được)
-│   ├── seed-rds-via-bastion.sh # Seed RDS từ máy host thông qua bastion EC2
-│   ├── setup-harbor-ec2.sh     # Cài Harbor lên EC2 từ xa (chạy từ máy host qua SSH)
-│   ├── install-eks-tools.sh    # Cài tool nền tảng lên EKS: ALB Controller, EBS CSI, kube-prometheus-stack,
-│   │                           # KEDA, Argo Rollouts, Traefik, ArgoCD
-│   └── migrate.sh              # [Placeholder] Chạy TypeORM migrations (production)
-│
-├── security/
-│   ├── .checkov.yaml           # Danh sách check Checkov được skip (kèm lý do); check khác = hard fail
-│   └── .trivyignore            # [Placeholder] Danh sách CVE bỏ qua khi scan bằng Trivy (hiện chưa có CVE nào)
-│
-├── sonar-project.properties    # Config SonarQube/SonarCloud scanner (quét chung backend + frontend)
-├── .gitleaks.toml              # Config GitLeaks (allowlist file mẫu .env.example...)
-├── .gitattributes              # Chuẩn hóa line ending (LF) + đánh dấu file binary
-├── .gitignore                  # Ignore node_modules, .env, dist, .next, *.tfstate, secrets.tfvars...
-│
-├── infrastructure/             # ════════ Terraform — hạ tầng AWS ════════
-│   ├── main.tf                 # Root module: ghép các module con
-│   ├── variables.tf / outputs.tf / provider.tf / versions.tf
-│   ├── backend.tf              # S3 backend (partial config, truyền phần còn lại lúc init)
-│   ├── modules/
-│   │   ├── vpc/                # VPC, 2 public + 2 private subnet, IGW, NAT gateway (mỗi AZ 1 cái), flow log
-│   │   ├── eks/                # Cluster (mã hóa KMS), node group, OIDC provider, add-on, access entry
-│   │   ├── rds/                # RDS PostgreSQL Multi-AZ, mật khẩu master do Secrets Manager quản lý
-│   │   ├── s3/                 # Bucket ảnh (private, versioning, mã hóa, lifecycle)
-│   │   ├── acm/                # Chứng chỉ wildcard (DNS validation)
-│   │   ├── ec2/                # EC2 Ubuntu 24.04 + Security Group (dùng cho Harbor và Bastion)
-│   │   ├── cloudwatch-alarms/  # Metric filter + alarm trên log control plane, SNS email
-│   │   └── iam-irsa/           # IAM policy + role IRSA: backend, frontend, ALB controller, EBS CSI
-│   ├── env/{dev,test,prod}/    # terraform.tfvars, backend.hcl, secrets.tfvars.example cho từng môi trường
-│   └── scripts/
-│       ├── bootstrap-tfstate.sh  # Tạo S3 bucket lưu Terraform state (chạy 1 lần)
-│       └── tf.sh                 # Wrapper chạy Terraform theo môi trường (tự init đúng backend + var-file)
-│
-├── helm/                       # 5 Helm chart — tiến hóa dần theo từng guide (xem mục 11)
-│   ├── electronics-shop/             # Deployment + HPA + Postgres/MinIO StatefulSet + Ingress Traefik (K3s)
-│   ├── electronics-shop-rollout/     # Argo Rollouts canary (TraefikService/IngressRoute)
-│   ├── electronics-shop-monitoring/  # + PodMonitor, Grafana dashboard-as-code, PrometheusRule (cảnh báo)
-│   ├── electronics-shop-keda/        # Thay HPA bằng KEDA ScaledObject (cpu + memory + Prometheus)
-│   └── electronics-shop-eks/         # Bản EKS: dùng RDS/S3 thay Postgres/MinIO, ServiceAccount IRSA
-│
-├── argo/                       # Argo CD / Argo Rollouts
-│   ├── argocd-application.example.yaml / argocd-application-eks.example.yaml   # mẫu Application
-│   ├── argocd-repo-secret.example.yaml                                         # mẫu credential repo private
-│   ├── argocd-server-values.yaml / argocd-server-values-eks.yaml               # values chart argo-cd (Ingress UI)
-│   └── argo-rollouts-values.yaml / argo-rollouts-values-eks.yaml               # values chart argo-rollouts (Dashboard)
-│
-├── keda/
-│   └── keda-values.yaml        # Values cài KEDA
-├── monitoring/
-│   ├── kube-prometheus-stack-values-example.yaml       # Mẫu values cho K3s local
-│   └── kube-prometheus-stack-values-eks-example.yaml   # Mẫu values cho EKS
-├── traefik/
-│   └── traefik-values-eks.yaml # Traefik đứng sau NLB trên EKS (phục vụ canary chia % traffic)
-│
-├── docs/                       # Tài liệu hướng dẫn
-│   ├── k3s-n-helm-local-deployment-guide.md
-│   ├── argocd-rolling-update-guide.md
-│   ├── argo-rollouts-canary-guide.md
-│   ├── prometheus-grafana-alertmanager-monitoring-guide.md
-│   ├── keda-autoscaling-guide.md
-│   ├── eks-manual-deployment-guide.md
-│   ├── terraform-infrastructure-guide.md
-│   ├── terraform-ci-github-actions-guide.md
-│   ├── diagrams/               # Sơ đồ AWS Architecture và CI-CD pipeline (PNG)
-│   └── image-assets.txt        # Link Google Drive chứa ảnh sản phẩm của app
-│
-├── backend/                    # ════════ NestJS API ════════
-│   ├── src/
-│   │   ├── main.ts             # Entrypoint: bootstrap app, cấu hình CORS, ValidationPipe,
-│   │   │                       # global prefix /api/v1 (trừ /metrics), Swagger (bật/tắt qua
-│   │   │                       # ENABLE_SWAGGER, mặc định chỉ bật khi NODE_ENV !== 'production')
-│   │   ├── app.module.ts       # Root module: load ConfigModule, TypeOrmModule (async — lấy DB credentials
-│   │   │                       # từ env hoặc Secrets Manager, SSL khi dùng RDS), import tất cả
-│   │   │                       # feature modules (kể cả MetricsModule), đăng ký HealthController
-│   │   ├── health.controller.ts # GET /api/v1/health — health check đơn giản (status + timestamp + version),
-│   │   │                        # dùng bởi probe của Kubernetes / frontend health-check route
-│   │   ├── types/
-│   │   │   └── express.d.ts    # Mở rộng type Express.Request (đính kèm user từ JWT)
-│   │   │
-│   │   ├── config/
-│   │   │   ├── configuration.ts  # Load & type-safe toàn bộ biến môi trường từ .env
-│   │   │   │                     # (port, database, jwt, storage.aws, storage.minio)
-│   │   │   └── secrets-manager.ts  # Lấy username/password DB từ AWS Secrets Manager (secret master
-│   │   │                           # của RDS, qua IRSA) khi DB_CREDENTIALS_SOURCE=secrets-manager
-│   │   │
-│   │   ├── common/               # Shared dùng toàn app
-│   │   │   ├── decorators/
-│   │   │   │   └── roles.decorator.ts  # @Roles('admin') — gắn metadata role vào route
-│   │   │   │                           # @CurrentUser() — inject user từ JWT payload
-│   │   │   ├── guards/
-│   │   │   │   ├── jwt-auth.guard.ts   # Guard xác thực Bearer token JWT
-│   │   │   │   └── roles.guard.ts      # Guard phân quyền: kiểm tra role từ @Roles()
-│   │   │   └── constants/
-│   │   │       └── upload.constants.ts # Giới hạn upload ảnh dùng chung: tối đa 5MB, chỉ jpg/png/webp
-│   │   │
-│   │   ├── database/
-│   │   │   └── seeds/                  # ── Seed dữ liệu mẫu (đã hoàn chỉnh) ──
-│   │   │       ├── run-seeds.ts        # Entrypoint seed: khởi tạo DataSource độc lập,
-│   │   │       │                       # chạy tuần tự theo thứ tự phụ thuộc
-│   │   │       ├── category.seed.ts    # Seed danh mục (Điện thoại, Laptop, Tablet...)
-│   │   │       ├── product.seed.ts     # Seed sản phẩm với specs JSONB đầy đủ
-│   │   │       ├── variant.seed.ts     # Seed biến thể sản phẩm (màu, cấu hình, giá)
-│   │   │       ├── inventory.seed.ts   # Seed tồn kho theo SKU
-│   │   │       ├── user.seed.ts        # Seed tài khoản mẫu (admin + user thường)
-│   │   │       ├── order.seed.ts       # Seed đơn hàng với snapshot OrderItems
-│   │   │       ├── cart.seed.ts        # Seed giỏ hàng mẫu
-│   │   │       └── payment-method-option.seed.ts  # Seed 4 phương thức thanh toán
-│   │   │                                           # (cod, bank_transfer, momo, vnpay)
-│   │   │
-│   │   └── modules/              # ── Business Modules ──
-│   │       │
-│   │       ├── metrics/          # Shared (Global) — metrics Prometheus cho backend
-│   │       │   ├── metrics.module.ts          # Đăng ký MetricsController + HttpMetricsInterceptor (toàn cục)
-│   │       │   ├── metrics.controller.ts      # GET /metrics (ngoài prefix api/v1, ẩn khỏi Swagger)
-│   │       │   ├── metrics.service.ts         # Registry prom-client riêng + metric mặc định Node.js,
-│   │       │   │                              # http_request_duration_seconds, http_requests_total
-│   │       │   └── http-metrics.interceptor.ts  # Đo mọi request, label route dùng pattern (không dùng URL thật)
-│   │       │
-│   │       ├── storage/          # Shared service — upload/xóa file S3 hoặc MinIO
-│   │       │   ├── storage.module.ts   # Export StorageService (global) cho các module khác
-│   │       │   └── storage.service.ts  # uploadFile, uploadFiles, deleteFile,
-│   │       │                           # getPresignedUploadUrl (client direct upload),
-│   │       │                           # getSignedReadUrl (private file access), buildPublicUrl
-│   │       │                           # Dùng AWS SDK v3 — switch S3/MinIO qua STORAGE_PROVIDER;
-│   │       │                           # nhánh S3 trả path /api/images/<key> (bucket private, IRSA)
-│   │       │
-│   │       ├── auth/             # Xác thực: đăng ký, đăng nhập, JWT
-│   │       │   ├── auth.module.ts      # Import PassportModule, JwtModule, UserModule
-│   │       │   ├── auth.controller.ts  # POST /auth/register, POST /auth/login
-│   │       │   ├── auth.service.ts     # bcryptjs hash (12 rounds), JWT sign
-│   │       │   ├── dto/
-│   │       │   │   └── auth.dto.ts     # RegisterDto (email, password, fullName),
-│   │       │   │                       # LoginDto — validate bằng class-validator
-│   │       │   └── strategies/
-│   │       │       └── jwt.strategy.ts # Passport JWT strategy — extract Bearer token,
-│   │       │                           # validate payload, load user từ DB
-│   │       │
-│   │       ├── user/             # Quản lý hồ sơ người dùng
-│   │       │   ├── user.module.ts
-│   │       │   ├── user.controller.ts  # GET /users/me, PATCH /users/me,
-│   │       │   │                       # PATCH /users/me/avatar (multipart/form-data),
-│   │       │   │                       # DELETE /users/me (tự xóa tài khoản),
-│   │       │   │                       # GET /users/admin/all, GET /users/admin/:id,
-│   │       │   │                       # PATCH /users/admin/:id (đổi role/khóa tài khoản),
-│   │       │   │                       # DELETE /users/admin/:id  [Admin]
-│   │       │   ├── user.service.ts     # getProfile, updateProfile, updateAvatar
-│   │       │   │                       # (upload MinIO/S3, xóa ảnh cũ), deleteUser,
-│   │       │   │                       # getAllUsers, updateUserByAdmin
-│   │       │   └── entities/
-│   │       │       └── user.entity.ts  # id (uuid), email (unique), password (excluded
-│   │       │                           # khỏi select), fullName, phone, address,
-│   │       │                           # avatarUrl, avatarKey, role ('user'|'admin')
-│   │       │
-│   │       ├── catalog/          # Danh mục sản phẩm điện tử
-│   │       │   ├── catalog.module.ts
-│   │       │   ├── catalog.controller.ts  # GET/POST/PATCH/DELETE /catalog/categories(/:id),
-│   │       │   │                          # GET/POST/PATCH/DELETE /catalog/products(/:id|:slug)
-│   │       │   │                          # (+ upload ảnh multipart),
-│   │       │   │                          # GET /catalog/products/:id/variants,
-│   │       │   │                          # GET /catalog/variants/:variantId,
-│   │       │   │                          # POST /catalog/products/:id/variants,
-│   │       │   │                          # PATCH/DELETE /catalog/variants/:variantId  [Admin]
-│   │       │   ├── catalog.service.ts     # findAll (filter/sort/pagination),
-│   │       │   │                          # findBySlug (tăng viewCount), create (+S3),
-│   │       │   │                          # update, delete (+xóa ảnh S3)
-│   │       │   ├── dto/
-│   │       │   │   ├── create-product.dto.ts  # name, brand, price, salePrice,
-│   │       │   │   │                          # categoryId, specs{}, variants[]
-│   │       │   │   └── product-query.dto.ts   # search, categoryId, brand,
-│   │       │   │                              # minPrice, maxPrice, specs filter,
-│   │       │   │                              # sort (price_asc/desc, popular, newest),
-│   │       │   │                              # page, limit
-│   │       │   └── entities/
-│   │       │       ├── product.entity.ts  # slug (auto-gen), specs: JSONB (RAM/CPU/Pin...),
-│   │       │       │                      # images: [{url, key}], variants: [],
-│   │       │       │                      # salePrice, soldCount, viewCount
-│   │       │       ├── product-variant.entity.ts  # Biến thể: name, sku, price,
-│   │       │       │                               # attributes (JSONB), stock
-│   │       │       └── category.entity.ts  # name, slug, specFields[] (định nghĩa
-│   │       │                               # các thông số đặc trưng cho từng loại thiết bị)
-│   │       │
-│   │       ├── cart/             # Giỏ hàng (lưu DB, không dùng session/cookie)
-│   │       │   ├── cart.module.ts
-│   │       │   ├── cart.controller.ts  # GET /cart, POST /cart/items,
-│   │       │   │                       # PATCH /cart/items/:id, DELETE /cart/items/:id,
-│   │       │   │                       # DELETE /cart/items (xóa nhiều item theo danh sách id),
-│   │       │   │                       # DELETE /cart
-│   │       │   ├── cart.service.ts     # getCart (kèm subtotal), addItem (auto-merge),
-│   │       │   │                       # updateQuantity, removeItem, clearCart
-│   │       │   └── entities/
-│   │       │       └── cart-item.entity.ts  # userId, productId, variantId, quantity
-│   │       │
-│   │       ├── order/            # Đặt hàng
-│   │       │   ├── order.module.ts
-│   │       │   ├── order.controller.ts  # POST /orders (tạo từ cart),
-│   │       │   │                        # POST /orders/buy-now (mua ngay 1 sản phẩm, không qua cart),
-│   │       │   │                        # GET /orders (lịch sử), GET /orders/:id,
-│   │       │   │                        # PATCH /orders/:id/cancel (khách tự hủy đơn),
-│   │       │   │                        # GET /orders/admin/all, PATCH /orders/admin/:id/status,
-│   │       │   │                        # DELETE /orders/admin/:id  [Admin]
-│   │       │   ├── order.service.ts     # createFromCart chạy trong DB transaction:
-│   │       │   │                        # tạo Order → snapshot OrderItems → clearCart
-│   │       │   │                        # → rollback nếu lỗi; generateOrderCode
-│   │       │   └── entities/
-│   │       │       ├── order.entity.ts      # orderCode, shippingAddress (JSONB),
-│   │       │       │                        # subtotal, shippingFee, discount, total,
-│   │       │       │                        # status (pending/confirmed/shipping/delivered/
-│   │       │       │                        # cancelled/refunded)
-│   │       │       └── order-item.entity.ts # Snapshot: productName, unitPrice, quantity
-│   │       │                                # (bảo toàn giá tại thời điểm đặt hàng)
-│   │       │
-│   │       ├── payment/          # Thanh toán
-│   │       │   ├── payment.module.ts
-│   │       │   ├── payment.controller.ts  # GET /payments/methods (danh sách phương thức),
-│   │       │   │                          # POST /payments (khởi tạo),
-│   │       │   │                          # GET /payments/order/:orderId, GET /payments/:id,
-│   │       │   │                          # POST /payments/webhook/vnpay (VNPay callback),
-│   │       │   │                          # PATCH /payments/admin/:id/status,
-│   │       │   │                          # DELETE /payments/admin/:id  [Admin]
-│   │       │   ├── payment.service.ts     # initiate (COD tự confirm ngay),
-│   │       │   │                          # confirm (từ webhook), getByOrder
-│   │       │   └── entities/
-│   │       │       ├── payment.entity.ts  # method (cod/bank_transfer/momo/vnpay), status
-│   │       │       │                      # (pending/success/failed/refunded),
-│   │       │       │                      # transactionId, metadata (JSONB)
-│   │       │       └── payment-method-option.entity.ts  # Danh mục phương thức thanh toán
-│   │       │                                             # động (code, name, icon, isActive,
-│   │       │                                             # sortOrder, metadata) — frontend
-│   │       │                                             # fetch bảng này để render lựa chọn
-│   │       │                                             # thay vì hard-code
-│   │       │
-│   │       └── inventory/        # Quản lý tồn kho
-│   │           ├── inventory.module.ts
-│   │           ├── inventory.controller.ts  # GET /inventory/:productId,
-│   │           │                            # PUT /inventory/:productId [Admin only]
-│   │           ├── inventory.service.ts     # getStock, setStock, adjustStock
-│   │           └── entities/
-│   │               └── inventory.entity.ts  # sku (productId hoặc productId-variantId),
-│   │                                        # quantity (tổng), reserved (đang giữ),
-│   │                                        # available = quantity - reserved,
-│   │                                        # lowStockThreshold (cảnh báo)
-│   │
-│   ├── certs/
-│   │   └── global-bundle.pem  # CA bundle của AWS RDS — xác thực SSL khi kết nối RDS (copy vào Docker image)
-│   ├── .env.example    # Template biến môi trường (commit được, không chứa secret)
-│   ├── .eslintrc.js / .prettierrc  # ESLint + Prettier (CI lint với --max-warnings=0)
-│   ├── package.json    # NestJS 10, TypeORM 0.3, AWS SDK v3, prom-client, bcryptjs, passport-jwt...
-│   └── tsconfig.json   # TypeScript config cho NestJS
-│
-└── frontend/           # ════════ Next.js 15 App Router ════════
-    ├── app/
-    │   ├── layout.tsx          # Root layout: load font, render Navbar + Footer,
-    │   │                       # wrap QueryClientProvider + Toaster
-    │   ├── globals.css         # Tailwind @tailwind directives + custom CSS variables
-    │   ├── globals.d.ts        # Type declarations toàn cục cho Next.js
-    │   ├── providers.tsx       # React Query QueryClientProvider (client component)
-    │   ├── page.tsx            # 🏠 Trang chủ (SSR): banner hero 3 cột, category pills,
-    │   │                       # sidebar filter (giá, thương hiệu), product grid,
-    │   │                       # sort dropdown, pagination
-    │   ├── login/
-    │   │   └── page.tsx        # 🔑 Trang đăng nhập / đăng ký: form toggle,
-    │   │                       # validation, redirect sau login
-    │   ├── products/
-    │   │   └── [slug]/
-    │   │       └── page.tsx    # 📱 Chi tiết sản phẩm (CSR): image gallery + thumbnails,
-    │   │                       # chọn variant (màu/cấu hình) → giá thay đổi,
-    │   │                       # quantity stepper, AddToCart / Mua ngay,
-    │   │                       # bảng thông số ProductSpecs
-    │   ├── cart/
-    │   │   └── page.tsx        # 🛒 Giỏ hàng: danh sách items, quantity stepper inline,
-    │   │                       # order summary (subtotal + phí ship), xóa item,
-    │   │                       # chọn item → lưu vào sessionStorage → chuyển sang /checkout
-    │   ├── checkout/
-    │   │   └── page.tsx        # 💳 Thanh toán: đọc item đã chọn từ sessionStorage
-    │   │                       # (do /cart ghi vào), form địa chỉ giao hàng, chọn phương
-    │   │                       # thức thanh toán (fetch từ /payments/methods), tạo đơn
-    │   │                       # qua POST /orders, redirect sang /order-success
-    │   ├── buy-now/
-    │   │   └── page.tsx        # ⚡ Mua ngay 1 sản phẩm (bỏ qua giỏ hàng): đọc item từ
-    │   │                       # sessionStorage (do trang chi tiết sản phẩm ghi vào),
-    │   │                       # form địa chỉ + phương thức thanh toán, tạo đơn qua
-    │   │                       # POST /orders/buy-now
-    │   ├── order-success/
-    │   │   └── page.tsx        # ✅ Trang xác nhận đặt hàng thành công, hiển thị mã đơn
-    │   │                       # hàng (orderCode) lấy từ query string
-    │   ├── profile/
-    │   │   └── page.tsx        # 👤 Trang cá nhân: tab Thông tin / Đơn hàng,
-    │   │                       # edit inline, avatar upload, lịch sử đơn hàng, đăng xuất
-    │   └── api/                # Route handler chạy server-side (có test `route.test.ts` cạnh mỗi route)
-    │       ├── health-check/
-    │       │   └── route.ts    # Gọi GET /health của backend (qua INTERNAL_API_URL trong Docker,
-    │       │                   # fallback NEXT_PUBLIC_API_URL khi chạy local) để kiểm tra kết nối
-    │       ├── ping/
-    │       │   └── route.ts    # Probe readiness/liveness cho Pod frontend — không gọi backend
-    │       ├── metrics/
-    │       │   └── route.ts    # Endpoint metrics cho Prometheus scrape
-    │       └── images/
-    │           └── [...key]/
-    │               └── route.ts  # Proxy đọc ảnh từ S3 private (AWS SDK + IRSA)
-    │
-    ├── components/
-    │   ├── layout/
-    │   │   ├── Navbar.tsx      # Sticky navbar: logo, search bar, cart badge (Zustand),
-    │   │   │                   # avatar dropdown, mobile hamburger menu
-    │   │   └── Footer.tsx      # Footer: links, thông tin liên hệ, copyright
-    │   ├── product/
-    │   │   ├── ProductCard.tsx      # Card sản phẩm: ảnh, brand badge, tên, specs pills,
-    │   │   │                        # giá (salePrice nếu có), nút Add to Cart
-    │   │   ├── ProductCard.test.tsx # Unit test cho ProductCard (Jest + Testing Library)
-    │   │   ├── ProductSpecs.tsx     # Bảng thông số kỹ thuật với label tiếng Việt tự động
-    │   │   │                        # (RAM, CPU, Pin, Màn hình, Camera...)
-    │   │   └── ProductSpecs.test.tsx # Unit test cho ProductSpecs
-    │   └── ui/
-    │       ├── Button.tsx      # Shared button: variants (primary/outline/ghost/danger),
-    │       │                   # sizes (sm/md/lg), loading state với spinner
-    │       └── Button.test.tsx # Unit test cho Button
-    │
-    ├── lib/
-    │   ├── api.ts              # Axios instance (baseURL = NEXT_PUBLIC_API_URL)
-    │   │                       # Interceptors: tự gắn Authorization header từ localStorage,
-    │   │                       # tự logout khi nhận 401; export catalogApi, cartApi,
-    │   │                       # authApi, userApi, orderApi, paymentMethodApi
-    │   ├── api.test.ts         # Unit test cho lib/api.ts (+ api.env.test.ts: test biến môi trường URL)
-    │   ├── image.ts            # isApiImageProxyUrl(): nhận diện ảnh dạng /api/images/... để tắt
-    │   │                       # Next Image optimization cho riêng loại ảnh này
-    │   ├── metrics.ts          # Registry prom-client của frontend (label app="frontend"),
-    │   │                       # Histogram http_request_duration_seconds + Counter http_requests_total
-    │   ├── with-metrics.ts     # withMetrics(): HOF bọc route handler để đo duration + đếm request
-    │   ├── otel-metrics-processor.ts  # SpanProcessor: ghi duration trang SSR vào registry Prometheus
-    │   └── hooks/
-    │       ├── useCart.ts      # Zustand store: items[], subtotal, itemCount,
-    │       │                   # fetchCart (sync với server), addItem, updateQuantity,
-    │       │                   # removeItem — dùng xuyên suốt toàn app
-    │       └── useCart.test.ts # Unit test cho useCart store
-    │
-    ├── instrumentation.ts      # Next.js instrumentation hook: khởi tạo prom-client + OpenTelemetry
-    │                           # lúc server khởi động (+ instrumentation.test.ts)
-    ├── .env.local.example      # Template env frontend (NEXT_PUBLIC_API_URL)
-    ├── .eslintrc.json          # Cấu hình ESLint (next lint)
-    ├── jest.config.js          # Cấu hình Jest + jsdom cho unit test frontend
-    ├── jest.setup.js           # Setup file cho Testing Library (jest-dom matchers)
-    ├── next.config.js          # output: 'standalone' (tối ưu cho Docker); cho phép load ảnh
-    │                           # từ MinIO (localhost:9000 hoặc minio:9000 trong Docker), S3
-    │                           # (*.amazonaws.com) và placehold.co; rewrite proxy /api/* → backend
-    │                           # (dùng INTERNAL_API_URL trong Docker, fallback NEXT_PUBLIC_API_URL
-    │                           # khi chạy local), TRỪ /api/images và /api/ping do frontend tự xử lý
-    ├── tailwind.config.js      # Tailwind CSS config (content paths, theme extend)
-    ├── postcss.config.js       # PostCSS config cho Tailwind
-    └── tsconfig.json           # TypeScript config cho Next.js
-```
-
-> **Testing:** Cả backend (Jest, 17 file `*.spec.ts` cạnh service/controller/guard/config) lẫn frontend
-> (Jest + React Testing Library, 16 file `*.test.ts(x)`) đều có sẵn unit test.
-> Chạy bằng `npm test` (hoặc `npm run test:cov` để lấy coverage) trong từng thư mục — CI cũng chạy đúng 2 lệnh lint + `test:cov` này.
-
----
-
-## 3. Mô tả từng module Backend
+## 2. Mô tả từng module Backend
 
 ### 🔐 Auth Module
 Xử lý đăng ký, đăng nhập và cấp JWT token.
@@ -590,7 +209,7 @@ Kubernetes (Helm chart).
 - 2 metric HTTP do `HttpMetricsInterceptor` tự ghi cho mọi request: `http_request_duration_seconds` (histogram) và
   `http_requests_total` (counter), label `method`, `route`, `status_code`. Label `route` dùng **pattern**
   (`/catalog/products/:id`) thay vì URL thật để số time-series không tăng vô hạn theo số bản ghi.
-- Mọi metric đều có label `app="backend"`. Prometheus thu thập qua PodMonitor (xem mục 11, bước 6).
+- Mọi metric đều có label `app="backend"`. Prometheus thu thập qua PodMonitor (xem mục 10, bước 6).
 
 ### ⚙️ Cấu hình dùng chung (DB credentials, upload)
 - **Database:** mặc định đọc `DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_NAME`. Khi `DB_CREDENTIALS_SOURCE=secrets-manager`
@@ -604,7 +223,7 @@ Kubernetes (Helm chart).
 
 ---
 
-## 4. Mô tả Frontend
+## 3. Mô tả Frontend
 
 ### Trang Home (`/`)
 - **SSR** — fetch dữ liệu server-side, SEO-friendly
@@ -678,7 +297,7 @@ balancer trên EKS và bị lỗi.
 
 ---
 
-## 5. Yêu cầu hệ thống
+## 4. Yêu cầu hệ thống
 
 | Công cụ | Phiên bản tối thiểu | Ghi chú |
 |---|---|---|
@@ -687,17 +306,17 @@ balancer trên EKS và bị lỗi.
 | PostgreSQL | 16 | Chạy native hoặc Docker (RDS trên AWS dùng bản 18) |
 | MinIO | Latest | Chạy native (hướng dẫn bên dưới) |
 | Git | 2.x | |
-| Docker + Docker Compose | Mới nhất | *Tùy chọn* — chạy stack bằng Compose, build image (mục 11, bước 1) |
-| kubectl, Helm, K3s | Mới nhất | *Tùy chọn* — chạy trên Kubernetes local (mục 11, bước 3–7) |
-| AWS CLI, Terraform | Terraform ≥ 1.10 | *Tùy chọn* — triển khai lên AWS EKS (mục 11, bước 8–10) |
+| Docker + Docker Compose | Mới nhất | *Tùy chọn* — chạy stack bằng Compose, build image (mục 10, bước 1) |
+| kubectl, Helm, K3s | Mới nhất | *Tùy chọn* — chạy trên Kubernetes local (mục 10, bước 3–7) |
+| AWS CLI, Terraform | Terraform ≥ 1.10 | *Tùy chọn* — triển khai lên AWS EKS (mục 10, bước 8–10) |
 
 > **WSL2 (Windows):** Hướng dẫn này được viết và kiểm tra trên **WSL2 Ubuntu 22.04**. Tất cả lệnh dùng trong terminal WSL2. Không dùng PowerShell hay CMD.
 
 ---
 
-## 6. Cài đặt môi trường
+## 5. Cài đặt môi trường
 
-### 6.1 — Node.js 20 LTS (qua nvm)
+### 5.1 — Node.js 20 LTS (qua nvm)
 
 ```bash
 # Cài nvm
@@ -716,7 +335,7 @@ node -v   # → v20.x.x
 npm -v    # → 10.x.x
 ```
 
-### 6.2 — PostgreSQL 16
+### 5.2 — PostgreSQL 16
 
 **Cài đặt (Ubuntu / WSL2):**
 ```bash
@@ -827,7 +446,7 @@ db-stop
 
 ---
 
-### 6.3 — MinIO (Object Storage)
+### 5.3 — MinIO (Object Storage)
 
 **Tải và cài MinIO server:**
 ```bash
@@ -909,7 +528,7 @@ ps aux | grep minio
 pkill minio
 ```
 
-### 6.4 — Git
+### 5.4 — Git
 
 ```bash
 # Ubuntu / WSL2
@@ -922,7 +541,7 @@ git config --global user.email "email@example.com"
 
 ---
 
-## 7. Hướng dẫn chạy local
+## 6. Hướng dẫn chạy local
 
 ### Bước 1 — Clone project
 
@@ -1074,7 +693,7 @@ sudo -u postgres psql -d electronics_shop \
 
 ---
 
-## 8. API Reference
+## 7. API Reference
 
 ### Auth
 
@@ -1213,7 +832,7 @@ GET /api/v1/health     # → { "status": "ok", "timestamp": "...", "version": ".
 
 ---
 
-## 9. Biến môi trường
+## 8. Biến môi trường
 
 ### Backend (`backend/.env`)
 
@@ -1251,10 +870,10 @@ GET /api/v1/health     # → { "status": "ok", "timestamp": "...", "version": ".
 
 ---
 
-## 10. DevSecOps
+## 9. DevSecOps
 
 Toàn bộ pipeline chạy bằng GitHub Actions (`.github/workflows/`). Cách dựng pipeline từng bước từ đầu xem
-[mục 11](#11-hướng-dẫn-khởi-tạo-ci-cd-pipeline).
+[mục 10](#10-hướng-dẫn-khởi-tạo-ci-cd-pipeline).
 
 ### GitHub Actions workflows
 
@@ -1315,7 +934,7 @@ Helm values (đường dẫn lấy từ biến `HELM_VALUES_FILE`) rồi commit 
 
 ---
 
-## 11. Hướng dẫn khởi tạo CI-CD pipeline
+## 10. Hướng dẫn khởi tạo CI-CD pipeline
 
 Pipeline của project được dựng dần theo **10 bước**, mỗi bước có một file hướng dẫn riêng và bước sau dựa trên kết quả của
 bước trước. Hãy làm đúng thứ tự dưới đây: từ chạy app bằng Docker Compose ở local, dựng registry Harbor, đưa lên K3s
@@ -1425,11 +1044,11 @@ tầng bằng Terraform + GitHub Actions.
   bằng OIDC thay vì access key, các Secrets/Variables/Environments cần tạo trên GitHub, cách chạy `apply` lần đầu, và
   các lỗi thường gặp.
 - **Mục đích:** mọi thay đổi hạ tầng đều được kiểm tra bảo mật và duyệt trước khi áp dụng — hoàn tất pipeline cho cả app
-  (`ci.yml`, `deploy.yml`) lẫn hạ tầng (`terraform.yml`). Chi tiết từng workflow xem [mục 10](#10-devsecops).
+  (`ci.yml`, `deploy.yml`) lẫn hạ tầng (`terraform.yml`). Chi tiết từng workflow xem [mục 9](#9-devsecops).
 
 ---
 
-## 12. Lộ trình tách Microservices
+## 11. Lộ trình tách Microservices
 
 Khi traffic tăng, mỗi module đã chuẩn để tách thành service độc lập:
 
@@ -1454,7 +1073,7 @@ Bước 4 — Mỗi service có DB riêng (Database per Service pattern)
 
 ---
 
-## 13. Troubleshooting
+## 12. Troubleshooting
 
 ### ❌ `peer authentication failed for user "postgres"`
 Lỗi khi chạy `psql -U postgres` trực tiếp trên WSL2/Linux.
